@@ -104,7 +104,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
         }
     }
 
-    private void RenderTable(List<ProductData> products, SortTypes currentSort)
+    private static void RenderTable(List<ProductData> products, SortTypes currentSort)
     {
         var orderedProducts = currentSort switch
         {
@@ -125,18 +125,20 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             .RoundedBorder()
             .BorderColor(Color.DarkCyan);
 
-        table.AddColumn(new TableColumn("[u]Name[/]").LeftAligned().Width(20).NoWrap());
+        table.AddColumn(new TableColumn("[bold grey]Stackable?[/]").Width(6).Centered());
+        table.AddColumn(new TableColumn("[bold grey]NPC Sell Price[/]").Width(8).RightAligned());
+        table.AddColumn(new TableColumn("[u]Name[/]").LeftAligned().NoWrap());
         table.AddColumn(new TableColumn("[bold green]Buy Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold red]Sell Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FFA500]Margin[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #00BFFF]Margin %[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold #FF6347]Total Week Vol.[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold #DDA0DD]Buy Week Vol.[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold #90EE90]Sell Week Vol.[/]").RightAligned());
+        table.AddColumn(new TableColumn("[bold #FF6347]Total Week Vol.[/]").RightAligned().NoWrap());
+        table.AddColumn(new TableColumn("[bold #DDA0DD]Buy Week Vol.[/]").RightAligned().NoWrap());
+        table.AddColumn(new TableColumn("[bold #90EE90]Sell Week Vol.[/]").RightAligned().NoWrap());
 
         foreach (var product in orderedProducts)
         {
-            var color = product.Item.Tier switch
+            var tierColor = product.Item.Tier switch
             {
                 ItemTier.Uncommon => "#78F86A",
                 ItemTier.Rare => "#535FF8",
@@ -150,12 +152,17 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 _ => "white"
             };
 
+            var marginColor = product.OrderMeta.MarginPercentage > 50 ? "green" : "white";
+            var stackable = !product.Item.Unstackable;
+
             table.AddRow(
-                $"[{color}]{product.Item.FriendlyName}[/]",
+                $"{(stackable ? "YES" : "NO")}",
+                $"{(product.Item.NpcSellPrice.HasValue ? product.Item.NpcSellPrice.Value.ToString("N0") : "--")}",
+                $"[{tierColor}]{product.Item.FriendlyName}[/]",
                 $"{product.Buy.UnitPrice:N2}",
                 $"{product.Sell.UnitPrice:N2}",
                 $"{product.OrderMeta.Margin:N1}",
-                $"{product.OrderMeta.MarginPercentage:P1}",
+                $"[{marginColor}]{product.OrderMeta.MarginPercentage:P1}[/]",
                 $"{product.OrderMeta.TotalWeekVolume:N0}",
                 $"{product.Buy.WeekVolume:N0}",
                 $"{product.Sell.WeekVolume:N0}");
