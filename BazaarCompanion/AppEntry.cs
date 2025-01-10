@@ -152,7 +152,13 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 _ => "white"
             };
 
-            var marginColor = product.OrderMeta.MarginPercentage > 50 ? "green" : "white";
+            var marginColor = product.OrderMeta.MarginPercentage switch
+            {
+                < 0 => "red",
+                < 0.5 => "white",
+                < 0.75 => "yellow",
+                _ => "green"
+            };
             var stackable = !product.Item.Unstackable;
 
             table.AddRow(
