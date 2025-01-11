@@ -27,8 +27,8 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
         var products = bazaarResponse.Products.Values
             .Where(x => x.BuySummary.Count is not 0)
             .Where(x => x.SellSummary.Count is not 0)
-            .Where(x => x.QuickStatus.SellMovingWeek > 35_000)
-            .Where(x => x.QuickStatus.BuyMovingWeek > 35_000)
+            .Where(x => x.QuickStatus.SellMovingWeek > 50_000)
+            .Where(x => x.QuickStatus.BuyMovingWeek > 50_000)
             .Join(itemResponse.Items, bazaar => bazaar.ProductId, item => item.Id, (bazaar, item) =>
             {
                 var buy = bazaar.BuySummary.First();
@@ -154,11 +154,15 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
             var marginColor = product.OrderMeta.MarginPercentage switch
             {
-                < 0 => "red",
-                < 0.5 => "white",
-                < 0.75 => "yellow",
-                _ => "green"
+                < 0.1   => "grey",      // Low margin
+                < 0.2   => "yellow1",     // Moderate margin
+                < 0.3   => "greenyellow", // Decent margin
+                < 0.4   => "mediumspringgreen",  // Good margin
+                < 0.6   => "springgreen1",   // Very good margin
+                < 0.8   => "paleturquoise1",  // Great margin
+                _       => "deepskyblue1"  // Excellent margin (100% or more)
             };
+
             var stackable = !product.Item.Unstackable;
 
             table.AddRow(
