@@ -1,4 +1,4 @@
-﻿using BazaarCompanion.Interfaces;
+using BazaarCompanion.Interfaces;
 using BazaarCompanion.Models;
 using BazaarCompanion.Models.Api.Items;
 using Microsoft.Extensions.Hosting;
@@ -58,6 +58,8 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 "Total Week Vol." => SortTypes.TotalMovingVolume,
                 "Sell Week Vol." => SortTypes.SellMovingWeek,
                 "Buy Week Vol." => SortTypes.BuyMovingWeek,
+                "NPC Profit" => SortTypes.NpcProfit,
+                "NPC Margin" => SortTypes.NpcMargin,
                 _ => currentSort
             };
         }
