@@ -2,8 +2,9 @@
 
 public class OrderMeta
 {
-    public required double PotentialProfitMultiplier { get; set; }
-    public required double Margin { get; set; }
-    public required double MarginPercentage { get; set; }
-    public required double TotalWeekVolume { get; set; }
+    public double PotentialProfitMultiplier { get; set; }
+    public double Margin { get; set; }
+    public double MarginPercentage { get; set; }
+    public double TotalWeekVolume { get; set; }
+    public double NpcProfit { get; set; } // New property
 }
