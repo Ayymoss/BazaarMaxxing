@@ -21,6 +21,50 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
     private async Task HandleDisplayAsync(CancellationToken cancellationToken)
     {
+        var products = await FetchDataAsync();
+
+        var currentSort = SortTypes.PotentialProfitMultiplier;
+
+        while (!cancellationToken.IsCancellationRequested)
+        {
+            AnsiConsole.Clear();
+
+            RenderTable(products, currentSort);
+
+            var sortColumn = AnsiConsole.Prompt(
+                new SelectionPrompt<string>()
+                    .Title("Sort by which column? (or Quit)")
+                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Pot. Prof. Mult.", "Total Week Vol.",
+                        "Sell Week Vol.", "Buy Week Vol.", "Update Data", "Quit"));
+
+            switch (sortColumn)
+            {
+                case "Quit":
+                    Environment.Exit(1);
+                    break;
+                case "Update Data":
+                    products = await FetchDataAsync();
+                    break;
+            }
+
+            currentSort = sortColumn switch
+            {
+                "Name" => SortTypes.Name,
+                "Buy Price" => SortTypes.BuyPrice,
+                "Sell Price" => SortTypes.SellPrice,
+                "Margin" => SortTypes.Margin,
+                "Margin %" => SortTypes.MarginPercentage,
+                "Pot. Prof. Mult." => SortTypes.PotentialProfitMultiplier,
+                "Total Week Vol." => SortTypes.TotalMovingVolume,
+                "Sell Week Vol." => SortTypes.SellMovingWeek,
+                "Buy Week Vol." => SortTypes.BuyMovingWeek,
+                _ => currentSort
+            };
+        }
+    }
+
+    private async Task<List<ProductData>> FetchDataAsync()
+    {
         var itemResponse = await hyPixelApi.GetItemsAsync();
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
 
@@ -69,42 +113,9 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 };
             })
             .Where(x => x.OrderMeta.Margin > 100)
+            .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
             .ToList();
-
-        var currentSort = SortTypes.PotentialProfitMultiplier;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            AnsiConsole.Clear();
-
-            RenderTable(products, currentSort);
-
-            var sortColumn = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Pot. Prof. Mult.", "Total Week Vol.",
-                        "Sell Week Vol.", "Buy Week Vol.", "Quit"));
-
-            if (sortColumn == "Quit")
-            {
-                Environment.Exit(1);
-                break;
-            }
-
-            currentSort = sortColumn switch
-            {
-                "Name" => SortTypes.Name,
-                "Buy Price" => SortTypes.BuyPrice,
-                "Sell Price" => SortTypes.SellPrice,
-                "Margin" => SortTypes.Margin,
-                "Margin %" => SortTypes.MarginPercentage,
-                "Pot. Prof. Mult." => SortTypes.PotentialProfitMultiplier,
-                "Total Week Vol." => SortTypes.TotalMovingVolume,
-                "Sell Week Vol." => SortTypes.SellMovingWeek,
-                "Buy Week Vol." => SortTypes.BuyMovingWeek,
-                _ => currentSort
-            };
-        }
+        return products;
     }
 
     private static void RenderTable(List<ProductData> products, SortTypes currentSort)
