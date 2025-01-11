@@ -65,56 +65,12 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
     private async Task<List<ProductData>> FetchDataAsync()
     {
-        var products = await FetchDataAsync();
-
-        var currentSort = SortTypes.PotentialProfitMultiplier;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            AnsiConsole.Clear();
-
-            RenderTable(products, currentSort);
-
-            var sortColumn = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Pot. Prof. Mult.", "Total Week Vol.",
-                        "Sell Week Vol.", "Buy Week Vol.", "NPC Profit", "NPC Margin", "Update Data", "Quit"));
-
-            switch (sortColumn)
-            {
-                case "Quit":
-                    Environment.Exit(1);
-                    break;
-                case "Update Data":
-                    products = await FetchDataAsync();
-                    break;
-            }
-
-            currentSort = sortColumn switch
-            {
-                "Name" => SortTypes.Name,
-                "Buy Price" => SortTypes.BuyPrice,
-                "Sell Price" => SortTypes.SellPrice,
-                "Margin" => SortTypes.Margin,
-                "Margin %" => SortTypes.MarginPercentage,
-                "Pot. Prof. Mult." => SortTypes.PotentialProfitMultiplier,
-                "Total Week Vol." => SortTypes.TotalMovingVolume,
-                "Sell Week Vol." => SortTypes.SellMovingWeek,
-                "Buy Week Vol." => SortTypes.BuyMovingWeek,
-                _ => currentSort
-            };
-        }
-    }
-
-    private async Task<List<ProductData>> FetchDataAsync()
-    {
         var itemResponse = await hyPixelApi.GetItemsAsync();
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
 
         var products = bazaarResponse.Products.Values
-            .Where(x => x.BuySummary.Count > 0)
-            .Where(x => x.SellSummary.Count > 0)
+            .Where(x => x.BuySummary.Count is not 0)
+            .Where(x => x.SellSummary.Count is not 0)
             .Where(x => x.QuickStatus.SellMovingWeek > 50_000)
             .Where(x => x.QuickStatus.BuyMovingWeek > 50_000)
             .Join(itemResponse.Items, bazaar => bazaar.ProductId, item => item.Id, (bazaar, item) =>
@@ -122,7 +78,6 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 var buy = bazaar.BuySummary.First();
                 var sell = bazaar.SellSummary.First();
 
-                // Calculate values for the OrderMeta
                 var margin = buy.PricePerUnit - sell.PricePerUnit;
                 var marginPercentage = 1 - sell.PricePerUnit / buy.PricePerUnit;
                 var totalWeekVolume = bazaar.QuickStatus.SellMovingWeek + bazaar.QuickStatus.BuyMovingWeek;
@@ -167,47 +122,9 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                     NpcMargin = (decimal)npcMargin
                 };
             })
-            //.Where(x => x.OrderMeta.Margin > 100) 
-            .OrderByDescending(x => x.OrderMeta.NpcProfit) 
             .Where(x => x.OrderMeta.Margin > 100)
             .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
             .ToList();
-
-        var currentSort = SortTypes.PotentialProfitMultiplier;
-
-        while (!cancellationToken.IsCancellationRequested)
-        {
-            AnsiConsole.Clear();
-
-            RenderTable(products, currentSort);
-
-            var sortColumn = AnsiConsole.Prompt(
-                new SelectionPrompt<string>()
-                    .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Pot. Prof. Mult.", "Total Week Vol.",
-                        "Sell Week Vol.", "Buy Week Vol.", "NPC Profit", "Quit"));
-
-            if (sortColumn == "Quit")
-            {
-                Environment.Exit(1);
-                break;
-            }
-
-            currentSort = sortColumn switch
-            {
-                "Name" => SortTypes.Name,
-                "Buy Price" => SortTypes.BuyPrice,
-                "Sell Price" => SortTypes.SellPrice,
-                "Margin" => SortTypes.Margin,
-                "Margin %" => SortTypes.MarginPercentage,
-                "Pot. Prof. Mult." => SortTypes.PotentialProfitMultiplier,
-                "Total Week Vol." => SortTypes.TotalMovingVolume,
-                "Sell Week Vol." => SortTypes.SellMovingWeek,
-                "Buy Week Vol." => SortTypes.BuyMovingWeek,
-                "NPC Profit" => SortTypes.NpcProfit, // Ensure this is mapped
-                _ => currentSort
-            };
-        }
         return products;
     }
 
