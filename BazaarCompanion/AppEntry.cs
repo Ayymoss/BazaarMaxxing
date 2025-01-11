@@ -37,6 +37,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 var margin = buy.PricePerUnit - sell.PricePerUnit;
                 var marginPercentage = 1 - sell.PricePerUnit / buy.PricePerUnit;
                 var totalWeekVolume = bazaar.QuickStatus.SellMovingWeek + bazaar.QuickStatus.BuyMovingWeek;
+                var potentialProfitMultiplier = buy.PricePerUnit / sell.PricePerUnit;
 
                 return new ProductData
                 {
@@ -60,6 +61,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                     },
                     OrderMeta = new OrderMeta
                     {
+                        PotentialProfitMultiplier = potentialProfitMultiplier,
                         Margin = margin,
                         MarginPercentage = marginPercentage,
                         TotalWeekVolume = totalWeekVolume
@@ -69,7 +71,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             .Where(x => x.OrderMeta.Margin > 100)
             .ToList();
 
-        var currentSort = SortTypes.MarginPercentage;
+        var currentSort = SortTypes.PotentialProfitMultiplier;
 
         while (!cancellationToken.IsCancellationRequested)
         {
@@ -80,8 +82,8 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             var sortColumn = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Total Week Vol.", "Sell Week Vol.",
-                        "Buy Week Vol.", "Quit"));
+                    .AddChoices("Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Pot. Prof. Mult.", "Total Week Vol.",
+                        "Sell Week Vol.", "Buy Week Vol.", "Quit"));
 
             if (sortColumn == "Quit")
             {
@@ -96,6 +98,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 "Sell Price" => SortTypes.SellPrice,
                 "Margin" => SortTypes.Margin,
                 "Margin %" => SortTypes.MarginPercentage,
+                "Pot. Prof. Mult." => SortTypes.PotentialProfitMultiplier,
                 "Total Week Vol." => SortTypes.TotalMovingVolume,
                 "Sell Week Vol." => SortTypes.SellMovingWeek,
                 "Buy Week Vol." => SortTypes.BuyMovingWeek,
@@ -114,6 +117,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             SortTypes.Margin => products.OrderByDescending(x => x.OrderMeta.Margin),
             SortTypes.MarginPercentage => products.OrderByDescending(x => x.OrderMeta.MarginPercentage),
             SortTypes.TotalMovingVolume => products.OrderByDescending(x => x.OrderMeta.TotalWeekVolume),
+            SortTypes.PotentialProfitMultiplier => products.OrderByDescending(x => x.OrderMeta.PotentialProfitMultiplier),
             SortTypes.SellMovingWeek => products.OrderByDescending(x => x.Sell.WeekVolume),
             SortTypes.BuyMovingWeek => products.OrderByDescending(x => x.Buy.WeekVolume),
             _ => throw new ArgumentOutOfRangeException(nameof(currentSort), currentSort, null)
@@ -125,13 +129,14 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             .RoundedBorder()
             .BorderColor(Color.DarkCyan);
 
-        table.AddColumn(new TableColumn("[bold grey]Stackable?[/]").Width(6).Centered());
-        table.AddColumn(new TableColumn("[bold grey]NPC Sell Price[/]").Width(8).RightAligned());
+        table.AddColumn(new TableColumn("[bold grey]Stackable?[/]").Centered());
+        table.AddColumn(new TableColumn("[bold grey]NPC Sell Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[u]Name[/]").LeftAligned().NoWrap());
         table.AddColumn(new TableColumn("[bold green]Buy Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold red]Sell Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FFA500]Margin[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #00BFFF]Margin %[/]").RightAligned());
+        table.AddColumn(new TableColumn("[bold #F9AD35]Pot. Prof. Mult.[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FF6347]Total Week Vol.[/]").RightAligned().NoWrap());
         table.AddColumn(new TableColumn("[bold #DDA0DD]Buy Week Vol.[/]").RightAligned().NoWrap());
         table.AddColumn(new TableColumn("[bold #90EE90]Sell Week Vol.[/]").RightAligned().NoWrap());
@@ -154,25 +159,37 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
             var marginColor = product.OrderMeta.MarginPercentage switch
             {
-                < 0.1   => "grey",      // Low margin
-                < 0.2   => "yellow1",     // Moderate margin
-                < 0.3   => "greenyellow", // Decent margin
-                < 0.4   => "mediumspringgreen",  // Good margin
-                < 0.6   => "springgreen1",   // Very good margin
-                < 0.8   => "paleturquoise1",  // Great margin
-                _       => "deepskyblue1"  // Excellent margin (100% or more)
+                < 0.1 => "grey",
+                < 0.2 => "yellow1",
+                < 0.3 => "greenyellow",
+                < 0.4 => "mediumspringgreen",
+                < 0.6 => "springgreen1",
+                < 0.8 => "paleturquoise1",
+                _ => "deepskyblue1"
+            };
+
+            var multiplierColor = product.OrderMeta.PotentialProfitMultiplier switch
+            {
+                < 2 => "grey",
+                < 3 => "yellow1",
+                < 5 => "greenyellow",
+                < 10 => "mediumspringgreen",
+                < 50 => "springgreen1",
+                < 100 => "paleturquoise1",
+                _ => "deepskyblue1"
             };
 
             var stackable = !product.Item.Unstackable;
 
             table.AddRow(
                 $"{(stackable ? "YES" : "NO")}",
-                $"{(product.Item.NpcSellPrice.HasValue ? product.Item.NpcSellPrice.Value.ToString("N0") : "--")}",
+                $"{(product.Item.NpcSellPrice.HasValue ? product.Item.NpcSellPrice.Value.ToString("C0") : "--")}",
                 $"[{tierColor}]{product.Item.FriendlyName}[/]",
-                $"{product.Buy.UnitPrice:N2}",
-                $"{product.Sell.UnitPrice:N2}",
-                $"{product.OrderMeta.Margin:N1}",
+                $"{product.Buy.UnitPrice:C2}",
+                $"{product.Sell.UnitPrice:C2}",
+                $"{product.OrderMeta.Margin:C2}",
                 $"[{marginColor}]{product.OrderMeta.MarginPercentage:P1}[/]",
+                $"[{multiplierColor}]{product.OrderMeta.PotentialProfitMultiplier:N2}x[/]",
                 $"{product.OrderMeta.TotalWeekVolume:N0}",
                 $"{product.Buy.WeekVolume:N0}",
                 $"{product.Sell.WeekVolume:N0}");
@@ -190,6 +207,7 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
         SellMovingWeek,
         BuyMovingWeek,
         BuyPrice,
-        SellPrice
+        SellPrice,
+        PotentialProfitMultiplier
     }
 }
