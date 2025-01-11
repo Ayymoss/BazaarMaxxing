@@ -115,7 +115,6 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                     }
                 };
             })
-<<<<<<< HEAD
             //.Where(x => x.OrderMeta.Margin > 100) 
             .OrderByDescending(x => x.OrderMeta.NpcProfit) 
             .ToList();
@@ -155,12 +154,6 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 _ => currentSort
             };
         }
-=======
-            .Where(x => x.OrderMeta.Margin > 100)
-            .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
-            .ToList();
-        return products;
->>>>>>> 1b3490c75085602a94e2fa0941b9eb39d5617312
     }
 
     private static void RenderTable(List<ProductData> products, SortTypes currentSort)
