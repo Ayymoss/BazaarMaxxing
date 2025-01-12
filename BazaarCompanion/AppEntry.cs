@@ -1,5 +1,6 @@
 using BazaarCompanion.Interfaces;
 using BazaarCompanion.Models;
+using BazaarCompanion.Models.Api.Bazaar;
 using BazaarCompanion.Models.Api.Items;
 using Microsoft.Extensions.Hosting;
 using Spectre.Console;
@@ -9,6 +10,9 @@ namespace BazaarCompanion;
 
 public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 {
+    private bool _filter = true;
+    private IEnumerable<ProductData> _products = [];
+
     public Task StartAsync(CancellationToken cancellationToken)
     {
         new Thread(async () => await HandleDisplayAsync(cancellationToken)) { Name = nameof(AppEntry) }.Start();
@@ -22,7 +26,8 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
     private async Task HandleDisplayAsync(CancellationToken cancellationToken)
     {
-        var products = await FetchDataAsync();
+        var data = await FetchDataAsync();
+        var products = BuildProductData(data.BazaarResponse, data.ItemResponse);
 
         var currentSort = SortTypes.PotentialProfitMultiplier;
 
@@ -36,8 +41,9 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             var sortColumn = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Update Data", "Name", "Buy Price", "Sell Price", "Margin", "Margin %", "Potential Profit Multiplier",
-                        "Total Week Volume", "Sell Week Volume", "Buy Week Volume", "Buy Order Power", "NPC Profit", "NPC Margin", "Quit"));
+                    .AddChoices("Update Data", "Toggle Filter", "-------", "Name", "Buy Price", "Sell Price", "Margin", "Margin %",
+                        "Potential Profit Multiplier", "Total Week Volume", "Sell Week Volume", "Buy Week Volume", "Buy Order Power",
+                        "NPC Profit", "NPC Margin", "-------", "Quit"));
 
             switch (sortColumn)
             {
@@ -45,7 +51,12 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                     Environment.Exit(1);
                     break;
                 case "Update Data":
-                    products = await FetchDataAsync();
+                    data = await FetchDataAsync();
+                    products = BuildProductData(data.BazaarResponse, data.ItemResponse);
+                    break;
+                case "Toggle Filter":
+                    _filter = !_filter;
+                    products = BuildProductData(data.BazaarResponse, data.ItemResponse);
                     break;
             }
 
@@ -68,12 +79,16 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
         }
     }
 
-    private async Task<List<ProductData>> FetchDataAsync()
+    private async Task<(BazaarResponse BazaarResponse, ItemResponse ItemResponse)> FetchDataAsync()
     {
         var itemResponse = await hyPixelApi.GetItemsAsync();
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
+        return (bazaarResponse, itemResponse);
+    }
 
-        var products = bazaarResponse.Products.Values
+    private List<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)
+    {
+        _products = bazaarResponse.Products.Values
             .Where(x => x.BuySummary.Count is not 0)
             .Where(x => x.SellSummary.Count is not 0)
             .Where(x => x.QuickStatus.SellMovingWeek > 50_000)
@@ -125,10 +140,21 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                         NpcMargin = npcMargin
                     }
                 };
-            })
-            .Where(x => x.OrderMeta.Margin > 100)
-            .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
-            .ToList();
+            });
+
+        List<ProductData> products;
+
+        if (_filter)
+        {
+            products = _products.Where(x => x.OrderMeta.Margin > 100)
+                .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
+                .Where(x => x.OrderMeta.BuyOrderPower > 0.5)
+                .ToList();
+        }
+        else
+        {
+            products = _products.ToList();
+        }
 
         return products;
     }
