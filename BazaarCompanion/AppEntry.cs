@@ -2,14 +2,18 @@ using BazaarCompanion.Interfaces;
 using BazaarCompanion.Models;
 using BazaarCompanion.Models.Api.Bazaar;
 using BazaarCompanion.Models.Api.Items;
+using BazaarCompanion.Utilities;
+using Humanizer;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 using Spectre.Console;
 using Item = BazaarCompanion.Models.Item;
 
 namespace BazaarCompanion;
 
-public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
+public class AppEntry(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration> optionsMonitor) : IHostedService
 {
+    private readonly Configuration _configuration = optionsMonitor.CurrentValue;
     private bool _filter = true;
     private IEnumerable<ProductData> _products = [];
 
@@ -41,9 +45,9 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             var sortColumn = AnsiConsole.Prompt(
                 new SelectionPrompt<string>()
                     .Title("Sort by which column? (or Quit)")
-                    .AddChoices("Update Data", "Toggle Filter", "-------", "Name", "Buy Price", "Sell Price", "Margin", "Margin %",
+                    .AddChoices("Update Data", "Toggle Filter", "-------", "Name", "Buy Price", "Sell Price", "Margin",
                         "Potential Profit Multiplier", "Total Week Volume", "Sell Week Volume", "Buy Week Volume", "Buy Order Power",
-                        "NPC Profit", "NPC Margin", "-------", "Quit"));
+                        "-------", "Quit"));
 
             switch (sortColumn)
             {
@@ -66,14 +70,11 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 "Buy Price" => SortTypes.BuyPrice,
                 "Sell Price" => SortTypes.SellPrice,
                 "Margin" => SortTypes.Margin,
-                "Margin %" => SortTypes.MarginPercentage,
                 "Potential Profit Multiplier" => SortTypes.PotentialProfitMultiplier,
                 "Total Week Volume" => SortTypes.TotalMovingVolume,
                 "Sell Week Volume" => SortTypes.SellMovingWeek,
                 "Buy Week Volume" => SortTypes.BuyMovingWeek,
                 "Buy Order Power" => SortTypes.BuyOrderPower,
-                "NPC Profit" => SortTypes.NpcProfit,
-                "NPC Margin" => SortTypes.NpcMargin,
                 _ => currentSort
             };
         }
@@ -90,24 +91,15 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
     {
         _products = bazaarResponse.Products.Values
             .Where(x => x.BuySummary.Count is not 0)
-            .Where(x => x.SellSummary.Count is not 0)
-            .Where(x => x.QuickStatus.SellMovingWeek > 50_000)
-            .Where(x => x.QuickStatus.BuyMovingWeek > 50_000)
             .Join(itemResponse.Items, bazaar => bazaar.ProductId, item => item.Id, (bazaar, item) =>
             {
                 var buy = bazaar.BuySummary.First();
-                var sell = bazaar.SellSummary.First();
+                var sell = bazaar.SellSummary.FirstOrDefault();
 
-                var margin = buy.PricePerUnit - sell.PricePerUnit;
-                var marginPercentage = 1 - sell.PricePerUnit / buy.PricePerUnit;
+                var margin = buy.PricePerUnit - (sell?.PricePerUnit ?? 0);
                 var totalWeekVolume = bazaar.QuickStatus.SellMovingWeek + bazaar.QuickStatus.BuyMovingWeek;
-                var potentialProfitMultiplier = buy.PricePerUnit / sell.PricePerUnit;
+                var potentialProfitMultiplier = buy.PricePerUnit / (sell?.PricePerUnit ?? 0.1);
                 var buyingPower = (float)bazaar.QuickStatus.BuyMovingWeek / bazaar.QuickStatus.SellMovingWeek;
-
-                double? npcProfit = item.NpcSellPrice.HasValue ? item.NpcSellPrice.Value - buy.PricePerUnit : null;
-                double? npcMargin = item.NpcSellPrice.HasValue && buy.PricePerUnit > 0
-                    ? (item.NpcSellPrice.Value - buy.PricePerUnit) / buy.PricePerUnit
-                    : null;
 
                 return new ProductData
                 {
@@ -116,28 +108,28 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                     {
                         FriendlyName = item.Name,
                         Tier = item.Tier,
-                        NpcSellPrice = item.NpcSellPrice,
                         Unstackable = item.Unstackable
                     },
                     Buy = new OrderInfo
                     {
                         UnitPrice = buy.PricePerUnit,
-                        WeekVolume = bazaar.QuickStatus.BuyMovingWeek
+                        WeekVolume = bazaar.QuickStatus.BuyMovingWeek,
+                        CurrentOrders = bazaar.QuickStatus.BuyOrders,
+                        CurrentVolume = bazaar.QuickStatus.BuyVolume
                     },
                     Sell = new OrderInfo
                     {
-                        UnitPrice = sell.PricePerUnit,
-                        WeekVolume = bazaar.QuickStatus.SellMovingWeek
+                        UnitPrice = sell?.PricePerUnit,
+                        WeekVolume = bazaar.QuickStatus.SellMovingWeek,
+                        CurrentOrders = bazaar.QuickStatus.SellOrders,
+                        CurrentVolume = bazaar.QuickStatus.SellVolume
                     },
                     OrderMeta = new OrderMeta
                     {
                         PotentialProfitMultiplier = potentialProfitMultiplier,
                         Margin = margin,
-                        MarginPercentage = marginPercentage,
                         TotalWeekVolume = totalWeekVolume,
                         BuyOrderPower = buyingPower,
-                        NpcProfit = npcProfit,
-                        NpcMargin = npcMargin
                     }
                 };
             });
@@ -146,9 +138,11 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
 
         if (_filter)
         {
-            products = _products.Where(x => x.OrderMeta.Margin > 100)
-                .Where(x => x.OrderMeta.PotentialProfitMultiplier > 2)
-                .Where(x => x.OrderMeta.BuyOrderPower > 0.5)
+            products = _products.Where(x => x.OrderMeta.Margin > _configuration.MinimumMargin)
+                .Where(x => x.OrderMeta.PotentialProfitMultiplier > _configuration.MinimumPotentialProfitMultiplier)
+                .Where(x => x.OrderMeta.BuyOrderPower > _configuration.MinimumBuyOrderPower)
+                .Where(x => x.Buy.WeekVolume > _configuration.MinimumWeekVolume)
+                .Where(x => x.Sell.WeekVolume > _configuration.MinimumWeekVolume)
                 .ToList();
         }
         else
@@ -167,14 +161,11 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             SortTypes.BuyPrice => products.OrderByDescending(x => x.Buy.UnitPrice),
             SortTypes.SellPrice => products.OrderByDescending(x => x.Sell.UnitPrice),
             SortTypes.Margin => products.OrderByDescending(x => x.OrderMeta.Margin),
-            SortTypes.MarginPercentage => products.OrderByDescending(x => x.OrderMeta.MarginPercentage),
             SortTypes.TotalMovingVolume => products.OrderByDescending(x => x.OrderMeta.TotalWeekVolume),
             SortTypes.PotentialProfitMultiplier => products.OrderByDescending(x => x.OrderMeta.PotentialProfitMultiplier),
             SortTypes.SellMovingWeek => products.OrderByDescending(x => x.Sell.WeekVolume),
             SortTypes.BuyMovingWeek => products.OrderByDescending(x => x.Buy.WeekVolume),
             SortTypes.BuyOrderPower => products.OrderByDescending(x => x.OrderMeta.BuyOrderPower),
-            SortTypes.NpcProfit => products.OrderByDescending(x => x.OrderMeta.NpcProfit),
-            SortTypes.NpcMargin => products.OrderByDescending(x => x.OrderMeta.NpcMargin),
             _ => throw new ArgumentOutOfRangeException(nameof(currentSort), currentSort, null)
         };
 
@@ -188,15 +179,13 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
         table.AddColumn(new TableColumn("[bold green]Buy Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold red]Sell Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FFA500]Margin[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold #00BFFF]Margin %[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #F9AD35]Pot. Prof. Mult.[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #F46DF9]Buy Order Pow.[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FF6347]Total Week Vol.[/]").RightAligned().NoWrap());
-        table.AddColumn(new TableColumn("[bold #DDA0DD]Buy Week Vol.[/]").RightAligned().NoWrap());
-        table.AddColumn(new TableColumn("[bold #90EE90]Sell Week Vol.[/]").RightAligned().NoWrap());
-        table.AddColumn(new TableColumn("[bold grey]NPC Sell Price[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold grey]NPC Profit[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold grey]NPC Margin[/]").RightAligned());
+        table.AddColumn(new TableColumn("[green]Buy Week Vol.[/]").RightAligned().NoWrap());
+        table.AddColumn(new TableColumn("[red]Sell Week Vol.[/]").RightAligned().NoWrap());
+        table.AddColumn(new TableColumn("[green]Buy Book[/]").RightAligned());
+        table.AddColumn(new TableColumn("[red]Sell Book[/]").RightAligned());
 
         foreach (var product in orderedProducts)
         {
@@ -212,17 +201,6 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
                 ItemTier.VerySpecial => "#F5655A",
                 ItemTier.Unobtainable => "#A2240F",
                 _ => "white"
-            };
-
-            var marginColor = product.OrderMeta.MarginPercentage switch
-            {
-                < 0.1 => "grey",
-                < 0.2 => "yellow1",
-                < 0.3 => "greenyellow",
-                < 0.4 => "mediumspringgreen",
-                < 0.6 => "springgreen1",
-                < 0.8 => "paleturquoise1",
-                _ => "deepskyblue1"
             };
 
             var multiplierColor = product.OrderMeta.PotentialProfitMultiplier switch
@@ -250,17 +228,15 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
             table.AddRow(
                 $"[{tierColor}]{product.Item.FriendlyName} {(!product.Item.Unstackable ? "x64" : "x1")}[/]",
                 $"{product.Buy.UnitPrice:C2}",
-                $"{product.Sell.UnitPrice:C2}",
+                $"{product.Sell.UnitPrice?.ToString("C2") ?? "--"}",
                 $"{product.OrderMeta.Margin:C2}",
-                $"[{marginColor}]{product.OrderMeta.MarginPercentage:P1}[/]",
                 $"[{multiplierColor}]{product.OrderMeta.PotentialProfitMultiplier:N2}x[/]",
                 $"[{buyPowerColor}]{product.OrderMeta.BuyOrderPower:N2}x[/]",
-                $"{product.OrderMeta.TotalWeekVolume:N0}",
-                $"{product.Buy.WeekVolume:N0}",
-                $"{product.Sell.WeekVolume:N0}",
-                $"{product.Item.NpcSellPrice?.ToString("C0") ?? "--"}",
-                $"{product.OrderMeta.NpcProfit?.ToString("C2") ?? "--"}",
-                $"{product.OrderMeta.NpcMargin?.ToString("P2") ?? "--"}");
+                $"{product.OrderMeta.TotalWeekVolume:N2}",
+                $"{product.Buy.WeekVolume:N2}",
+                $"{product.Sell.WeekVolume:N2}",
+                $"O:{product.Buy.CurrentOrders.ToMetric(decimals: 0)} -> V:{product.Buy.CurrentVolume.ToMetric(decimals: 0)}",
+                $"O:{product.Sell.CurrentOrders.ToMetric(decimals: 0)} -> V:{product.Sell.CurrentVolume.ToMetric(decimals: 0)}");
         }
 
         AnsiConsole.Status().Start("HyPixel Bazaar", ctx => AnsiConsole.Write(table));
@@ -270,15 +246,12 @@ public class AppEntry(IHyPixelApi hyPixelApi) : IHostedService
     {
         Name,
         Margin,
-        MarginPercentage,
         TotalMovingVolume,
         SellMovingWeek,
         BuyMovingWeek,
         BuyPrice,
         SellPrice,
         PotentialProfitMultiplier,
-        NpcProfit,
-        NpcMargin,
         BuyOrderPower
     }
 }
