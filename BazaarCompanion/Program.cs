@@ -35,6 +35,7 @@ public static class Program
             x.BaseAddress = new Uri("https://api.hypixel.net/");
         });
 
+        builder.Services.AddSingleton<BazaarDisplay>();
         builder.Services.AddHostedService<AppEntry>();
 
         var app = builder.Build();
