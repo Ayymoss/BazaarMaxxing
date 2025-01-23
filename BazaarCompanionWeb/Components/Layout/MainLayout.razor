@@ -1,0 +1,34 @@
+﻿@using BazaarCompanionWeb.Utilities
+@inherits LayoutComponentBase
+
+<RadzenComponents @rendermode="InteractiveServer" />
+
+<RadzenLayout
+    Style="height: 100vh; grid-template-columns: auto 1fr auto; grid-template-areas: 'rz-header rz-header rz-header' 'rz-sidebar rz-body rz-right-sidebar'">
+    <RadzenHeader>
+        <TopBar @ref="_topBar"/>
+    </RadzenHeader>
+    <RadzenBody @ref="_body" class="rz-p-8">
+        <ChildContent>
+            <RadzenContentContainer Name="main">
+                <div style="height: 100%">
+                    @Body
+                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center">
+                        @{
+                            var version = HelperMethods.GetVersion();
+                            var versionString = $"Hypixel Bazaar Maxing | By Amos | Version {version}";
+                        }
+                        <RadzenText TextAlign="TextAlign.Center" Text="@versionString" TextStyle="TextStyle.Caption"
+                                    class="rz-mb-0 rz-my-2 rz-color-secondary-dark"/>
+                    </RadzenStack>
+                </div>
+            </RadzenContentContainer>
+        </ChildContent>
+    </RadzenBody>
+</RadzenLayout>
+
+<div id="blazor-error-ui">
+    An unhandled error has occurred.
+    <a href="" class="reload">Reload</a>
+    <a class="dismiss">🗙</a>
+</div>

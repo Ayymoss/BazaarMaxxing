@@ -1,0 +1,28 @@
+﻿@if (_loading)
+{
+    <div class="rz-mx-12 rz-my-4">
+        <RadzenProgressBar ProgressBarStyle="ProgressBarStyle.Secondary" Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate"/>
+    </div>
+}
+else
+{
+
+    if (Product.PriceHistory?.Count is not 0)
+    {
+        <RadzenChart Style="width: 100%">
+            <RadzenChartTooltipOptions Shared="true" />
+            <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Buy" ValueProperty="Buy">
+                <RadzenMarkers Visible="true" MarkerType="MarkerType.Square" />
+                <RadzenSeriesDataLabels  />
+            </RadzenLineSeries>
+            <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Sell" ValueProperty="Sell">
+                <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle" />
+                <RadzenSeriesDataLabels />
+            </RadzenLineSeries>
+            <RadzenCategoryAxis Padding="40" />
+            <RadzenValueAxis Formatter="@FormatAsUsd">
+                <RadzenGridLines Visible="true" />
+            </RadzenValueAxis>
+        </RadzenChart>
+    }
+}

@@ -27,7 +27,7 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
 
     private readonly Dictionary<SortOption, string> _sortOptions = new()
     {
-        [SortOption.Name] = "Margin",
+        [SortOption.Name] = "Name",
         [SortOption.BuyPrice] = "Buy Price",
         [SortOption.SellPrice] = "Sell Price",
         [SortOption.Margin] = "Margin",
@@ -93,12 +93,15 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
             .Where(x => x.BuySummary.Count is not 0)
             .Join(itemResponse.Items, bazaar => bazaar.ProductId, item => item.Id, (bazaar, item) =>
             {
-                var buy = bazaar.BuySummary.First();
+                var buy = bazaar.BuySummary.FirstOrDefault();
                 var sell = bazaar.SellSummary.FirstOrDefault();
 
-                var margin = buy.PricePerUnit - (sell?.PricePerUnit ?? 0);
+                var buyPrice = buy?.PricePerUnit ?? double.MaxValue;
+                var sellPrice = sell?.PricePerUnit ?? 0.1;
+
+                var margin = buyPrice - sellPrice;
                 var totalWeekVolume = bazaar.QuickStatus.SellMovingWeek + bazaar.QuickStatus.BuyMovingWeek;
-                var potentialProfitMultiplier = buy.PricePerUnit / (sell?.PricePerUnit ?? 0.1);
+                var potentialProfitMultiplier = buyPrice / sellPrice;
                 var buyingPower = (float)bazaar.QuickStatus.BuyMovingWeek / bazaar.QuickStatus.SellMovingWeek;
 
                 return new ProductData
@@ -112,7 +115,7 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
                     },
                     Buy = new OrderInfo
                     {
-                        UnitPrice = buy.PricePerUnit,
+                        UnitPrice = buy?.PricePerUnit,
                         WeekVolume = bazaar.QuickStatus.BuyMovingWeek,
                         CurrentOrders = bazaar.QuickStatus.BuyOrders,
                         CurrentVolume = bazaar.QuickStatus.BuyVolume
@@ -224,8 +227,8 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
             };
 
             table.AddRow(
-                $"[{tierColor}]{product.Item.FriendlyName} {(product.Item.Unstackable ? "(UNSTKBL)" : "(STKBL)")}[/]",
-                $"{product.Buy.UnitPrice:C2}",
+                $"[{tierColor}]{product.Item.FriendlyName} {(product.Item.Unstackable ? "(UNSTKBL)" : string.Empty)}[/]",
+                $"{product.Buy.UnitPrice?.ToString("C2") ?? "--"}",
                 $"{product.Sell.UnitPrice?.ToString("C2") ?? "--"}",
                 $"{product.OrderMeta.Margin:C2}",
                 $"[{multiplierColor}]{product.OrderMeta.PotentialProfitMultiplier:N2}x[/]",
