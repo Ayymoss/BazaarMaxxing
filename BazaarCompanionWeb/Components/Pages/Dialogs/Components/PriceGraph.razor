@@ -1,28 +1,27 @@
 ﻿@if (_loading)
 {
     <div class="rz-mx-12 rz-my-4">
-        <RadzenProgressBar ProgressBarStyle="ProgressBarStyle.Secondary" Value="100" ShowValue="false" Mode="ProgressBarMode.Indeterminate"/>
+        <RadzenProgressBar ProgressBarStyle="ProgressBarStyle.Secondary" Value="100" ShowValue="false"
+                           Mode="ProgressBarMode.Indeterminate"/>
     </div>
 }
 else
 {
-
     if (Product.PriceHistory?.Count is not 0)
     {
         <RadzenChart Style="width: 100%">
-            <RadzenChartTooltipOptions Shared="true" />
+            <RadzenChartTooltipOptions Shared="true"/>
             <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Buy" ValueProperty="Buy">
-                <RadzenMarkers Visible="true" MarkerType="MarkerType.Square" />
-                <RadzenSeriesDataLabels  />
+                <RadzenMarkers Visible="true" MarkerType="MarkerType.Square"/>
             </RadzenLineSeries>
             <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Sell" ValueProperty="Sell">
-                <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle" />
-                <RadzenSeriesDataLabels />
+                <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
             </RadzenLineSeries>
-            <RadzenCategoryAxis Padding="40" />
+            <RadzenCategoryAxis Padding="20" LabelAutoRotation="45" Formatter="DateFormatter"/>
             <RadzenValueAxis Formatter="@FormatAsUsd">
-                <RadzenGridLines Visible="true" />
+                <RadzenGridLines Visible="true"/>
             </RadzenValueAxis>
+            <RadzenLegend Visible="false"/>
         </RadzenChart>
     }
 }

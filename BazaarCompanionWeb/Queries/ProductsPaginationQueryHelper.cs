@@ -66,7 +66,7 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         // Apply the sort
         query = sortDescriptors.Aggregate(query, (current, sort) => sort.Property switch
         {
-            nameof(ProductDataInfo.ItemFriendlyName) => current.ApplySort(sort, p => p.FriendlyName),
+            nameof(ProductDataInfo.ItemFriendlyName) => current.ApplySortForName(sort, p => p.FriendlyName, p => p.Tier),
             nameof(ProductDataInfo.BuyOrderUnitPrice) => current.ApplySort(sort, p => p.MarketData.BuyLastPrice),
             nameof(ProductDataInfo.SellOrderUnitPrice) => current.ApplySort(sort, p => p.MarketData.SellLastPrice),
             nameof(ProductDataInfo.OrderMetaMargin) => current.ApplySort(sort, p => p.Meta.Margin),

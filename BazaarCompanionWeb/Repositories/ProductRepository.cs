@@ -61,6 +61,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
         var existingProducts = await context.Products
             .Include(x => x.Snapshots)
             .Include(x => x.MarketData)
+            .Include(x => x.Meta)
             .Where(x => productMap.Keys.Contains(x.Name))
             .ToListAsync(cancellationToken);
 
@@ -75,6 +76,11 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
             foreach (var product in existingProducts)
             {
                 var incomingProduct = productMap[product.Name];
+                product.Name = incomingProduct.Name;
+                product.FriendlyName = incomingProduct.FriendlyName;
+                product.Tier = incomingProduct.Tier;
+                product.Unstackable = incomingProduct.Unstackable;
+
                 product.MarketData.BuyLastPrice = incomingProduct.MarketData.BuyLastPrice;
                 product.MarketData.BuyLastOrderVolumeWeek = incomingProduct.MarketData.BuyLastOrderVolumeWeek;
                 product.MarketData.BuyLastOrderVolume = incomingProduct.MarketData.BuyLastOrderVolume;
@@ -83,6 +89,10 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                 product.MarketData.SellLastOrderVolumeWeek = incomingProduct.MarketData.SellLastOrderVolumeWeek;
                 product.MarketData.SellLastOrderVolume = incomingProduct.MarketData.SellLastOrderVolume;
                 product.MarketData.SellLastOrderCount = incomingProduct.MarketData.SellLastOrderCount;
+
+                product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
+                product.Meta.PotentialProfitMultiplier = incomingProduct.Meta.PotentialProfitMultiplier;
+                product.Meta.Margin = incomingProduct.Meta.Margin;
 
                 product.Snapshots.Add(new EFPriceSnapshot
                 {

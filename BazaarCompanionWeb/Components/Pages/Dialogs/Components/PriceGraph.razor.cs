@@ -7,7 +7,6 @@ namespace BazaarCompanionWeb.Components.Pages.Dialogs.Components;
 
 public partial class PriceGraph(IProductRepository productRepository)
 {
-
     [Parameter] public required ProductDataInfo Product { get; set; }
 
     private bool _loading;
@@ -37,5 +36,10 @@ public partial class PriceGraph(IProductRepository productRepository)
     private string FormatAsUsd(object value)
     {
         return ((double)value).ToString("C0", CultureInfo.CreateSpecificCulture("en-US"));
+    }
+
+    private static string DateFormatter(object arg)
+    {
+        return arg is DateOnly dateOnly ? dateOnly.ToString("yyyy-MM-dd") : string.Empty;
     }
 }
