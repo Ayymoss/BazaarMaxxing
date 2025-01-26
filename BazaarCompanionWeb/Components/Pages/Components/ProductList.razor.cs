@@ -4,7 +4,6 @@ using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Models.Api.Items;
-using BazaarCompanionWeb.Models.Pagination;
 using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
 using Microsoft.AspNetCore.Components;
 using Radzen;
@@ -13,7 +12,7 @@ using SortDescriptor = BazaarCompanionWeb.Models.Pagination.SortDescriptor;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
-public partial class ProductList : IDisposable
+public partial class ProductList : ComponentBase, IDisposable
 {
     [Inject] private DialogService DialogService { get; set; }
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
@@ -108,37 +107,7 @@ public partial class ProductList : IDisposable
         await DialogService.OpenAsync<PriceHistoryDialog>("Price History", parameters, options);
     }
 
-    private static string ProductTierColor(ItemTier itemTier)
-    {
-        return itemTier switch
-        {
-            ItemTier.Uncommon => "#78F86A",
-            ItemTier.Rare => "#535FF8",
-            ItemTier.Epic => "#A22EA5",
-            ItemTier.Legendary => "#F9AD35",
-            ItemTier.Mythic => "#F46DF9",
-            ItemTier.Supreme => "#76FBFE",
-            ItemTier.Special => "#F5655A",
-            ItemTier.VerySpecial => "#F5655A",
-            ItemTier.Unobtainable => "#A2240F",
-            _ => "#FFFFFF"
-        };
-    }
-
-    private static string ProfitColor(double multiplier)
-    {
-        return multiplier switch
-        {
-            < 2 => "#808080",
-            < 3 => "#FFFFFF",
-            < 5 => "#78F86A",
-            < 10 => "#535FF8",
-            < 50 => "#A22EA5",
-            < 100 => "#F9AD35",
-            < 500 => "#F46DF9",
-            _ => "#76FBFE"
-        };
-    }
+    
 
     public void Dispose()
     {

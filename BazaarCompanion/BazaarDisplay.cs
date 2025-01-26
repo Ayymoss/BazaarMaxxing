@@ -30,7 +30,7 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
         [SortOption.Name] = "Name",
         [SortOption.BuyPrice] = "Buy Price",
         [SortOption.SellPrice] = "Sell Price",
-        [SortOption.Margin] = "Margin",
+        [SortOption.Margin] = "Spread",
         [SortOption.PotentialProfitMultiplier] = "Potential Profit Multiplier",
         [SortOption.BuyOrderPower] = "Buy Order Power",
         [SortOption.TotalMovingVolume] = "Total Week Volume",
@@ -181,7 +181,7 @@ public class BazaarDisplay(IHyPixelApi hyPixelApi, IOptionsMonitor<Configuration
         table.AddColumn(new TableColumn("[u]Name[/]").LeftAligned().NoWrap());
         table.AddColumn(new TableColumn("[bold green]Buy Price[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold red]Sell Price[/]").RightAligned());
-        table.AddColumn(new TableColumn("[bold #FFA500]Margin[/]").RightAligned());
+        table.AddColumn(new TableColumn("[bold #FFA500]Spread[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #F9AD35]Pot. Prof. Mult.[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #F46DF9]Buy Order Pow.[/]").RightAligned());
         table.AddColumn(new TableColumn("[bold #FF6347]Total Week Vol.[/]").RightAligned().NoWrap());

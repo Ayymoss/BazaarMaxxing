@@ -17,6 +17,7 @@ using Serilog.Events;
 
 namespace BazaarCompanionWeb;
 
+// TODO: Fire sale icon for items which have jumped price massively. 
 public class Program
 {
     public static void Main(string[] args)
@@ -34,7 +35,8 @@ public class Program
 
         builder.Services.AddDbContextFactory<DataContext>(options =>
         {
-            options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}");
+            options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
+                sqlOpt => sqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         });
 
         // Add services to the container.

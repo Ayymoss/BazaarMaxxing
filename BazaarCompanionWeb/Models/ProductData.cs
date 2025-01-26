@@ -21,29 +21,45 @@ public class ProductData
             Unstackable = Item.Unstackable,
             Meta = new EFProductMeta
             {
-                PotentialProfitMultiplier = (Buy.UnitPrice ?? double.MaxValue) / (Sell.UnitPrice ?? 0.1),
-                Margin = (Buy.UnitPrice ?? double.MaxValue) - (Sell.UnitPrice ?? 0.1),
+                ProfitMultiplier = Buy.UnitPrice / Sell.UnitPrice,
+                Margin = Buy.UnitPrice - Sell.UnitPrice,
                 TotalWeekVolume = Buy.WeekVolume + Sell.WeekVolume,
+                FlipOpportunityScore = OrderMeta.FlipOpportunityScore,
             },
             Snapshots =
             [
                 new EFPriceSnapshot
                 {
-                    BuyUnitPrice = Buy.UnitPrice ?? double.MaxValue,
-                    SellUnitPrice = Sell.UnitPrice ?? 0.1,
+                    BuyUnitPrice = Buy.UnitPrice,
+                    SellUnitPrice = Sell.UnitPrice,
                     Taken = TimeProvider.System.GetUtcNow().DateTime,
                 }
             ],
-            MarketData = new EFMarketData
+            Buy = new EFBuyMarketData
             {
-                BuyLastPrice = Buy.UnitPrice ?? double.MaxValue,
-                BuyLastOrderVolumeWeek = Buy.WeekVolume,
-                BuyLastOrderVolume = Buy.CurrentVolume,
-                BuyLastOrderCount = Buy.CurrentOrders,
-                SellLastPrice = Sell.UnitPrice ?? 0.1,
-                SellLastOrderVolumeWeek = Sell.WeekVolume,
-                SellLastOrderVolume = Sell.CurrentVolume,
-                SellLastOrderCount = Sell.CurrentOrders,
+                UnitPrice = Buy.UnitPrice,
+                OrderVolumeWeek = Buy.WeekVolume,
+                OrderVolume = Buy.CurrentVolume,
+                OrderCount = Buy.CurrentOrders,
+                Book = Buy.OrderBook.Select(x => new EFOrder
+                {
+                    Amount = x.Amount,
+                    Orders = x.Orders,
+                    UnitPrice = x.UnitPrice,
+                }).ToList(),
+            },
+            Sell = new EFSellMarketData
+            {
+                UnitPrice = Sell.UnitPrice,
+                OrderVolumeWeek = Sell.WeekVolume,
+                OrderVolume = Sell.CurrentVolume,
+                OrderCount = Sell.CurrentOrders,
+                Book = Sell.OrderBook.Select(x => new EFOrder
+                {
+                    Amount = x.Amount,
+                    Orders = x.Orders,
+                    UnitPrice = x.UnitPrice,
+                }).ToList(),
             }
         };
     }

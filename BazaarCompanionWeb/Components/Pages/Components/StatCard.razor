@@ -1,0 +1,16 @@
+﻿@using System.Globalization
+<RadzenCard Variant="@Variant" class="card-width card-width-ex">
+    <RadzenStack Orientation="Orientation.Vertical" Wrap="FlexWrap.NoWrap" Gap="0rem">
+        <RadzenText Text="@Title" TextStyle="TextStyle.Overline" class="rz-mb-1"/>
+        <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Gap="0.5rem">
+            <RadzenText TextStyle="TextStyle.H4" TextAlign="TextAlign.Center" class="rz-m-0">
+                @(Value.ToString("C2", CultureInfo.CreateSpecificCulture("en-US")))
+            </RadzenText>
+            <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.NoWrap" Gap="0.25rem">
+                <RadzenIcon Icon="@Icon" class="@Color"/>
+                <RadzenText Text="@Percentage.ToString("P2")" TextStyle="TextStyle.Body1" TextAlign="TextAlign.Center"
+                            class="@($"{Color} rz-m-0")"/>
+            </RadzenStack>
+        </RadzenStack>
+    </RadzenStack>
+</RadzenCard>

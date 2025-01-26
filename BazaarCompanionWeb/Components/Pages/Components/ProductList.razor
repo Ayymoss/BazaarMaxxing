@@ -1,5 +1,7 @@
-﻿@using System.Text
+﻿@using System.Globalization
+@using System.Text
 @using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Utilities
 @using Humanizer
 
 <RadzenRow JustifyContent="JustifyContent.Center">
@@ -43,22 +45,34 @@
                     <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.ItemFriendlyName))" Title="Name"
                                           MinWidth="250px" Width="250px">
                         <Template Context="context">
-                            <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {ProductTierColor(context.ItemTier)}")">
+                            <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {context.ItemTier.ProductTierColor()}")">
                                 @(context.ItemFriendlyName)
                             </RadzenText>
                         </Template>
                     </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderUnitPrice))" Title="Buy Price"
+                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderUnitPrice))"
+                                          Title="Insta. Buy Price"
                                           MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
                     <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderUnitPrice))"
-                                          Title="Sell Price" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaMargin))" Title="Margin"
+                                          Title="Insta. Sell Price" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaMargin))" Title="Spread"
                                           MinWidth="60px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
                     <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier))"
                                           Title="Profit Multi." MinWidth="60px">
                         <Template Context="context">
-                            <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {ProfitColor(context.OrderMetaPotentialProfitMultiplier)}")">
+                            <RadzenText TextStyle="TextStyle.Body2"
+                                        Style="@($"color: {context.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">
                                 @(context.OrderMetaPotentialProfitMultiplier.ToString("N2"))x
+                            </RadzenText>
+                        </Template>
+                    </RadzenDataGridColumn>
+                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaFlipOpportunityScore))"
+                                          Title="Flip Rating" MinWidth="60px">
+                        <Template Context="context">
+
+                            <RadzenText TextStyle="TextStyle.Body2"
+                                        Style="@($"color: {context.OrderMetaFlipOpportunityScore.RatingColor()}")">
+                                @context.OrderMetaFlipOpportunityScore.ToString("N2")
                             </RadzenText>
                         </Template>
                     </RadzenDataGridColumn>
@@ -90,6 +104,7 @@
                             </RadzenText>
                         </Template>
                     </RadzenDataGridColumn>
+
                 </Columns>
                 <EmptyTemplate>
                     <RadzenText TextAlign="TextAlign.Center" TextStyle="TextStyle.H6" class="rz-my-4" Text="There are no products..."/>

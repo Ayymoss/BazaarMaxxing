@@ -20,7 +20,8 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Products
-            .Include(x => x.MarketData)
+            .Include(x => x.Buy)
+            .Include(x => x.Sell)
             .Include(x => x.Meta)
             .AsNoTracking()
             .AsQueryable();
@@ -42,10 +43,10 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
     private IQueryable<EFProduct> ApplyFilterQuery(IQueryable<EFProduct> query)
     {
         return query.Where(x => x.Meta.Margin > _configuration.MinimumMargin)
-            .Where(x => x.Meta.PotentialProfitMultiplier > _configuration.MinimumPotentialProfitMultiplier)
-            .Where(x => x.MarketData.BuyLastOrderVolumeWeek / x.MarketData.SellLastOrderVolumeWeek > _configuration.MinimumBuyOrderPower)
-            .Where(x => x.MarketData.BuyLastOrderVolumeWeek > _configuration.MinimumWeekVolume)
-            .Where(x => x.MarketData.SellLastOrderVolumeWeek > _configuration.MinimumWeekVolume);
+            .Where(x => x.Meta.ProfitMultiplier > _configuration.MinimumPotentialProfitMultiplier)
+            .Where(x => x.Buy.OrderVolumeWeek / x.Sell.OrderVolumeWeek > _configuration.MinimumBuyOrderPower)
+            .Where(x => x.Buy.OrderVolumeWeek > _configuration.MinimumWeekVolume)
+            .Where(x => x.Sell.OrderVolumeWeek > _configuration.MinimumWeekVolume);
     }
 
     private static IQueryable<EFProduct> ApplySearchQuery(IQueryable<EFProduct> query, string search)
@@ -67,13 +68,14 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         query = sortDescriptors.Aggregate(query, (current, sort) => sort.Property switch
         {
             nameof(ProductDataInfo.ItemFriendlyName) => current.ApplySortForName(sort, p => p.FriendlyName, p => p.Tier),
-            nameof(ProductDataInfo.BuyOrderUnitPrice) => current.ApplySort(sort, p => p.MarketData.BuyLastPrice),
-            nameof(ProductDataInfo.SellOrderUnitPrice) => current.ApplySort(sort, p => p.MarketData.SellLastPrice),
+            nameof(ProductDataInfo.BuyOrderUnitPrice) => current.ApplySort(sort, p => p.Buy.UnitPrice),
+            nameof(ProductDataInfo.SellOrderUnitPrice) => current.ApplySort(sort, p => p.Sell.UnitPrice),
             nameof(ProductDataInfo.OrderMetaMargin) => current.ApplySort(sort, p => p.Meta.Margin),
-            nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier) => current.ApplySort(sort, p => p.Meta.PotentialProfitMultiplier),
+            nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier) => current.ApplySort(sort, p => p.Meta.ProfitMultiplier),
             nameof(ProductDataInfo.OrderMetaTotalWeekVolume) => current.ApplySort(sort, p => p.Meta.TotalWeekVolume),
-            nameof(ProductDataInfo.BuyOrderWeekVolume) => current.ApplySort(sort, p => p.MarketData.BuyLastOrderVolumeWeek),
-            nameof(ProductDataInfo.SellOrderWeekVolume) => current.ApplySort(sort, p => p.MarketData.SellLastOrderVolumeWeek),
+            nameof(ProductDataInfo.BuyOrderWeekVolume) => current.ApplySort(sort, p => p.Buy.OrderVolumeWeek),
+            nameof(ProductDataInfo.SellOrderWeekVolume) => current.ApplySort(sort, p => p.Sell.OrderVolumeWeek),
+            nameof(ProductDataInfo.OrderMetaFlipOpportunityScore) => current.ApplySort(sort, p => p.Meta.FlipOpportunityScore),
             _ => current
         });
         return query;
@@ -87,7 +89,7 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         var pagedData = await query
             .Skip(request.Skip)
             .Take(request.Top)
-            .Select(server => MapServer(server))
+            .Select(server => MapProduct(server))
             .ToListAsync(cancellationToken: cancellationToken);
 
         return new PaginationContext<ProductDataInfo>
@@ -97,26 +99,29 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         };
     }
 
-    private static ProductDataInfo MapServer(EFProduct product)
+    private static ProductDataInfo MapProduct(EFProduct product)
     {
         return new ProductDataInfo
         {
-            Guid = product.ProductGuid,
+            ProductGuid = product.ProductGuid,
+            BuyMarketDataId = product.Buy.Id,
+            SellMarketDataId = product.Sell.Id,
             ItemId = product.Name,
             ItemFriendlyName = product.FriendlyName,
             ItemTier = product.Tier,
             ItemUnstackable = product.Unstackable,
-            BuyOrderUnitPrice = product.MarketData.BuyLastPrice,
-            BuyOrderWeekVolume = product.MarketData.BuyLastOrderVolumeWeek,
-            BuyOrderCurrentOrders = product.MarketData.BuyLastOrderCount,
-            BuyOrderCurrentVolume = product.MarketData.BuyLastOrderVolume,
-            SellOrderUnitPrice = product.MarketData.SellLastPrice,
-            SellOrderWeekVolume = product.MarketData.SellLastOrderVolumeWeek,
-            SellOrderCurrentOrders = product.MarketData.SellLastOrderCount,
-            SellOrderCurrentVolume = product.MarketData.SellLastOrderVolume,
-            OrderMetaPotentialProfitMultiplier = product.Meta.PotentialProfitMultiplier,
+            BuyOrderUnitPrice = product.Buy.UnitPrice,
+            BuyOrderWeekVolume = product.Buy.OrderVolumeWeek,
+            BuyOrderCurrentOrders = product.Buy.OrderCount,
+            BuyOrderCurrentVolume = product.Buy.OrderVolume,
+            SellOrderUnitPrice = product.Sell.UnitPrice,
+            SellOrderWeekVolume = product.Sell.OrderVolumeWeek,
+            SellOrderCurrentOrders = product.Sell.OrderCount,
+            SellOrderCurrentVolume = product.Sell.OrderVolume,
+            OrderMetaPotentialProfitMultiplier = product.Meta.ProfitMultiplier,
             OrderMetaMargin = product.Meta.Margin,
-            OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume,
+            OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume, 
+            OrderMetaFlipOpportunityScore = product.Meta.FlipOpportunityScore,
         };
     }
 }

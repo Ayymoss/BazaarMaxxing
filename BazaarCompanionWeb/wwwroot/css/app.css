@@ -76,6 +76,14 @@ a {
     border: none;
 }
 
+.card-width {
+    min-width: 12rem;
+}
+
+.card-width.card-width-ex {
+    min-width: 14rem;
+}
+
 .custom-rz-link {
     background-color: var(--rz-body-background-color);
     border: none;

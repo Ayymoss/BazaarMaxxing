@@ -16,9 +16,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
             .Select(p => p.Name)
             .ToListAsync(cancellationToken);
 
-        var productMap = products.ToDictionary(x => x.Name, product => product);
-
+        var productMap = products.ToDictionary(x => x.Name);
         var timeNow = TimeProvider.System.GetLocalNow().DateTime;
+
         var newProducts = products
             .Where(p => !existingProductNames.Contains(p.Name))
             .Select(x => new EFProduct
@@ -31,37 +31,44 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
 
                 Meta = new EFProductMeta
                 {
-                    PotentialProfitMultiplier = x.Meta.PotentialProfitMultiplier,
+                    ProfitMultiplier = x.Meta.ProfitMultiplier,
                     Margin = x.Meta.Margin,
                     TotalWeekVolume = x.Meta.TotalWeekVolume,
+                    FlipOpportunityScore = x.Meta.FlipOpportunityScore,
                 },
                 Snapshots =
                 [
                     new EFPriceSnapshot
                     {
-                        BuyUnitPrice = x.MarketData.BuyLastPrice,
-                        SellUnitPrice = x.MarketData.SellLastPrice,
+                        BuyUnitPrice = x.Buy.UnitPrice,
+                        SellUnitPrice = x.Sell.UnitPrice,
                         Taken = timeNow,
                     }
                 ],
-                MarketData = new EFMarketData
+                Buy = new EFBuyMarketData
                 {
-                    BuyLastPrice = x.MarketData.BuyLastPrice,
-                    BuyLastOrderVolumeWeek = x.MarketData.BuyLastOrderVolumeWeek,
-                    BuyLastOrderVolume = x.MarketData.BuyLastOrderVolume,
-                    BuyLastOrderCount = x.MarketData.BuyLastOrderCount,
-                    SellLastPrice = x.MarketData.SellLastPrice,
-                    SellLastOrderVolumeWeek = x.MarketData.SellLastOrderVolumeWeek,
-                    SellLastOrderVolume = x.MarketData.SellLastOrderVolume,
-                    SellLastOrderCount = x.MarketData.SellLastOrderCount,
-                }
+                    UnitPrice = x.Buy.UnitPrice,
+                    OrderVolumeWeek = x.Buy.OrderVolumeWeek,
+                    OrderVolume = x.Buy.OrderVolume,
+                    OrderCount = x.Buy.OrderCount,
+                    Book = x.Buy.Book
+                },
+                Sell = new EFSellMarketData
+                {
+                    UnitPrice = x.Sell.UnitPrice,
+                    OrderVolumeWeek = x.Sell.OrderVolumeWeek,
+                    OrderVolume = x.Sell.OrderVolume,
+                    OrderCount = x.Sell.OrderCount,
+                    Book = x.Sell.Book
+                },
             })
             .ToList();
 
         var existingProducts = await context.Products
             .Include(x => x.Snapshots)
-            .Include(x => x.MarketData)
             .Include(x => x.Meta)
+            .Include(x => x.Buy).ThenInclude(b => b.Book)
+            .Include(x => x.Sell).ThenInclude(s => s.Book)
             .Where(x => productMap.Keys.Contains(x.Name))
             .ToListAsync(cancellationToken);
 
@@ -76,37 +83,41 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
             foreach (var product in existingProducts)
             {
                 var incomingProduct = productMap[product.Name];
+
+                context.RemoveRange(product.Buy.Book);
+                context.RemoveRange(product.Sell.Book);
+
                 product.Name = incomingProduct.Name;
                 product.FriendlyName = incomingProduct.FriendlyName;
                 product.Tier = incomingProduct.Tier;
                 product.Unstackable = incomingProduct.Unstackable;
 
-                product.MarketData.BuyLastPrice = incomingProduct.MarketData.BuyLastPrice;
-                product.MarketData.BuyLastOrderVolumeWeek = incomingProduct.MarketData.BuyLastOrderVolumeWeek;
-                product.MarketData.BuyLastOrderVolume = incomingProduct.MarketData.BuyLastOrderVolume;
-                product.MarketData.BuyLastOrderCount = incomingProduct.MarketData.BuyLastOrderCount;
-                product.MarketData.SellLastPrice = incomingProduct.MarketData.SellLastPrice;
-                product.MarketData.SellLastOrderVolumeWeek = incomingProduct.MarketData.SellLastOrderVolumeWeek;
-                product.MarketData.SellLastOrderVolume = incomingProduct.MarketData.SellLastOrderVolume;
-                product.MarketData.SellLastOrderCount = incomingProduct.MarketData.SellLastOrderCount;
+                product.Buy.UnitPrice = incomingProduct.Buy.UnitPrice;
+                product.Buy.OrderVolumeWeek = incomingProduct.Buy.OrderVolumeWeek;
+                product.Buy.OrderVolume = incomingProduct.Buy.OrderVolume;
+                product.Buy.OrderCount = incomingProduct.Buy.OrderCount;
+                product.Buy.Book = incomingProduct.Buy.Book;
+
+                product.Sell.UnitPrice = incomingProduct.Sell.UnitPrice;
+                product.Sell.OrderVolumeWeek = incomingProduct.Sell.OrderVolumeWeek;
+                product.Sell.OrderVolume = incomingProduct.Sell.OrderVolume;
+                product.Sell.OrderCount = incomingProduct.Sell.OrderCount;
+                product.Sell.Book = incomingProduct.Sell.Book;
 
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
-                product.Meta.PotentialProfitMultiplier = incomingProduct.Meta.PotentialProfitMultiplier;
+                product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
                 product.Meta.Margin = incomingProduct.Meta.Margin;
 
                 product.Snapshots.Add(new EFPriceSnapshot
                 {
-                    BuyUnitPrice = incomingProduct.MarketData.BuyLastPrice,
-                    SellUnitPrice = incomingProduct.MarketData.SellLastPrice,
+                    BuyUnitPrice = incomingProduct.Buy.UnitPrice,
+                    SellUnitPrice = incomingProduct.Sell.UnitPrice,
                     Taken = timeNow,
                     ProductGuid = product.ProductGuid,
                 });
             }
 
-            if (existingProducts.Count > 0)
-            {
-                context.UpdateRange(existingProducts);
-            }
+            context.UpdateRange(existingProducts); // This line is likely redundant
 
             await context.SaveChangesAsync(cancellationToken);
             await transaction.CommitAsync(cancellationToken);
@@ -114,8 +125,17 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
         catch (Exception e)
         {
             await transaction.RollbackAsync(cancellationToken);
-            Console.WriteLine($"Error updating or adding products: {e}");
         }
+    }
+
+    public async Task<List<Order>> GetOrderBookAsync(int marketDataId, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        var book = await context.Orders
+            .Where(x => x.MarketDataId == marketDataId)
+            .Select(x => new Order(x.UnitPrice, x.Amount, x.Orders))
+            .ToListAsync(cancellationToken: cancellationToken);
+        return book;
     }
 
     public async Task<List<PriceHistorySnapshot>> GetPriceHistoryAsync(Guid productGuid, CancellationToken cancellationToken)

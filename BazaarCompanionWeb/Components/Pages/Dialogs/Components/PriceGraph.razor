@@ -1,27 +1,18 @@
-﻿@if (_loading)
-{
-    <div class="rz-mx-12 rz-my-4">
-        <RadzenProgressBar ProgressBarStyle="ProgressBarStyle.Secondary" Value="100" ShowValue="false"
-                           Mode="ProgressBarMode.Indeterminate"/>
-    </div>
-}
-else
-{
-    if (Product.PriceHistory?.Count is not 0)
-    {
-        <RadzenChart Style="width: 100%">
-            <RadzenChartTooltipOptions Shared="true"/>
-            <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Buy" ValueProperty="Buy">
-                <RadzenMarkers Visible="true" MarkerType="MarkerType.Square"/>
-            </RadzenLineSeries>
-            <RadzenLineSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Sell" ValueProperty="Sell">
-                <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
-            </RadzenLineSeries>
-            <RadzenCategoryAxis Padding="20" LabelAutoRotation="45" Formatter="DateFormatter"/>
-            <RadzenValueAxis Formatter="@FormatAsUsd">
-                <RadzenGridLines Visible="true"/>
-            </RadzenValueAxis>
-            <RadzenLegend Visible="false"/>
-        </RadzenChart>
-    }
-}
+﻿<RadzenCard Variant="Variant.Filled">
+    <RadzenChart Style="width: 100%">
+        <RadzenChartTooltipOptions Shared="true"/>
+        <RadzenAreaSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Buy" ValueProperty="Buy"
+                          Stroke="var(--rz-success)" Fill="var(--rz-success-lighter)">
+            <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
+        </RadzenAreaSeries>
+        <RadzenAreaSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Sell" ValueProperty="Sell"
+                          Stroke="var(--rz-danger)" Fill="var(--rz-danger-lighter)">
+            <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
+        </RadzenAreaSeries>
+        <RadzenCategoryAxis Padding="20" LabelAutoRotation="35" Formatter="AxisFormat"/>
+        <RadzenValueAxis Formatter="ValueFormat">
+            <RadzenGridLines Visible="true"/>
+        </RadzenValueAxis>
+        <RadzenLegend Visible="false"/>
+    </RadzenChart>
+</RadzenCard>

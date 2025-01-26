@@ -8,7 +8,7 @@ public class ScheduledTaskRunner(IServiceProvider serviceProvider, ILogger<Sched
 
     public void StartTimer()
     {
-        _timer = new Timer(ScheduleSteamActions, null, TimeSpan.Zero, TimeSpan.FromMinutes(15));
+        _timer = new Timer(ScheduleSteamActions, null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
     }
 
     private void ScheduleSteamActions(object? state)

@@ -1,22 +1,15 @@
-﻿using System.ComponentModel.DataAnnotations;
-using System.ComponentModel.DataAnnotations.Schema;
+using System.ComponentModel.DataAnnotations;
 
 namespace BazaarCompanionWeb.Entities;
 
-public class EFMarketData
+public abstract class EFMarketData
 {
     [Key] public int Id { get; set; }
 
-    public required double BuyLastPrice { get; set; }
-    public required double BuyLastOrderVolumeWeek { get; set; }
-    public required int BuyLastOrderVolume { get; set; }
-    public required int BuyLastOrderCount { get; set; }
+    public required double UnitPrice { get; set; }
+    public required double OrderVolumeWeek { get; set; }
+    public required int OrderVolume { get; set; }
+    public required int OrderCount { get; set; }
 
-    public required double SellLastPrice { get; set; }
-    public required double SellLastOrderVolumeWeek { get; set; }
-    public required int SellLastOrderVolume { get; set; }
-    public required int SellLastOrderCount { get; set; }
-
-    public Guid ProductGuid { get; set; }
-    [ForeignKey(nameof(ProductGuid))] public EFProduct Product { get; set; }
+    public required ICollection<EFOrder> Book { get; set; }
 }
