@@ -107,6 +107,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
                 product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
                 product.Meta.Margin = incomingProduct.Meta.Margin;
+                product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
 
                 product.Snapshots.Add(new EFPriceSnapshot
                 {
@@ -138,6 +139,46 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
         return book;
     }
 
+    public async Task<ProductDataInfo> GetProductAsync(Guid productGuid, CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var product = await context.Products.Where(x => x.ProductGuid == productGuid).Select(x => new ProductDataInfo
+        {
+            ProductGuid = x.ProductGuid,
+            BuyMarketDataId = x.Buy.Id,
+            SellMarketDataId = x.Sell.Id,
+            ItemId = x.Name,
+            ItemFriendlyName = x.FriendlyName,
+            ItemTier = x.Tier,
+            ItemUnstackable = x.Unstackable,
+            BuyOrderUnitPrice = x.Buy.UnitPrice,
+            BuyOrderWeekVolume = x.Buy.OrderVolumeWeek,
+            BuyOrderCurrentOrders = x.Buy.OrderCount,
+            BuyOrderCurrentVolume = x.Buy.OrderVolume,
+            SellOrderUnitPrice = x.Sell.UnitPrice,
+            SellOrderWeekVolume = x.Sell.OrderVolumeWeek,
+            SellOrderCurrentOrders = x.Sell.OrderCount,
+            SellOrderCurrentVolume = x.Sell.OrderVolume,
+            OrderMetaPotentialProfitMultiplier = x.Meta.ProfitMultiplier,
+            OrderMetaMargin = x.Meta.Margin,
+            OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
+            OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
+        }).FirstAsync(cancellationToken: cancellationToken);
+
+        product.PriceHistory = await GetPriceHistoryAsync(product.ProductGuid, cancellationToken);
+
+        product.BuyBook = (await GetOrderBookAsync(product.BuyMarketDataId, cancellationToken))
+            .OrderBy(y => y.UnitPrice)
+            .ToList();
+
+        product.SellBook = (await GetOrderBookAsync(product.SellMarketDataId, cancellationToken))
+            .OrderByDescending(y => y.UnitPrice)
+            .ToList();
+
+        return product;
+    }
+
     public async Task<List<PriceHistorySnapshot>> GetPriceHistoryAsync(Guid productGuid, CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
@@ -148,5 +189,16 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
             .Select(x => new PriceHistorySnapshot(x.Key, x.Average(y => y.BuyUnitPrice), x.Average(y => y.SellUnitPrice)))
             .ToListAsync(cancellationToken);
         return snapshots;
+    }
+
+    public async Task<DateTime> GetLastUpdatedAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+
+        var lastUpdated = (await context.PriceSnapshots
+                .OrderBy(x => x.Taken)
+                .LastOrDefaultAsync(cancellationToken: cancellationToken))
+            ?.Taken ?? TimeProvider.System.GetLocalNow().DateTime;
+        return lastUpdated;
     }
 }

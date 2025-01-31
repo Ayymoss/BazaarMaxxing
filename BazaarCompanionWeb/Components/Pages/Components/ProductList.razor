@@ -1,115 +1,116 @@
-﻿@using System.Globalization
-@using System.Text
+﻿@using System.Text
 @using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Utilities
 @using Humanizer
+<RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
+    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" AlignItems="AlignItems.Center"
+                 Wrap="FlexWrap.Wrap">
+        <RadzenText TextAlign="TextAlign.Start" TextStyle="TextStyle.Overline" class="rz-mb-0 rz-mr-4">
+            Last Updated @(_lastServerRefresh?.Humanize() ?? "Loading...")
+        </RadzenText>
+    </RadzenStack>
+    <RadzenCard>
+        <RadzenRow JustifyContent="JustifyContent.Center" class="rz-mb-4">
+            <RadzenColumn SizeSM="12" SizeMD="12" SizeLG="8" SizeXL="6" SizeXX="6">
+                <RadzenText TextAlign="TextAlign.Start" TextStyle="TextStyle.DisplayH4" class="rz-mb-0 rz-mt-2">
+                    @_titleText
+                </RadzenText>
+            </RadzenColumn>
+            <RadzenColumn SizeSM="12" SizeMD="12" SizeLG="4" SizeXL="6" SizeXX="6">
+                <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End">
+                    <RadzenColumn SizeSM="12" SizeMD="2">
+                        <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center"
+                                     Orientation="Orientation.Horizontal">
+                            <RadzenSwitch @bind-Value="_filter" Name="Filter" Change="OnFilter"/>
+                            <RadzenText TextStyle="TextStyle.Body1" Text="Filter" TextAlign="TextAlign.Center"/>
+                        </RadzenStack>
+                    </RadzenColumn>
+                    <RadzenColumn SizeSM="12" SizeMD="4">
+                        <RadzenFormField Text="Search (min 3 chars)" Variant="Variant.Outlined" Style="width: 100%; min-width: 240px;">
+                            <ChildContent>
+                                <RadzenTextBox @bind-Value="_searchString" Change="OnSearch"/>
+                            </ChildContent>
+                            <End>
+                                <RadzenIcon Icon="search" IconStyle="IconStyle.Info"/>
+                            </End>
+                        </RadzenFormField>
+                    </RadzenColumn>
+                </RadzenRow>
+            </RadzenColumn>
+        </RadzenRow>
+        <RadzenDataGrid @ref="_dataGrid" TItem="ProductDataInfo" IsLoading="@_isLoading" Count="@_count" Data="@_productTable"
+                        LoadData="@TableLoadData" RowClick="RowClickEvent"
+                        Density="Density.Compact" AllowPaging="true" PageSize="25" AllowSorting="true" PagerAlwaysVisible="true"
+                        PagerHorizontalAlign="HorizontalAlign.Center" PageSizeOptions="@PageSizes" ShowPagingSummary="true"
+                        PagingSummaryFormat="Displaying page {0} of {1} <b>(total {2} records)</b>" AllowColumnResize="true"
+                        Style="min-height: 200px;" class="rz-selectable">
+            <Columns>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.ItemFriendlyName))" Title="Name"
+                                      MinWidth="250px" Width="250px">
+                    <Template Context="context">
+                        <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {context.ItemTier.ProductTierColor()}")">
+                            @(context.ItemFriendlyName)
+                        </RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderUnitPrice))"
+                                      Title="Insta. Buy Price"
+                                      MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderUnitPrice))"
+                                      Title="Insta. Sell Price" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaMargin))" Title="Spread"
+                                      MinWidth="60px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier))"
+                                      Title="Profit Multi." MinWidth="60px">
+                    <Template Context="context">
+                        <RadzenText TextStyle="TextStyle.Body2"
+                                    Style="@($"color: {context.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">
+                            @(context.OrderMetaPotentialProfitMultiplier.ToString("N2"))x
+                        </RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaFlipOpportunityScore))"
+                                      Title="Flip Rating" MinWidth="60px">
+                    <Template Context="context">
 
-<RadzenRow JustifyContent="JustifyContent.Center">
-    <RadzenColumn SizeSM="12" SizeMD="10" SizeXX="8">
-        <RadzenCard>
-            <RadzenRow JustifyContent="JustifyContent.Center" class="rz-mb-4">
-                <RadzenColumn SizeSM="12" SizeMD="12" SizeLG="3" SizeXL="6" SizeXX="6">
-                    <RadzenText TextAlign="TextAlign.Start" TextStyle="TextStyle.DisplayH4" class="rz-mb-0 rz-mt-2">
-                        @_titleText
-                    </RadzenText>
-                </RadzenColumn>
-                <RadzenColumn SizeSM="12" SizeMD="12" SizeLG="9" SizeXL="6" SizeXX="6">
-                    <RadzenRow AlignItems="AlignItems.Center" JustifyContent="JustifyContent.End">
-                        <RadzenColumn SizeSM="12" SizeMD="2">
-                            <RadzenStack AlignItems="AlignItems.Center" JustifyContent="JustifyContent.Center"
-                                         Orientation="Orientation.Horizontal">
-                                <RadzenSwitch @bind-Value="_filter" Name="Filter" Change="OnFilter"/>
-                                <RadzenText TextStyle="TextStyle.Body1" Text="Filter" TextAlign="TextAlign.Center"/>
-                            </RadzenStack>
-                        </RadzenColumn>
-                        <RadzenColumn SizeSM="12" SizeMD="4">
-                            <RadzenFormField Text="Search (min 3 chars)" Variant="Variant.Outlined" Style="width: 100%; min-width: 240px;">
-                                <ChildContent>
-                                    <RadzenTextBox @bind-Value="_searchString" Change="OnSearch"/>
-                                </ChildContent>
-                                <End>
-                                    <RadzenIcon Icon="search" IconStyle="IconStyle.Info"/>
-                                </End>
-                            </RadzenFormField>
-                        </RadzenColumn>
-                    </RadzenRow>
-                </RadzenColumn>
-            </RadzenRow>
-            <RadzenDataGrid @ref="_dataGrid" TItem="ProductDataInfo" IsLoading="@_isLoading" Count="@_count" Data="@_productTable"
-                            LoadData="@TableLoadData" RowClick="RowClickEvent"
-                            Density="Density.Compact" AllowPaging="true" PageSize="25" AllowSorting="true" PagerAlwaysVisible="true"
-                            PagerHorizontalAlign="HorizontalAlign.Center" PageSizeOptions="@PageSizes" ShowPagingSummary="true"
-                            PagingSummaryFormat="Displaying page {0} of {1} <b>(total {2} records)</b>" AllowColumnResize="true"
-                            Style="min-height: 200px;" class="rz-selectable">
-                <Columns>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.ItemFriendlyName))" Title="Name"
-                                          MinWidth="250px" Width="250px">
-                        <Template Context="context">
-                            <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {context.ItemTier.ProductTierColor()}")">
-                                @(context.ItemFriendlyName)
-                            </RadzenText>
-                        </Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderUnitPrice))"
-                                          Title="Insta. Buy Price"
-                                          MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderUnitPrice))"
-                                          Title="Insta. Sell Price" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaMargin))" Title="Spread"
-                                          MinWidth="60px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier))"
-                                          Title="Profit Multi." MinWidth="60px">
-                        <Template Context="context">
-                            <RadzenText TextStyle="TextStyle.Body2"
-                                        Style="@($"color: {context.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">
-                                @(context.OrderMetaPotentialProfitMultiplier.ToString("N2"))x
-                            </RadzenText>
-                        </Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaFlipOpportunityScore))"
-                                          Title="Flip Rating" MinWidth="60px">
-                        <Template Context="context">
-
-                            <RadzenText TextStyle="TextStyle.Body2"
-                                        Style="@($"color: {context.OrderMetaFlipOpportunityScore.RatingColor()}")">
-                                @context.OrderMetaFlipOpportunityScore.ToString("N2")
-                            </RadzenText>
-                        </Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaTotalWeekVolume))"
-                                          Title="Total Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderWeekVolume))"
-                                          Title="Buy Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderWeekVolume))"
-                                          Title="Sell Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
-                                          Title="Open Buys" Sortable="false" MinWidth="80px">
-                        <Template Context="context">
-                            @{
-                                var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
-                            }
-                            <RadzenText TextStyle="TextStyle.Body2">
-                                @textResult.ToString()
-                            </RadzenText>
-                        </Template>
-                    </RadzenDataGridColumn>
-                    <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
-                                          Title="Open Sells" Sortable="false" MinWidth="80px">
-                        <Template Context="context">
-                            @{
-                                var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
-                            }
-                            <RadzenText TextStyle="TextStyle.Body2">
-                                @textResult.ToString()
-                            </RadzenText>
-                        </Template>
-                    </RadzenDataGridColumn>
-
-                </Columns>
-                <EmptyTemplate>
-                    <RadzenText TextAlign="TextAlign.Center" TextStyle="TextStyle.H6" class="rz-my-4" Text="There are no products..."/>
-                </EmptyTemplate>
-            </RadzenDataGrid>
-        </RadzenCard>
-    </RadzenColumn>
-</RadzenRow>
+                        <RadzenText TextStyle="TextStyle.Body2"
+                                    Style="@($"color: {context.OrderMetaFlipOpportunityScore.RatingColor()}")">
+                            @context.OrderMetaFlipOpportunityScore.ToString("N2")
+                        </RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaTotalWeekVolume))"
+                                      Title="Total Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderWeekVolume))"
+                                      Title="Buy Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderWeekVolume))"
+                                      Title="Sell Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
+                                      Title="Open Buys" Sortable="false" MinWidth="80px">
+                    <Template Context="context">
+                        @{
+                            var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
+                        }
+                        <RadzenText TextStyle="TextStyle.Body2">
+                            @textResult.ToString()
+                        </RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
+                                      Title="Open Sells" Sortable="false" MinWidth="80px">
+                    <Template Context="context">
+                        @{
+                            var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
+                        }
+                        <RadzenText TextStyle="TextStyle.Body2">
+                            @textResult.ToString()
+                        </RadzenText>
+                    </Template>
+                </RadzenDataGridColumn>
+            </Columns>
+            <EmptyTemplate>
+                <RadzenText TextAlign="TextAlign.Center" TextStyle="TextStyle.H6" class="rz-my-4" Text="There are no products..."/>
+            </EmptyTemplate>
+        </RadzenDataGrid>
+    </RadzenCard>
+</RadzenStack>

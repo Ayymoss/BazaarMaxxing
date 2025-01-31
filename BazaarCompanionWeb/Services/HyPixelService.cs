@@ -77,7 +77,7 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                         Margin = margin,
                         TotalWeekVolume = totalWeekVolume,
                         BuyOrderPower = buyingPower,
-                        FlipOpportunityScore = ProfitReferenceValue(buyPrice, sellPrice, buyMovingWeek, sellMovingWeek,
+                        FlipOpportunityScore = FlipOpportunityScore(buyPrice, sellPrice, buyMovingWeek, sellMovingWeek,
                             potentialProfitMultiplier)
                     }
                 };
@@ -85,7 +85,7 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
         return products;
     }
 
-    private static double ProfitReferenceValue(double buyPrice, double sellPrice, long buyMovingWeek, long sellMovingWeek,
+    private static double FlipOpportunityScore(double buyPrice, double sellPrice, long buyMovingWeek, long sellMovingWeek,
         double multiplier)
     {
         var volumeRatio = buyMovingWeek / (float)sellMovingWeek;

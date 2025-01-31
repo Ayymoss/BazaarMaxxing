@@ -48,29 +48,7 @@
             <RadzenStack Orientation="Orientation.Horizontal">
                 <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Start">
                     <RadzenText Text="Buy Order Book" TextStyle="TextStyle.H4" TextAlign="TextAlign.Center" class="rz-mb-0"/>
-                    <RadzenTable Style="height:250px" class="rz-density-compact">
-                        <RadzenTableHeader>
-                            <RadzenTableHeaderRow>
-                                <RadzenTableHeaderCell>Unit Price</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Amount</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Orders</RadzenTableHeaderCell>
-                            </RadzenTableHeaderRow>
-                        </RadzenTableHeader>
-                        <RadzenTableBody>
-                            @foreach (var order in Product.BuyBook)
-                            {
-                                <RadzenTableRow>
-                                    <RadzenTableCell>@order.UnitPrice.ToString("C2", CultureInfo.CreateSpecificCulture("en-US"))</RadzenTableCell>
-                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
-                                    <RadzenTableCell>@order.Orders.ToString("N0")</RadzenTableCell>
-                                </RadzenTableRow>
-                            }
-                        </RadzenTableBody>
-                    </RadzenTable>
-                </RadzenStack>
-                <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Start">
-                    <RadzenText Text="Sell Order Book" TextStyle="TextStyle.H4" TextAlign="TextAlign.Center" class="rz-mb-0"/>
-                    <RadzenTable Style="height:250px" class="rz-density-compact">
+                    <RadzenTable Style="height:250px" class="rz-density-compact rz-selectable">
                         <RadzenTableHeader>
                             <RadzenTableHeaderRow>
                                 <RadzenTableHeaderCell>Unit Price</RadzenTableHeaderCell>
@@ -90,7 +68,32 @@
                         </RadzenTableBody>
                     </RadzenTable>
                 </RadzenStack>
+                <RadzenStack Orientation="Orientation.Vertical" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Start">
+                    <RadzenText Text="Sell Order Book" TextStyle="TextStyle.H4" TextAlign="TextAlign.Center" class="rz-mb-0"/>
+                    <RadzenTable Style="height:250px" class="rz-density-compact rz-selectable">
+                        <RadzenTableHeader>
+                            <RadzenTableHeaderRow>
+                                <RadzenTableHeaderCell>Unit Price</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Amount</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Orders</RadzenTableHeaderCell>
+                            </RadzenTableHeaderRow>
+                        </RadzenTableHeader>
+                        <RadzenTableBody>
+                            @foreach (var order in Product.BuyBook)
+                            {
+                                <RadzenTableRow>
+                                    <RadzenTableCell>@order.UnitPrice.ToString("C2", CultureInfo.CreateSpecificCulture("en-US"))</RadzenTableCell>
+                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
+                                    <RadzenTableCell>@order.Orders.ToString("N0")</RadzenTableCell>
+                                </RadzenTableRow>
+                            }
+                        </RadzenTableBody>
+                    </RadzenTable>
+                </RadzenStack>
             </RadzenStack>
         }
+        <RadzenText TextAlign="TextAlign.Right" TextStyle="TextStyle.Overline" class="rz-mb-0 rz-mr-4">
+            Last Updated @(_lastServerRefresh?.Humanize() ?? "Loading...")
+        </RadzenText>
     }
 </RadzenStack>

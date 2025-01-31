@@ -35,7 +35,11 @@ public class Program
 
         builder.Services.AddDbContextFactory<DataContext>(options =>
         {
+#if DEBUG
             options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
+#else
+            options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"),
+#endif
                 sqlOpt => sqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         });
 
@@ -48,6 +52,13 @@ public class Program
         RegisterLogging();
 
         var app = builder.Build();
+
+        using (var scope = app.Services.CreateScope())
+        {
+            var services = scope.ServiceProvider;
+            var dbContext = services.GetRequiredService<DataContext>();
+            dbContext.Database.Migrate();
+        }
 
         // Configure the HTTP request pipeline.
         if (!app.Environment.IsDevelopment())

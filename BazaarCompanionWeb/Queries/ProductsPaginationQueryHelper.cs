@@ -95,7 +95,7 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         return new PaginationContext<ProductDataInfo>
         {
             Data = pagedData,
-            Count = queryServerCount,
+            Count = queryServerCount
         };
     }
 
@@ -120,7 +120,7 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
             SellOrderCurrentVolume = product.Sell.OrderVolume,
             OrderMetaPotentialProfitMultiplier = product.Meta.ProfitMultiplier,
             OrderMetaMargin = product.Meta.Margin,
-            OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume, 
+            OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume,
             OrderMetaFlipOpportunityScore = product.Meta.FlipOpportunityScore,
         };
     }

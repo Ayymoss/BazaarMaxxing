@@ -1,0 +1,16 @@
+﻿services:
+  bazaarcompanionweb:
+    image: bazaarcompanionweb
+    build:
+      context: .
+      dockerfile: BazaarCompanionWeb/Dockerfile
+    environment:
+      - ConnectionStrings__DefaultConnection=Data Source=/app/_Database/Database.db
+    volumes:
+      - BazaarDatabase:/app/_Database
+    ports:
+      - "6969:6969"
+
+volumes:
+  BazaarDatabase:
+    driver: local

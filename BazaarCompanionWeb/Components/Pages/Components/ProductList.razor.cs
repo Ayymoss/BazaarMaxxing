@@ -3,7 +3,7 @@ using BazaarCompanionWeb.Components.Pages.Dialogs;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Interfaces;
-using BazaarCompanionWeb.Models.Api.Items;
+using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
 using Microsoft.AspNetCore.Components;
 using Radzen;
@@ -12,7 +12,7 @@ using SortDescriptor = BazaarCompanionWeb.Models.Pagination.SortDescriptor;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
-public partial class ProductList : ComponentBase, IDisposable
+public partial class ProductList(IProductRepository productRepository) : ComponentBase, IDisposable
 {
     [Inject] private DialogService DialogService { get; set; }
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
@@ -26,13 +26,22 @@ public partial class ProductList : ComponentBase, IDisposable
     private int _count;
     private string _searchString = string.Empty;
     private string _titleText = "Flips";
-    private bool _filter = true;
+    private bool _filter = false;
+    private DateTime? _lastServerRefresh;
 
     private static IEnumerable<int> PageSizes => [25, 50, 100];
 
     protected override async Task OnInitializedAsync()
     {
+        await GetLastUpdatedAsync();
         await base.OnInitializedAsync();
+    }
+
+    private async Task GetLastUpdatedAsync()
+    {
+        var cancellationToken = new CancellationTokenSource();
+        cancellationToken.CancelAfter(TimeSpan.FromSeconds(5));
+        _lastServerRefresh = await productRepository.GetLastUpdatedAsync(cancellationToken.Token);
     }
 
     private async Task TableLoadData(LoadDataArgs args)
@@ -44,7 +53,7 @@ public partial class ProductList : ComponentBase, IDisposable
             [
                 new Radzen.SortDescriptor
                 {
-                    Property = nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier),
+                    Property = nameof(ProductDataInfo.OrderMetaFlipOpportunityScore),
                     SortOrder = SortOrder.Descending
                 }
             ]
@@ -70,6 +79,7 @@ public partial class ProductList : ComponentBase, IDisposable
         var cancellationToken = new CancellationTokenSource();
         cancellationToken.CancelAfter(TimeSpan.FromSeconds(5));
         var context = await ProductQuery.QueryResourceAsync(paginationQuery, cancellationToken.Token);
+        await GetLastUpdatedAsync();
         _productTable = context.Data;
         _count = context.Count;
         _isLoading = false;
@@ -106,8 +116,6 @@ public partial class ProductList : ComponentBase, IDisposable
 
         await DialogService.OpenAsync<PriceHistoryDialog>("Price History", parameters, options);
     }
-
-    
 
     public void Dispose()
     {
