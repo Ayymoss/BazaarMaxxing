@@ -9,8 +9,8 @@ public class EFPriceSnapshot
 
     public required double BuyUnitPrice { get; set; }
     public required double SellUnitPrice { get; set; }
-    public required DateTime Taken { get; set; }
+    public required DateOnly Taken { get; set; }
 
-    public Guid ProductGuid { get; set; }
-    [ForeignKey(nameof(ProductGuid))] public EFProduct? Product { get; set; }
+    [MaxLength(64)] public required string ProductKey { get; set; }
+    [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }
 }

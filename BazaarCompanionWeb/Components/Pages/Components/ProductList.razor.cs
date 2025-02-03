@@ -3,8 +3,8 @@ using BazaarCompanionWeb.Components.Pages.Dialogs;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Interfaces;
-using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
+using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Radzen;
 using Radzen.Blazor;
@@ -12,7 +12,7 @@ using SortDescriptor = BazaarCompanionWeb.Models.Pagination.SortDescriptor;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
-public partial class ProductList(IProductRepository productRepository) : ComponentBase, IDisposable
+public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposable
 {
     [Inject] private DialogService DialogService { get; set; }
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
@@ -22,12 +22,12 @@ public partial class ProductList(IProductRepository productRepository) : Compone
 
     private CultureInfo _usProvider = CultureInfo.CreateSpecificCulture("en-US");
 
-    private bool _isLoading = false;
+    private bool _isLoading = true;
     private int _count;
     private string _searchString = string.Empty;
     private string _titleText = "Flips";
     private bool _filter = false;
-    private DateTime? _lastServerRefresh;
+    private DateTimeOffset _lastServerRefresh;
 
     private static IEnumerable<int> PageSizes => [25, 50, 100];
 
@@ -41,7 +41,7 @@ public partial class ProductList(IProductRepository productRepository) : Compone
     {
         var cancellationToken = new CancellationTokenSource();
         cancellationToken.CancelAfter(TimeSpan.FromSeconds(5));
-        _lastServerRefresh = await productRepository.GetLastUpdatedAsync(cancellationToken.Token);
+        _lastServerRefresh = timeCache.LastUpdated;
     }
 
     private async Task TableLoadData(LoadDataArgs args)

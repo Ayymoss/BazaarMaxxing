@@ -1,17 +1,23 @@
-﻿using BazaarCompanionWeb.Dtos;
+﻿using BazaarCompanionWeb.Components.Pages.Components;
+using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
+using Serilog;
 
 namespace BazaarCompanionWeb.Components.Pages.Dialogs;
 
-public partial class PriceHistoryDialog(IProductRepository productRepository) : ComponentBase, IDisposable
+public partial class PriceHistoryDialog(IProductRepository productRepository, TimeCache timeCache) : ComponentBase, IDisposable
 {
     [Parameter] public required ProductDataInfo Product { get; set; }
 
     private System.Timers.Timer? _refreshTimer;
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _loading = true;
-    private DateTime? _lastServerRefresh;
+    private DateTimeOffset? _lastServerRefresh;
+
+    private StatCard? _buyRef;
+    private StatCard? _sellRef;
 
     protected override async Task OnInitializedAsync()
     {
@@ -19,7 +25,7 @@ public partial class PriceHistoryDialog(IProductRepository productRepository) : 
 
         await FetchProductDataAsync(_cancellationTokenSource.Token);
 
-        _refreshTimer = new System.Timers.Timer(TimeSpan.FromMinutes(1).TotalMilliseconds);
+        _refreshTimer = new System.Timers.Timer(TimeSpan.FromSeconds(32).TotalMilliseconds);
         _refreshTimer.Elapsed += async (sender, e) => await OnRefreshTimerElapsed();
         _refreshTimer.AutoReset = true;
         _refreshTimer.Enabled = true;
@@ -36,27 +42,32 @@ public partial class PriceHistoryDialog(IProductRepository productRepository) : 
     {
         try
         {
-            var lastUpdated = Task.Run(() => productRepository.GetLastUpdatedAsync(cancellationToken), cancellationToken);
-            var product = Task.Run(() => productRepository.GetProductAsync(Product.ProductGuid, cancellationToken),
-                cancellationToken);
-
-            await Task.WhenAll(lastUpdated, product);
-
-            _lastServerRefresh = await lastUpdated;
-            Product = await product;
+            Product = await productRepository.GetProductAsync(Product.ItemId, cancellationToken);
+            _lastServerRefresh = timeCache.LastUpdated;
         }
         catch (OperationCanceledException)
         {
-            Console.WriteLine("Data fetch was canceled.");
+            Log.Information("Data fetch was canceled");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error fetching data: {ex.Message}");
+            Log.Error(ex, "Error fetching data: {ExMessage}", ex.Message);
         }
         finally
         {
-            _loading = false;
-            StateHasChanged();
+            await InvokeAsync(() =>
+            {
+                if (Product.PriceHistory is not null)
+                {
+                    // I feel like there's a better way to do this. I'm not sure of it.
+                    // Cascading Value/Parameter maybe...
+                    _buyRef?.UpdateValues(Product.BuyOrderUnitPrice ?? double.MaxValue, Product.PriceHistory.Average(x => x.Buy));
+                    _sellRef?.UpdateValues(Product.SellOrderUnitPrice ?? 0.1, Product.PriceHistory.Average(x => x.Sell));
+                }
+
+                _loading = false;
+                StateHasChanged();
+            });
         }
     }
 

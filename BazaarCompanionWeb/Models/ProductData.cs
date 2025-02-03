@@ -1,4 +1,5 @@
-﻿using BazaarCompanionWeb.Entities;
+﻿using System.Text.Json;
+using BazaarCompanionWeb.Entities;
 
 namespace BazaarCompanionWeb.Models;
 
@@ -15,7 +16,7 @@ public class ProductData
     {
         return new EFProduct
         {
-            Name = ItemId,
+            ProductKey = ItemId,
             FriendlyName = Item.FriendlyName,
             Tier = Item.Tier,
             Unstackable = Item.Unstackable,
@@ -25,6 +26,7 @@ public class ProductData
                 Margin = Buy.UnitPrice - Sell.UnitPrice,
                 TotalWeekVolume = Buy.WeekVolume + Sell.WeekVolume,
                 FlipOpportunityScore = OrderMeta.FlipOpportunityScore,
+                ProductKey = ItemId
             },
             Snapshots =
             [
@@ -32,7 +34,8 @@ public class ProductData
                 {
                     BuyUnitPrice = Buy.UnitPrice,
                     SellUnitPrice = Sell.UnitPrice,
-                    Taken = TimeProvider.System.GetUtcNow().DateTime,
+                    Taken = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().DateTime),
+                    ProductKey = ItemId
                 }
             ],
             Buy = new EFBuyMarketData
@@ -41,12 +44,13 @@ public class ProductData
                 OrderVolumeWeek = Buy.WeekVolume,
                 OrderVolume = Buy.CurrentVolume,
                 OrderCount = Buy.CurrentOrders,
-                Book = Buy.OrderBook.Select(x => new EFOrder
+                BookValue = JsonSerializer.Serialize(Buy.OrderBook.Select(x => new OrderBook
                 {
                     Amount = x.Amount,
                     Orders = x.Orders,
                     UnitPrice = x.UnitPrice,
-                }).ToList(),
+                })),
+                ProductKey = ItemId
             },
             Sell = new EFSellMarketData
             {
@@ -54,12 +58,13 @@ public class ProductData
                 OrderVolumeWeek = Sell.WeekVolume,
                 OrderVolume = Sell.CurrentVolume,
                 OrderCount = Sell.CurrentOrders,
-                Book = Sell.OrderBook.Select(x => new EFOrder
+                BookValue = JsonSerializer.Serialize(Sell.OrderBook.Select(x => new OrderBook
                 {
                     Amount = x.Amount,
                     Orders = x.Orders,
                     UnitPrice = x.UnitPrice,
-                }).ToList(),
+                })),
+                ProductKey = ItemId
             }
         };
     }

@@ -20,7 +20,8 @@ namespace BazaarCompanionWeb.Migrations
                     UnitPrice = table.Column<double>(type: "REAL", nullable: false),
                     OrderVolumeWeek = table.Column<double>(type: "REAL", nullable: false),
                     OrderVolume = table.Column<int>(type: "INTEGER", nullable: false),
-                    OrderCount = table.Column<int>(type: "INTEGER", nullable: false)
+                    OrderCount = table.Column<int>(type: "INTEGER", nullable: false),
+                    BookValue = table.Column<string>(type: "TEXT", maxLength: 8192, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -31,37 +32,14 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFProducts",
                 columns: table => new
                 {
-                    ProductGuid = table.Column<Guid>(type: "TEXT", nullable: false),
-                    Name = table.Column<string>(type: "TEXT", nullable: false),
-                    FriendlyName = table.Column<string>(type: "TEXT", nullable: false),
+                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
+                    FriendlyName = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
                     Tier = table.Column<int>(type: "INTEGER", nullable: false),
                     Unstackable = table.Column<bool>(type: "INTEGER", nullable: false)
                 },
                 constraints: table =>
                 {
-                    table.PrimaryKey("PK_EFProducts", x => x.ProductGuid);
-                });
-
-            migrationBuilder.CreateTable(
-                name: "EFOrders",
-                columns: table => new
-                {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    Amount = table.Column<int>(type: "INTEGER", nullable: false),
-                    Orders = table.Column<int>(type: "INTEGER", nullable: false),
-                    UnitPrice = table.Column<double>(type: "REAL", nullable: false),
-                    MarketDataId = table.Column<int>(type: "INTEGER", nullable: false)
-                },
-                constraints: table =>
-                {
-                    table.PrimaryKey("PK_EFOrders", x => x.Id);
-                    table.ForeignKey(
-                        name: "FK_EFOrders_EFMarketData_MarketDataId",
-                        column: x => x.MarketDataId,
-                        principalTable: "EFMarketData",
-                        principalColumn: "Id",
-                        onDelete: ReferentialAction.Cascade);
+                    table.PrimaryKey("PK_EFProducts", x => x.ProductKey);
                 });
 
             migrationBuilder.CreateTable(
@@ -70,7 +48,7 @@ namespace BazaarCompanionWeb.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    ProductGuid = table.Column<Guid>(type: "TEXT", nullable: false)
+                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -82,10 +60,10 @@ namespace BazaarCompanionWeb.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_EFBuyMarketData_EFProducts_ProductGuid",
-                        column: x => x.ProductGuid,
+                        name: "FK_EFBuyMarketData_EFProducts_ProductKey",
+                        column: x => x.ProductKey,
                         principalTable: "EFProducts",
-                        principalColumn: "ProductGuid",
+                        principalColumn: "ProductKey",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -97,17 +75,17 @@ namespace BazaarCompanionWeb.Migrations
                         .Annotation("Sqlite:Autoincrement", true),
                     BuyUnitPrice = table.Column<double>(type: "REAL", nullable: false),
                     SellUnitPrice = table.Column<double>(type: "REAL", nullable: false),
-                    Taken = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    ProductGuid = table.Column<Guid>(type: "TEXT", nullable: false)
+                    Taken = table.Column<DateOnly>(type: "TEXT", nullable: false),
+                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_EFPriceSnapshots", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_EFPriceSnapshots_EFProducts_ProductGuid",
-                        column: x => x.ProductGuid,
+                        name: "FK_EFPriceSnapshots_EFProducts_ProductKey",
+                        column: x => x.ProductKey,
                         principalTable: "EFProducts",
-                        principalColumn: "ProductGuid",
+                        principalColumn: "ProductKey",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -121,16 +99,16 @@ namespace BazaarCompanionWeb.Migrations
                     Margin = table.Column<double>(type: "REAL", nullable: false),
                     TotalWeekVolume = table.Column<double>(type: "REAL", nullable: false),
                     FlipOpportunityScore = table.Column<double>(type: "REAL", nullable: false),
-                    ProductGuid = table.Column<Guid>(type: "TEXT", nullable: false)
+                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
                     table.PrimaryKey("PK_EFProductMetas", x => x.Id);
                     table.ForeignKey(
-                        name: "FK_EFProductMetas_EFProducts_ProductGuid",
-                        column: x => x.ProductGuid,
+                        name: "FK_EFProductMetas_EFProducts_ProductKey",
+                        column: x => x.ProductKey,
                         principalTable: "EFProducts",
-                        principalColumn: "ProductGuid",
+                        principalColumn: "ProductKey",
                         onDelete: ReferentialAction.Cascade);
                 });
 
@@ -140,7 +118,7 @@ namespace BazaarCompanionWeb.Migrations
                 {
                     Id = table.Column<int>(type: "INTEGER", nullable: false)
                         .Annotation("Sqlite:Autoincrement", true),
-                    ProductGuid = table.Column<Guid>(type: "TEXT", nullable: false)
+                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -152,39 +130,34 @@ namespace BazaarCompanionWeb.Migrations
                         principalColumn: "Id",
                         onDelete: ReferentialAction.Cascade);
                     table.ForeignKey(
-                        name: "FK_EFSellMarketData_EFProducts_ProductGuid",
-                        column: x => x.ProductGuid,
+                        name: "FK_EFSellMarketData_EFProducts_ProductKey",
+                        column: x => x.ProductKey,
                         principalTable: "EFProducts",
-                        principalColumn: "ProductGuid",
+                        principalColumn: "ProductKey",
                         onDelete: ReferentialAction.Cascade);
                 });
 
             migrationBuilder.CreateIndex(
-                name: "IX_EFBuyMarketData_ProductGuid",
+                name: "IX_EFBuyMarketData_ProductKey",
                 table: "EFBuyMarketData",
-                column: "ProductGuid",
+                column: "ProductKey",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_EFOrders_MarketDataId",
-                table: "EFOrders",
-                column: "MarketDataId");
-
-            migrationBuilder.CreateIndex(
-                name: "IX_EFPriceSnapshots_ProductGuid",
+                name: "IX_EFPriceSnapshots_ProductKey",
                 table: "EFPriceSnapshots",
-                column: "ProductGuid");
+                column: "ProductKey");
 
             migrationBuilder.CreateIndex(
-                name: "IX_EFProductMetas_ProductGuid",
+                name: "IX_EFProductMetas_ProductKey",
                 table: "EFProductMetas",
-                column: "ProductGuid",
+                column: "ProductKey",
                 unique: true);
 
             migrationBuilder.CreateIndex(
-                name: "IX_EFSellMarketData_ProductGuid",
+                name: "IX_EFSellMarketData_ProductKey",
                 table: "EFSellMarketData",
-                column: "ProductGuid",
+                column: "ProductKey",
                 unique: true);
         }
 
@@ -193,9 +166,6 @@ namespace BazaarCompanionWeb.Migrations
         {
             migrationBuilder.DropTable(
                 name: "EFBuyMarketData");
-
-            migrationBuilder.DropTable(
-                name: "EFOrders");
 
             migrationBuilder.DropTable(
                 name: "EFPriceSnapshots");

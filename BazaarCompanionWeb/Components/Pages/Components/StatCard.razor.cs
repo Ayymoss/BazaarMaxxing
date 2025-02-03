@@ -11,19 +11,36 @@ public partial class StatCard : ComponentBase
     [Parameter] public required double ReferenceValue { get; set; }
     [Parameter] public bool Inverse { get; set; }
 
-    private string Icon { get; set; } = "trending_flat";
-    private string Color { get; set; } = "rz-base";
-    private double Percentage { get; set; }
-
+    private string _icon = "trending_flat";
+    private string _color = "rz-base";
+    private decimal _percentage;
 
     protected override void OnInitialized()
     {
+        UpdateCalculation();
+    }
+
+    public void UpdateValues(double value, double reference)
+    {
+        Value = value;
+        ReferenceValue = reference;
+        UpdateCalculation();
+    }
+
+    private void UpdateCalculation()
+    {
         if (Math.Abs(ReferenceValue / Value - 1) > 0.05)
         {
-            Color = (Inverse ? Value < ReferenceValue : Value > ReferenceValue) ? "rz-color-success-light" : "rz-color-danger-light";
-            Icon = Value > ReferenceValue ? "trending_up" : "trending_down";
+            _color = (Inverse ? Value < ReferenceValue : Value > ReferenceValue) ? "rz-color-success-light" : "rz-color-danger-light";
+            _icon = Value > ReferenceValue ? "trending_up" : "trending_down";
+        }
+        else
+        {
+            _icon = "trending_flat";
+            _color = "rz-base";
         }
 
-        Percentage = Value / ReferenceValue - 1;
+        _percentage = Math.Round((decimal)Value / (decimal)ReferenceValue - 1, 2);
+        StateHasChanged();
     }
 }

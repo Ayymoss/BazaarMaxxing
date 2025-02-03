@@ -6,7 +6,7 @@
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" AlignItems="AlignItems.Center"
                  Wrap="FlexWrap.Wrap">
         <RadzenText TextAlign="TextAlign.Start" TextStyle="TextStyle.Overline" class="rz-mb-0 rz-mr-4">
-            Last Updated @(_lastServerRefresh?.Humanize() ?? "Loading...")
+            Last Updated @(_lastServerRefresh.Humanize() ?? "Loading...")
         </RadzenText>
     </RadzenStack>
     <RadzenCard>

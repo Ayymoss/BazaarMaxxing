@@ -2,29 +2,30 @@
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Repositories;
 
-public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : IProductRepository
+public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger)
+    : IProductRepository
 {
     public async Task UpdateOrAddProductsAsync(List<EFProduct> products, CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var existingProductNames = await context.Products
-            .Select(p => p.Name)
+            .Select(p => p.ProductKey)
             .ToListAsync(cancellationToken);
 
-        var productMap = products.ToDictionary(x => x.Name);
+        var productMap = products.ToDictionary(x => x.ProductKey);
         var timeNow = TimeProvider.System.GetLocalNow().DateTime;
 
         var newProducts = products
-            .Where(p => !existingProductNames.Contains(p.Name))
+            .Where(p => !existingProductNames.Contains(p.ProductKey))
             .Select(x => new EFProduct
             {
-                ProductGuid = Guid.CreateVersion7(),
-                Name = x.Name,
+                ProductKey = x.ProductKey,
                 FriendlyName = x.FriendlyName,
                 Tier = x.Tier,
                 Unstackable = x.Unstackable,
@@ -35,6 +36,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                     Margin = x.Meta.Margin,
                     TotalWeekVolume = x.Meta.TotalWeekVolume,
                     FlipOpportunityScore = x.Meta.FlipOpportunityScore,
+                    ProductKey = x.ProductKey
                 },
                 Snapshots =
                 [
@@ -42,7 +44,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                     {
                         BuyUnitPrice = x.Buy.UnitPrice,
                         SellUnitPrice = x.Sell.UnitPrice,
-                        Taken = timeNow,
+                        Taken = DateOnly.FromDateTime(timeNow),
+                        ProductKey = x.ProductKey
                     }
                 ],
                 Buy = new EFBuyMarketData
@@ -51,7 +54,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                     OrderVolumeWeek = x.Buy.OrderVolumeWeek,
                     OrderVolume = x.Buy.OrderVolume,
                     OrderCount = x.Buy.OrderCount,
-                    Book = x.Buy.Book
+                    BookValue = x.Buy.BookValue,
+                    ProductKey = x.ProductKey
                 },
                 Sell = new EFSellMarketData
                 {
@@ -59,35 +63,40 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                     OrderVolumeWeek = x.Sell.OrderVolumeWeek,
                     OrderVolume = x.Sell.OrderVolume,
                     OrderCount = x.Sell.OrderCount,
-                    Book = x.Sell.Book
+                    BookValue = x.Sell.BookValue,
+                    ProductKey = x.ProductKey
                 },
-            })
-            .ToList();
+            });
+
+        var test = productMap.Keys.ToList();
 
         var existingProducts = await context.Products
             .Include(x => x.Snapshots)
             .Include(x => x.Meta)
-            .Include(x => x.Buy).ThenInclude(b => b.Book)
-            .Include(x => x.Sell).ThenInclude(s => s.Book)
-            .Where(x => productMap.Keys.Contains(x.Name))
+            .Include(x => x.Buy)
+            .Include(x => x.Sell)
+            .Where(x => test.Contains(x.ProductKey))
+            // Get 2 days of EMA
+            .Where(x => x.Snapshots.Any(y => y.Taken >= DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date)))
             .ToListAsync(cancellationToken);
+
+        logger.LogInformation("Starting transaction...");
 
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
-            if (newProducts.Count > 0)
+            // ReSharper disable PossibleMultipleEnumeration
+            if (newProducts.Any())
             {
                 await context.AddRangeAsync(newProducts, cancellationToken);
             }
+            // ReSharper enable PossibleMultipleEnumeration
 
             foreach (var product in existingProducts)
             {
-                var incomingProduct = productMap[product.Name];
+                var incomingProduct = productMap[product.ProductKey];
 
-                context.RemoveRange(product.Buy.Book);
-                context.RemoveRange(product.Sell.Book);
-
-                product.Name = incomingProduct.Name;
+                product.ProductKey = incomingProduct.ProductKey;
                 product.FriendlyName = incomingProduct.FriendlyName;
                 product.Tier = incomingProduct.Tier;
                 product.Unstackable = incomingProduct.Unstackable;
@@ -96,31 +105,59 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
                 product.Buy.OrderVolumeWeek = incomingProduct.Buy.OrderVolumeWeek;
                 product.Buy.OrderVolume = incomingProduct.Buy.OrderVolume;
                 product.Buy.OrderCount = incomingProduct.Buy.OrderCount;
-                product.Buy.Book = incomingProduct.Buy.Book;
+                product.Buy.BookValue = incomingProduct.Buy.BookValue;
 
                 product.Sell.UnitPrice = incomingProduct.Sell.UnitPrice;
                 product.Sell.OrderVolumeWeek = incomingProduct.Sell.OrderVolumeWeek;
                 product.Sell.OrderVolume = incomingProduct.Sell.OrderVolume;
                 product.Sell.OrderCount = incomingProduct.Sell.OrderCount;
-                product.Sell.Book = incomingProduct.Sell.Book;
+                product.Sell.BookValue = incomingProduct.Sell.BookValue;
 
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
                 product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
                 product.Meta.Margin = incomingProduct.Meta.Margin;
                 product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
 
-                product.Snapshots.Add(new EFPriceSnapshot
+                const double alpha = 2d / (60d / ScheduledTaskRunner.TimerMinutes * 24);
+
+                if (product.Snapshots.Count is 0)
                 {
-                    BuyUnitPrice = incomingProduct.Buy.UnitPrice,
-                    SellUnitPrice = incomingProduct.Sell.UnitPrice,
-                    Taken = timeNow,
-                    ProductGuid = product.ProductGuid,
-                });
+                    product.Snapshots.Add(new EFPriceSnapshot
+                    {
+                        BuyUnitPrice = incomingProduct.Buy.UnitPrice,
+                        SellUnitPrice = incomingProduct.Sell.UnitPrice,
+                        Taken = DateOnly.FromDateTime(timeNow),
+                        ProductKey = product.ProductKey,
+                    });
+                }
+                else if (product.Snapshots.Count is 1 &&
+                         product.Snapshots.First().Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date))
+                {
+                    var yesterday = product.Snapshots.First(x =>
+                        x.Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date));
+
+                    var today = new EFPriceSnapshot
+                    {
+                        BuyUnitPrice = (incomingProduct.Buy.UnitPrice - yesterday.BuyUnitPrice) * alpha + yesterday.BuyUnitPrice,
+                        SellUnitPrice = (incomingProduct.Sell.UnitPrice - yesterday.SellUnitPrice) * alpha + yesterday.SellUnitPrice,
+                        Taken = DateOnly.FromDateTime(timeNow),
+                        ProductKey = product.ProductKey,
+                    };
+
+                    product.Snapshots.Add(today);
+                }
+                else
+                {
+                    var today = product.Snapshots.First(x => x.Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().Date));
+                    today.BuyUnitPrice = (incomingProduct.Buy.UnitPrice - today.BuyUnitPrice) * alpha + today.BuyUnitPrice;
+                    today.SellUnitPrice = (incomingProduct.Sell.UnitPrice - today.SellUnitPrice) * alpha + today.SellUnitPrice;
+                }
             }
 
-            context.UpdateRange(existingProducts); // This line is likely redundant
-
+            logger.LogInformation("Saving changes...");
             await context.SaveChangesAsync(cancellationToken);
+
+            logger.LogInformation("Commiting transaction...");
             await transaction.CommitAsync(cancellationToken);
         }
         catch (Exception e)
@@ -132,41 +169,48 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
     public async Task<List<Order>> GetOrderBookAsync(int marketDataId, CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-        var book = await context.Orders
-            .Where(x => x.MarketDataId == marketDataId)
-            .Select(x => new Order(x.UnitPrice, x.Amount, x.Orders))
+
+        var marketData = await context.MarketData
+            .AsNoTracking()
+            .Where(x => x.Id == marketDataId)
             .ToListAsync(cancellationToken: cancellationToken);
-        return book;
+
+        var books = marketData
+            .SelectMany(x => x.Books)
+            .Select(x => new Order(x.UnitPrice, x.Amount, x.Orders))
+            .ToList();
+
+        return books;
     }
 
-    public async Task<ProductDataInfo> GetProductAsync(Guid productGuid, CancellationToken cancellationToken)
+    public async Task<ProductDataInfo> GetProductAsync(string productKey, CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
-        var product = await context.Products.Where(x => x.ProductGuid == productGuid).Select(x => new ProductDataInfo
-        {
-            ProductGuid = x.ProductGuid,
-            BuyMarketDataId = x.Buy.Id,
-            SellMarketDataId = x.Sell.Id,
-            ItemId = x.Name,
-            ItemFriendlyName = x.FriendlyName,
-            ItemTier = x.Tier,
-            ItemUnstackable = x.Unstackable,
-            BuyOrderUnitPrice = x.Buy.UnitPrice,
-            BuyOrderWeekVolume = x.Buy.OrderVolumeWeek,
-            BuyOrderCurrentOrders = x.Buy.OrderCount,
-            BuyOrderCurrentVolume = x.Buy.OrderVolume,
-            SellOrderUnitPrice = x.Sell.UnitPrice,
-            SellOrderWeekVolume = x.Sell.OrderVolumeWeek,
-            SellOrderCurrentOrders = x.Sell.OrderCount,
-            SellOrderCurrentVolume = x.Sell.OrderVolume,
-            OrderMetaPotentialProfitMultiplier = x.Meta.ProfitMultiplier,
-            OrderMetaMargin = x.Meta.Margin,
-            OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
-            OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
-        }).FirstAsync(cancellationToken: cancellationToken);
+        var product = await context.Products.Where(x => x.ProductKey == productKey)
+            .Select(x => new ProductDataInfo
+            {
+                BuyMarketDataId = x.Buy.Id,
+                SellMarketDataId = x.Sell.Id,
+                ItemId = x.ProductKey,
+                ItemFriendlyName = x.FriendlyName,
+                ItemTier = x.Tier,
+                ItemUnstackable = x.Unstackable,
+                BuyOrderUnitPrice = x.Buy.UnitPrice,
+                BuyOrderWeekVolume = x.Buy.OrderVolumeWeek,
+                BuyOrderCurrentOrders = x.Buy.OrderCount,
+                BuyOrderCurrentVolume = x.Buy.OrderVolume,
+                SellOrderUnitPrice = x.Sell.UnitPrice,
+                SellOrderWeekVolume = x.Sell.OrderVolumeWeek,
+                SellOrderCurrentOrders = x.Sell.OrderCount,
+                SellOrderCurrentVolume = x.Sell.OrderVolume,
+                OrderMetaPotentialProfitMultiplier = x.Meta.ProfitMultiplier,
+                OrderMetaMargin = x.Meta.Margin,
+                OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
+                OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
+            }).FirstAsync(cancellationToken: cancellationToken);
 
-        product.PriceHistory = await GetPriceHistoryAsync(product.ProductGuid, cancellationToken);
+        product.PriceHistory = await GetPriceHistoryAsync(product.ItemId, cancellationToken);
 
         product.BuyBook = (await GetOrderBookAsync(product.BuyMarketDataId, cancellationToken))
             .OrderBy(y => y.UnitPrice)
@@ -179,26 +223,15 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory) : 
         return product;
     }
 
-    public async Task<List<PriceHistorySnapshot>> GetPriceHistoryAsync(Guid productGuid, CancellationToken cancellationToken)
+    public async Task<List<PriceHistorySnapshot>> GetPriceHistoryAsync(string productKey, CancellationToken cancellationToken)
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var snapshots = await context.PriceSnapshots
-            .Where(x => x.ProductGuid == productGuid)
-            .Where(x => DateTime.Now.AddDays(-30) < x.Taken)
-            .GroupBy(x => DateOnly.FromDateTime(x.Taken))
-            .Select(x => new PriceHistorySnapshot(x.Key, x.Average(y => y.BuyUnitPrice), x.Average(y => y.SellUnitPrice)))
+            .Where(x => x.ProductKey == productKey)
+            .Where(x => DateOnly.FromDateTime(DateTime.Now.AddDays(-30)) < x.Taken)
+            .GroupBy(x => x.Taken)
+            .Select(x => new PriceHistorySnapshot(x.Key, x.Max(y => y.BuyUnitPrice), x.Max(y => y.SellUnitPrice)))
             .ToListAsync(cancellationToken);
         return snapshots;
-    }
-
-    public async Task<DateTime> GetLastUpdatedAsync(CancellationToken cancellationToken)
-    {
-        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
-
-        var lastUpdated = (await context.PriceSnapshots
-                .OrderBy(x => x.Taken)
-                .LastOrDefaultAsync(cancellationToken: cancellationToken))
-            ?.Taken ?? TimeProvider.System.GetLocalNow().DateTime;
-        return lastUpdated;
     }
 }

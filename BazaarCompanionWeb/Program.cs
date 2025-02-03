@@ -9,6 +9,7 @@ using BazaarCompanionWeb.Queries;
 using BazaarCompanionWeb.Repositories;
 using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Radzen;
 using Refit;
@@ -39,6 +40,7 @@ public class Program
             options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
 #else
             options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"),
+            //options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
 #endif
                 sqlOpt => sqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         });
@@ -46,6 +48,10 @@ public class Program
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+
+        builder.Services.AddDataProtection()
+            .SetApplicationName("BazaarWeb")
+            .PersistKeysToFileSystem(new DirectoryInfo("/app/data/"));
 
         RegisterCustomServices(builder);
         RegisterPackageServices(builder);
@@ -70,7 +76,7 @@ public class Program
 
         app.Services.GetRequiredService<ScheduledTaskRunner>().StartTimer();
 
-        app.UseHttpsRedirection();
+        //app.UseHttpsRedirection();
 
         app.UseAntiforgery();
 
@@ -84,8 +90,16 @@ public class Program
 
     private static void RegisterLogging()
     {
-        if (!Directory.Exists(Path.Join(AppContext.BaseDirectory, "_Log")))
-            Directory.CreateDirectory(Path.Join(AppContext.BaseDirectory, "_Log"));
+#if DEBUG
+        var logBaseDirectory = Path.Join(AppContext.BaseDirectory, "_Log");
+        if (!Directory.Exists(logBaseDirectory))
+            Directory.CreateDirectory(logBaseDirectory);
+#else
+        var logBaseDirectory = Path.Join("data", "_Log");
+        if (!Directory.Exists(logBaseDirectory))
+            Directory.CreateDirectory(logBaseDirectory);
+#endif
+
 
         Log.Logger = new LoggerConfiguration()
 #if DEBUG
@@ -100,7 +114,7 @@ public class Program
             .Enrich.With<ShortSourceContextEnricher>()
             .WriteTo.Console()
             .WriteTo.File(
-                Path.Join(AppContext.BaseDirectory, "_Log", "bsb-.log"),
+                Path.Join(logBaseDirectory, "bc-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 10,
                 outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{ShortSourceContext}] {Message:lj}{NewLine}{Exception}")
@@ -132,6 +146,7 @@ public class Program
     private static void RegisterCustomServices(IHostApplicationBuilder builder)
     {
         builder.Services.AddSingleton<ScheduledTaskRunner>();
+        builder.Services.AddSingleton<TimeCache>();
 
         builder.Services.AddScoped<HyPixelService>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();

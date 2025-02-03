@@ -43,6 +43,12 @@
     --rz-sidebar-toggle-margin: 0 0.3rem 0 0 !important;
 }
 
+#components-reconnect-modal, .components-reconnect-dialog, .components-reconnect-overlay.components-reconnect-visible {
+    background-color: #131518 !important;
+    color: #0570dc !important;
+    font-weight: bold;
+}
+
 body {
     font-family: var(--rz-text-font-family);
     color: var(--rz-text-color);

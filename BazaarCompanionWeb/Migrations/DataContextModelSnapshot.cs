@@ -23,6 +23,11 @@ namespace BazaarCompanionWeb.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("BookValue")
+                        .IsRequired()
+                        .HasMaxLength(8192)
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("OrderCount")
                         .HasColumnType("INTEGER");
 
@@ -42,31 +47,6 @@ namespace BazaarCompanionWeb.Migrations
                     b.UseTptMappingStrategy();
                 });
 
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOrder", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Amount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("MarketDataId")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("Orders")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<double>("UnitPrice")
-                        .HasColumnType("REAL");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("MarketDataId");
-
-                    b.ToTable("EFOrders", (string)null);
-                });
-
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceSnapshot", b =>
                 {
                     b.Property<int>("Id")
@@ -76,34 +56,33 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("BuyUnitPrice")
                         .HasColumnType("REAL");
 
-                    b.Property<Guid>("ProductGuid")
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<double>("SellUnitPrice")
                         .HasColumnType("REAL");
 
-                    b.Property<DateTime>("Taken")
+                    b.Property<DateOnly>("Taken")
                         .HasColumnType("TEXT");
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductGuid");
+                    b.HasIndex("ProductKey");
 
                     b.ToTable("EFPriceSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFProduct", b =>
                 {
-                    b.Property<Guid>("ProductGuid")
-                        .ValueGeneratedOnAdd()
+                    b.Property<string>("ProductKey")
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<string>("FriendlyName")
                         .IsRequired()
-                        .HasColumnType("TEXT");
-
-                    b.Property<string>("Name")
-                        .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<int>("Tier")
@@ -112,7 +91,7 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<bool>("Unstackable")
                         .HasColumnType("INTEGER");
 
-                    b.HasKey("ProductGuid");
+                    b.HasKey("ProductKey");
 
                     b.ToTable("EFProducts", (string)null);
                 });
@@ -129,7 +108,9 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("Margin")
                         .HasColumnType("REAL");
 
-                    b.Property<Guid>("ProductGuid")
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
                     b.Property<double>("ProfitMultiplier")
@@ -140,7 +121,7 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasKey("Id");
 
-                    b.HasIndex("ProductGuid")
+                    b.HasIndex("ProductKey")
                         .IsUnique();
 
                     b.ToTable("EFProductMetas", (string)null);
@@ -150,10 +131,12 @@ namespace BazaarCompanionWeb.Migrations
                 {
                     b.HasBaseType("BazaarCompanionWeb.Entities.EFMarketData");
 
-                    b.Property<Guid>("ProductGuid")
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.HasIndex("ProductGuid")
+                    b.HasIndex("ProductKey")
                         .IsUnique();
 
                     b.ToTable("EFBuyMarketData", (string)null);
@@ -163,31 +146,22 @@ namespace BazaarCompanionWeb.Migrations
                 {
                     b.HasBaseType("BazaarCompanionWeb.Entities.EFMarketData");
 
-                    b.Property<Guid>("ProductGuid")
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.HasIndex("ProductGuid")
+                    b.HasIndex("ProductKey")
                         .IsUnique();
 
                     b.ToTable("EFSellMarketData", (string)null);
-                });
-
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOrder", b =>
-                {
-                    b.HasOne("BazaarCompanionWeb.Entities.EFMarketData", "MarketData")
-                        .WithMany("Book")
-                        .HasForeignKey("MarketDataId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("MarketData");
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceSnapshot", b =>
                 {
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
                         .WithMany("Snapshots")
-                        .HasForeignKey("ProductGuid")
+                        .HasForeignKey("ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -198,7 +172,7 @@ namespace BazaarCompanionWeb.Migrations
                 {
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
                         .WithOne("Meta")
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFProductMeta", "ProductGuid")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFProductMeta", "ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -215,7 +189,7 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
                         .WithOne("Buy")
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBuyMarketData", "ProductGuid")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBuyMarketData", "ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -232,16 +206,11 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
                         .WithOne("Sell")
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFSellMarketData", "ProductGuid")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFSellMarketData", "ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Product");
-                });
-
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFMarketData", b =>
-                {
-                    b.Navigation("Book");
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFProduct", b =>

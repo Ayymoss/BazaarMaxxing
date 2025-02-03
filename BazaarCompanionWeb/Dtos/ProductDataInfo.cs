@@ -4,10 +4,9 @@ namespace BazaarCompanionWeb.Dtos;
 
 public class ProductDataInfo
 {
-    public required Guid ProductGuid { get; set; }
     public required int SellMarketDataId { get; set; }
     public required int BuyMarketDataId { get; set; }
-    public string ItemId { get; set; }
+    public required string ItemId { get; set; }
     public string ItemFriendlyName { get; set; }
     public ItemTier ItemTier { get; set; }
     public bool ItemUnstackable { get; set; }

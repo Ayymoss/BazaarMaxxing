@@ -7,14 +7,13 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
 {
     public DbSet<EFPriceSnapshot> PriceSnapshots { get; set; }
     public DbSet<EFProduct> Products { get; set; }
-    public DbSet<EFOrder> Orders { get; set; }
+    public DbSet<EFMarketData> MarketData { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
         modelBuilder.Entity<EFProduct>().ToTable("EFProducts");
         modelBuilder.Entity<EFProductMeta>().ToTable("EFProductMetas");
         modelBuilder.Entity<EFPriceSnapshot>().ToTable("EFPriceSnapshots");
-        modelBuilder.Entity<EFOrder>().ToTable("EFOrders");
 
         modelBuilder.Entity<EFMarketData>(x =>
         {

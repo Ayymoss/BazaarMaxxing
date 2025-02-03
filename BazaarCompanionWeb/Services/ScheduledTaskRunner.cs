@@ -5,10 +5,11 @@ public class ScheduledTaskRunner(IServiceProvider serviceProvider, ILogger<Sched
     private Timer? _timer;
     private bool _firstRun = true;
     private readonly CancellationTokenSource _cancellationTokenSource = new();
+    public const int TimerMinutes = 1;
 
     public void StartTimer()
     {
-        _timer = new Timer(ScheduleSteamActions, null, TimeSpan.Zero, TimeSpan.FromMinutes(5));
+        _timer = new Timer(ScheduleSteamActions, null, TimeSpan.Zero, TimeSpan.FromMinutes(TimerMinutes));
     }
 
     private void ScheduleSteamActions(object? state)

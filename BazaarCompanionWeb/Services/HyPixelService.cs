@@ -3,11 +3,12 @@ using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Models.Api.Bazaar;
 using BazaarCompanionWeb.Models.Api.Items;
+using BazaarCompanionWeb.Utilities;
 using Item = BazaarCompanionWeb.Models.Item;
 
 namespace BazaarCompanionWeb.Services;
 
-public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRepository)
+public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRepository, TimeCache timeCache)
 {
     public async Task FetchDataAsync(CancellationToken cancellationToken)
     {
@@ -15,6 +16,7 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
         var itemResponse = await hyPixelApi.GetItemsAsync();
         var products = BuildProductData(bazaarResponse, itemResponse).Select(x => x.Map()).ToList();
         await productRepository.UpdateOrAddProductsAsync(products, cancellationToken);
+        timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
     }
 
     private IEnumerable<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)

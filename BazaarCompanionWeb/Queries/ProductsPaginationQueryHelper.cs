@@ -103,10 +103,9 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
     {
         return new ProductDataInfo
         {
-            ProductGuid = product.ProductGuid,
             BuyMarketDataId = product.Buy.Id,
             SellMarketDataId = product.Sell.Id,
-            ItemId = product.Name,
+            ItemId = product.ProductKey,
             ItemFriendlyName = product.FriendlyName,
             ItemTier = product.Tier,
             ItemUnstackable = product.Unstackable,

@@ -7,9 +7,9 @@
                 @(Value.ToString("C2", CultureInfo.CreateSpecificCulture("en-US")))
             </RadzenText>
             <RadzenStack Orientation="Orientation.Horizontal" AlignItems="AlignItems.Center" Wrap="FlexWrap.NoWrap" Gap="0.25rem">
-                <RadzenIcon Icon="@Icon" class="@Color"/>
-                <RadzenText Text="@Percentage.ToString("P2")" TextStyle="TextStyle.Body1" TextAlign="TextAlign.Center"
-                            class="@($"{Color} rz-m-0")"/>
+                <RadzenIcon Icon="@_icon" class="@_color"/>
+                <RadzenText Text="@_percentage.ToString("P2")" TextStyle="TextStyle.Body1" TextAlign="TextAlign.Center"
+                            class="@($"{_color} rz-m-0")"/>
             </RadzenStack>
         </RadzenStack>
     </RadzenStack>

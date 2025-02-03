@@ -1,4 +1,7 @@
 using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations.Schema;
+using System.Text.Json;
+using BazaarCompanionWeb.Models;
 
 namespace BazaarCompanionWeb.Entities;
 
@@ -11,5 +14,6 @@ public abstract class EFMarketData
     public required int OrderVolume { get; set; }
     public required int OrderCount { get; set; }
 
-    public required ICollection<EFOrder> Book { get; set; }
+    [MaxLength(8192)] public required string BookValue { get; set; }
+    [NotMapped] public List<OrderBook> Books => JsonSerializer.Deserialize<List<OrderBook>>(BookValue) ?? [];
 }

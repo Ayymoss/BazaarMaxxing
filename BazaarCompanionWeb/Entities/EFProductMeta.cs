@@ -12,6 +12,6 @@ public class EFProductMeta
     public required double TotalWeekVolume { get; set; }
     public required double FlipOpportunityScore { get; set; }
 
-    public Guid ProductGuid { get; set; }
-    [ForeignKey(nameof(ProductGuid))] public EFProduct? Product { get; set; }
+    [MaxLength(64)] public required string ProductKey { get; set; }
+    [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }
 }

@@ -5,10 +5,8 @@ namespace BazaarCompanionWeb.Entities;
 
 public class EFProduct
 {
-    [Key] public Guid ProductGuid { get; set; }
-
-    public required string Name { get; set; }
-    public required string FriendlyName { get; set; }
+    [Key, MaxLength(64)] public required string ProductKey { get; set; }
+    [MaxLength(64)] public required string FriendlyName { get; set; }
     public required ItemTier Tier { get; set; }
     public required bool Unstackable { get; set; }
 
