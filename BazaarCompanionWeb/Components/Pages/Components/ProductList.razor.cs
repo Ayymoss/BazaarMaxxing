@@ -28,6 +28,7 @@ public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposab
     private string _titleText = "Flips";
     private bool _filter = false;
     private DateTimeOffset _lastServerRefresh;
+    private string _pageTitle = "Bazaar Maxxing";
 
     private static IEnumerable<int> PageSizes => [25, 50, 100];
 
@@ -114,7 +115,9 @@ public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposab
             ShowClose = true
         };
 
+        _pageTitle = $"{arg.Data.ItemFriendlyName} | Bazaar Maxxing";
         await DialogService.OpenAsync<PriceHistoryDialog>("Price History", parameters, options);
+        _pageTitle = "Bazaar Maxxing";
     }
 
     public void Dispose()

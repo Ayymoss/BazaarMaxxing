@@ -2,7 +2,6 @@
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
-using BazaarCompanionWeb.Services;
 using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Repositories;
@@ -92,6 +91,11 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             }
             // ReSharper enable PossibleMultipleEnumeration
 
+            // 12 hour EMA (720 = 12 h * 60 m)
+            const double alpha = 2d / (720 + 1);
+            var todayDate = DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().Date);
+            var yesterdayDate = DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date);
+
             foreach (var product in existingProducts)
             {
                 var incomingProduct = productMap[product.ProductKey];
@@ -118,37 +122,32 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 product.Meta.Margin = incomingProduct.Meta.Margin;
                 product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
 
-                const double alpha = 2d / (60d / ScheduledTaskRunner.TimerMinutes * 24);
-
                 if (product.Snapshots.Count is 0)
                 {
                     product.Snapshots.Add(new EFPriceSnapshot
                     {
                         BuyUnitPrice = incomingProduct.Buy.UnitPrice,
                         SellUnitPrice = incomingProduct.Sell.UnitPrice,
-                        Taken = DateOnly.FromDateTime(timeNow),
+                        Taken = todayDate,
                         ProductKey = product.ProductKey,
                     });
                 }
-                else if (product.Snapshots.Count is 1 &&
-                         product.Snapshots.First().Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date))
+                else if (product.Snapshots.All(x => x.Taken != todayDate))
                 {
-                    var yesterday = product.Snapshots.First(x =>
-                        x.Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date));
+                    var yesterday = product.Snapshots.First(x => x.Taken == yesterdayDate);
 
-                    var today = new EFPriceSnapshot
+                    product.Snapshots.Add(new EFPriceSnapshot
                     {
                         BuyUnitPrice = (incomingProduct.Buy.UnitPrice - yesterday.BuyUnitPrice) * alpha + yesterday.BuyUnitPrice,
                         SellUnitPrice = (incomingProduct.Sell.UnitPrice - yesterday.SellUnitPrice) * alpha + yesterday.SellUnitPrice,
-                        Taken = DateOnly.FromDateTime(timeNow),
+                        Taken = todayDate,
                         ProductKey = product.ProductKey,
-                    };
-
-                    product.Snapshots.Add(today);
+                    });
                 }
                 else
                 {
-                    var today = product.Snapshots.First(x => x.Taken == DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().Date));
+                    var today = product.Snapshots.First(x => x.Taken == todayDate);
+
                     today.BuyUnitPrice = (incomingProduct.Buy.UnitPrice - today.BuyUnitPrice) * alpha + today.BuyUnitPrice;
                     today.SellUnitPrice = (incomingProduct.Sell.UnitPrice - today.SellUnitPrice) * alpha + today.SellUnitPrice;
                 }
@@ -162,6 +161,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         }
         catch (Exception e)
         {
+            logger.LogError(e, "Failure during transaction, reverted");
             await transaction.RollbackAsync(cancellationToken);
         }
     }

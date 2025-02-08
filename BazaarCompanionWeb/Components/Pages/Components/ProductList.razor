@@ -2,6 +2,9 @@
 @using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Utilities
 @using Humanizer
+
+<PageTitle>@_pageTitle</PageTitle>
+
 <RadzenStack Orientation="Orientation.Vertical" Gap="0.25rem">
     <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Right" AlignItems="AlignItems.Center"
                  Wrap="FlexWrap.Wrap">
@@ -86,10 +89,10 @@
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderWeekVolume))"
                                       Title="Sell Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
-                                      Title="Open Buys" Sortable="false" MinWidth="80px">
+                                      Title="Buy Orders" Sortable="false" MinWidth="80px">
                     <Template Context="context">
                         @{
-                            var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
+                            var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
                         }
                         <RadzenText TextStyle="TextStyle.Body2">
                             @textResult.ToString()
@@ -97,10 +100,10 @@
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
-                                      Title="Open Sells" Sortable="false" MinWidth="80px">
+                                      Title="Sell Orders" Sortable="false" MinWidth="80px">
                     <Template Context="context">
                         @{
-                            var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
+                            var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
                         }
                         <RadzenText TextStyle="TextStyle.Body2">
                             @textResult.ToString()

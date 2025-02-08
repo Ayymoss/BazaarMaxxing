@@ -40,7 +40,7 @@ public partial class StatCard : ComponentBase
             _color = "rz-base";
         }
 
-        _percentage = Math.Round((decimal)Value / (decimal)ReferenceValue - 1, 2);
+        _percentage = Math.Round((decimal)Value / (decimal)ReferenceValue - 1, 4);
         StateHasChanged();
     }
 }

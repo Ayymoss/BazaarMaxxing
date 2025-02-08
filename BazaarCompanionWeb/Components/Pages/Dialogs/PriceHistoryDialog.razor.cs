@@ -61,14 +61,29 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
                 {
                     // I feel like there's a better way to do this. I'm not sure of it.
                     // Cascading Value/Parameter maybe...
-                    _buyRef?.UpdateValues(Product.BuyOrderUnitPrice ?? double.MaxValue, Product.PriceHistory.Average(x => x.Buy));
-                    _sellRef?.UpdateValues(Product.SellOrderUnitPrice ?? 0.1, Product.PriceHistory.Average(x => x.Sell));
+                    var history = GetLastPriceHistoryAverage();
+                    _buyRef?.UpdateValues(Product.BuyOrderUnitPrice ?? double.MaxValue, history.Buy);
+                    _sellRef?.UpdateValues(Product.SellOrderUnitPrice ?? 0.1, history.Sell);
                 }
 
                 _loading = false;
                 StateHasChanged();
             });
         }
+    }
+
+    private (double Buy, double Sell) GetLastPriceHistoryAverage()
+    {
+        var buy = 0d;
+        var sell = 0d;
+
+        if (Product.PriceHistory is not null)
+        {
+            buy = Product.PriceHistory.OrderByDescending(x => x.Date).First().Buy;
+            sell = Product.PriceHistory.OrderByDescending(x => x.Date).First().Sell;
+        }
+
+        return (buy, sell);
     }
 
     public void Dispose()

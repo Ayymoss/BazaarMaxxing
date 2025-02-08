@@ -1,3 +1,4 @@
+using System.Text.Json;
 using BazaarCompanionWeb.Components;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
@@ -121,10 +122,23 @@ public class Program
             .CreateLogger();
     }
 
+    private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
+
     private static void RegisterPackageServices(WebApplicationBuilder builder)
     {
+        const string configFileName = "_Configuration.json";
+        var configFilePath = Path.Combine(AppContext.BaseDirectory, configFileName);
+
+        if (!File.Exists(configFilePath))
+        {
+            var defaultConfig = new Configuration();
+            var defaultJson = JsonSerializer.Serialize(defaultConfig, JsonOptions);
+
+            File.WriteAllText(configFilePath, defaultJson);
+        }
+
         builder.Configuration.SetBasePath(AppContext.BaseDirectory)
-            .AddJsonFile("_Configuration.json", false, true);
+            .AddJsonFile(configFileName, false, true);
 
         builder.Services.Configure<Configuration>(builder.Configuration);
         var configuration = builder.Configuration.Get<Configuration>() ?? new Configuration();

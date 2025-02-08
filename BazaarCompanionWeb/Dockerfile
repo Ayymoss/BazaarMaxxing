@@ -7,7 +7,6 @@ FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
 ARG BUILD_CONFIGURATION=Release
 WORKDIR /src
 COPY ["BazaarCompanionWeb/BazaarCompanionWeb.csproj", "BazaarCompanionWeb/"]
-COPY ["BazaarCompanionWeb/_Configuration.json", "BazaarCompanionWeb/"]
 RUN dotnet restore "BazaarCompanionWeb/BazaarCompanionWeb.csproj"
 COPY . .
 WORKDIR "/src/BazaarCompanionWeb"

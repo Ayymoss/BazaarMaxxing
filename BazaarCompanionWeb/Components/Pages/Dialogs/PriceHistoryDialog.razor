@@ -34,10 +34,11 @@
             </RadzenStack>
             <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center"
                          Wrap="FlexWrap.Wrap">
+                @{ var history = GetLastPriceHistoryAverage(); }
                 <StatCard @ref="_buyRef" Title="Insta Buy Price" Value="@(Product.BuyOrderUnitPrice ?? double.MaxValue)"
-                          ReferenceValue="@Product.PriceHistory.Average(x => x.Buy)"/>
+                          ReferenceValue="@history.Buy"/>
                 <StatCard @ref="_sellRef" Title="Insta Sell Price" Value="@(Product.SellOrderUnitPrice ?? 0.1)" Inverse="true"
-                          ReferenceValue="@Product.PriceHistory.Average(x => x.Sell)"/>
+                          ReferenceValue="@history.Sell"/>
             </RadzenStack>
             <PriceGraph Product="Product"/>
         }
