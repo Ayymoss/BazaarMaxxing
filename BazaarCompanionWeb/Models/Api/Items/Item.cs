@@ -16,6 +16,7 @@ public class Item
 
 public enum ItemTier
 {
+    Unknown,
     Common,
     Uncommon,
     Rare,

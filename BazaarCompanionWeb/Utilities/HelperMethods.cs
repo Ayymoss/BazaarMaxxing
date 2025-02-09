@@ -27,6 +27,7 @@ public static class HelperMethods
     {
         return itemTier switch
         {
+            ItemTier.Unknown => "#808080",
             ItemTier.Uncommon => "#78F86A",
             ItemTier.Rare => "#535FF8",
             ItemTier.Epic => "#A22EA5",

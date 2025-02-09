@@ -49,7 +49,7 @@
                         Style="min-height: 200px;" class="rz-selectable">
             <Columns>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.ItemFriendlyName))" Title="Name"
-                                      MinWidth="250px" Width="250px">
+                                      MinWidth="300px" Width="300px">
                     <Template Context="context">
                         <RadzenText TextStyle="TextStyle.Body2" style="@($"color: {context.ItemTier.ProductTierColor()}")">
                             @(context.ItemFriendlyName)
@@ -89,7 +89,7 @@
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderWeekVolume))"
                                       Title="Sell Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
-                                      Title="Buy Orders" Sortable="false" MinWidth="80px">
+                                      Title="Buy Orders" MinWidth="80px">
                     <Template Context="context">
                         @{
                             var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
@@ -100,7 +100,7 @@
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
-                                      Title="Sell Orders" Sortable="false" MinWidth="80px">
+                                      Title="Sell Orders" MinWidth="80px">
                     <Template Context="context">
                         @{
                             var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");

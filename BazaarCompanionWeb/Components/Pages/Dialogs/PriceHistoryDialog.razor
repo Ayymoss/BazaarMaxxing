@@ -52,8 +52,8 @@
                         <RadzenTableHeader>
                             <RadzenTableHeaderRow>
                                 <RadzenTableHeaderCell>Unit Price</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Amount</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Orders</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Orders (@Product.SellBook.Sum(x => x.Orders).ToString("N0"))</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Amount (@Product.SellBook.Sum(x => x.Amount).ToString("N0"))</RadzenTableHeaderCell>
                             </RadzenTableHeaderRow>
                         </RadzenTableHeader>
                         <RadzenTableBody>
@@ -61,8 +61,8 @@
                             {
                                 <RadzenTableRow>
                                     <RadzenTableCell>@order.UnitPrice.ToString("C2", CultureInfo.CreateSpecificCulture("en-US"))</RadzenTableCell>
-                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
                                     <RadzenTableCell>@order.Orders.ToString("N0")</RadzenTableCell>
+                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
                                 </RadzenTableRow>
                             }
                         </RadzenTableBody>
@@ -74,8 +74,8 @@
                         <RadzenTableHeader>
                             <RadzenTableHeaderRow>
                                 <RadzenTableHeaderCell>Unit Price</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Amount</RadzenTableHeaderCell>
-                                <RadzenTableHeaderCell>Orders</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Orders (@Product.BuyBook.Sum(x => x.Orders).ToString("N0"))</RadzenTableHeaderCell>
+                                <RadzenTableHeaderCell>Amount (@Product.BuyBook.Sum(x => x.Amount).ToString("N0"))</RadzenTableHeaderCell>
                             </RadzenTableHeaderRow>
                         </RadzenTableHeader>
                         <RadzenTableBody>
@@ -83,8 +83,8 @@
                             {
                                 <RadzenTableRow>
                                     <RadzenTableCell>@order.UnitPrice.ToString("C2", CultureInfo.CreateSpecificCulture("en-US"))</RadzenTableCell>
-                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
                                     <RadzenTableCell>@order.Orders.ToString("N0")</RadzenTableCell>
+                                    <RadzenTableCell>@order.Amount.ToString("N0")</RadzenTableCell>
                                 </RadzenTableRow>
                             }
                         </RadzenTableBody>

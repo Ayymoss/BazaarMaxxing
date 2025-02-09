@@ -15,6 +15,7 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _loading = true;
     private DateTimeOffset? _lastServerRefresh;
+    private bool _intention;
 
     private StatCard? _buyRef;
     private StatCard? _sellRef;
@@ -25,7 +26,7 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
 
         await FetchProductDataAsync(_cancellationTokenSource.Token);
 
-        _refreshTimer = new System.Timers.Timer(TimeSpan.FromSeconds(32).TotalMilliseconds);
+        _refreshTimer = new System.Timers.Timer(TimeSpan.FromSeconds(12).TotalMilliseconds);
         _refreshTimer.Elapsed += async (sender, e) => await OnRefreshTimerElapsed();
         _refreshTimer.AutoReset = true;
         _refreshTimer.Enabled = true;

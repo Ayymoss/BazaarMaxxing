@@ -32,17 +32,10 @@ public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposab
 
     private static IEnumerable<int> PageSizes => [25, 50, 100];
 
-    protected override async Task OnInitializedAsync()
+    protected override void OnInitialized()
     {
-        await GetLastUpdatedAsync();
-        await base.OnInitializedAsync();
-    }
-
-    private async Task GetLastUpdatedAsync()
-    {
-        var cancellationToken = new CancellationTokenSource();
-        cancellationToken.CancelAfter(TimeSpan.FromSeconds(5));
         _lastServerRefresh = timeCache.LastUpdated;
+        base.OnInitializedAsync();
     }
 
     private async Task TableLoadData(LoadDataArgs args)
@@ -80,7 +73,7 @@ public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposab
         var cancellationToken = new CancellationTokenSource();
         cancellationToken.CancelAfter(TimeSpan.FromSeconds(5));
         var context = await ProductQuery.QueryResourceAsync(paginationQuery, cancellationToken.Token);
-        await GetLastUpdatedAsync();
+        _lastServerRefresh = timeCache.LastUpdated;
         _productTable = context.Data;
         _count = context.Count;
         _isLoading = false;

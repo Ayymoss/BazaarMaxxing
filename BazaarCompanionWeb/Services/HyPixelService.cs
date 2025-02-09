@@ -4,6 +4,7 @@ using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Models.Api.Bazaar;
 using BazaarCompanionWeb.Models.Api.Items;
 using BazaarCompanionWeb.Utilities;
+using Humanizer;
 using Item = BazaarCompanionWeb.Models.Item;
 
 namespace BazaarCompanionWeb.Services;
@@ -21,10 +22,14 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
 
     private IEnumerable<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)
     {
+        var itemMap = itemResponse.Items.ToDictionary(x => x.Id, x => x);
+
         var products = bazaarResponse.Products.Values
             .Where(x => x.BuySummary.Count is not 0)
-            .Join(itemResponse.Items, bazaar => bazaar.ProductId, item => item.Id, (bazaar, item) =>
+            .Select(bazaar =>
             {
+                var item = itemMap.GetValueOrDefault(bazaar.ProductId);
+
                 var buy = bazaar.BuySummary.FirstOrDefault();
                 var sell = bazaar.SellSummary.FirstOrDefault();
 
@@ -38,14 +43,16 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                 var potentialProfitMultiplier = buyPrice / sellPrice;
                 var buyingPower = (float)buyMovingWeek / sellMovingWeek;
 
+                var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
+
                 return new ProductData
                 {
                     ItemId = bazaar.ProductId,
                     Item = new Item
                     {
-                        FriendlyName = item.Name,
-                        Tier = item.Tier,
-                        Unstackable = item.Unstackable
+                        FriendlyName = friendlyName,
+                        Tier = item?.Tier ?? ItemTier.Unknown,
+                        Unstackable = item?.Unstackable ?? false
                     },
                     Buy = new OrderInfo
                     {
@@ -87,9 +94,21 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
         return products;
     }
 
+    private static string ProductIdToName(string productId)
+    {
+        var split = productId.Split("_");
+        if (!int.TryParse(split.Last(), out var level)) return productId.Humanize().Titleize();
+
+        var nameParts = split.Take(split.Length - 1).ToArray();
+        var baseName = string.Join(" ", nameParts).Humanize().Titleize();
+        return $"{baseName} {level.ToRoman()}";
+    }
+
     private static double FlipOpportunityScore(double buyPrice, double sellPrice, long buyMovingWeek, long sellMovingWeek,
         double multiplier)
     {
+        if (buyMovingWeek is 0 || sellMovingWeek is 0) return 0;
+
         var volumeRatio = buyMovingWeek / (float)sellMovingWeek;
         var ratioWeight = Math.Min(volumeRatio, 1 / volumeRatio);
         var hourlyVolume = buyMovingWeek / 7 / 24;

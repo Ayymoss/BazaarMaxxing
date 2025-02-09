@@ -76,6 +76,8 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
             nameof(ProductDataInfo.BuyOrderWeekVolume) => current.ApplySort(sort, p => p.Buy.OrderVolumeWeek),
             nameof(ProductDataInfo.SellOrderWeekVolume) => current.ApplySort(sort, p => p.Sell.OrderVolumeWeek),
             nameof(ProductDataInfo.OrderMetaFlipOpportunityScore) => current.ApplySort(sort, p => p.Meta.FlipOpportunityScore),
+            nameof(ProductDataInfo.BuyOrderCurrentOrders) => current.ApplySort(sort, p => p.Sell.OrderCount),
+            nameof(ProductDataInfo.SellOrderCurrentOrders) => current.ApplySort(sort, p => p.Buy.OrderCount),
             _ => current
         });
         return query;
