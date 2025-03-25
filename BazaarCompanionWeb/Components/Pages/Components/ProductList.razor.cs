@@ -25,7 +25,7 @@ public partial class ProductList(TimeCache timeCache) : ComponentBase, IDisposab
     private bool _isLoading = true;
     private int _count;
     private string _searchString = string.Empty;
-    private string _titleText = "Flips";
+    private string _titleText = "Bazaar Flips";
     private bool _filter = false;
     private DateTimeOffset _lastServerRefresh;
     private string _pageTitle = "Bazaar Maxxing";

@@ -22,8 +22,8 @@ public class ProductData
             Unstackable = Item.Unstackable,
             Meta = new EFProductMeta
             {
-                ProfitMultiplier = Buy.UnitPrice / Sell.UnitPrice,
-                Margin = Buy.UnitPrice - Sell.UnitPrice,
+                ProfitMultiplier = Buy.OrderPrice / Sell.OrderPrice,
+                Margin = Buy.OrderPrice - Sell.OrderPrice,
                 TotalWeekVolume = Buy.WeekVolume + Sell.WeekVolume,
                 FlipOpportunityScore = OrderMeta.FlipOpportunityScore,
                 ProductKey = ItemId
@@ -32,15 +32,15 @@ public class ProductData
             [
                 new EFPriceSnapshot
                 {
-                    BuyUnitPrice = Buy.UnitPrice,
-                    SellUnitPrice = Sell.UnitPrice,
+                    BuyUnitPrice = Buy.Last,
+                    SellUnitPrice = Sell.Last,
                     Taken = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().DateTime),
                     ProductKey = ItemId
                 }
             ],
             Buy = new EFBuyMarketData
             {
-                UnitPrice = Buy.UnitPrice,
+                UnitPrice = Buy.OrderPrice,
                 OrderVolumeWeek = Buy.WeekVolume,
                 OrderVolume = Buy.CurrentVolume,
                 OrderCount = Buy.CurrentOrders,
@@ -54,7 +54,7 @@ public class ProductData
             },
             Sell = new EFSellMarketData
             {
-                UnitPrice = Sell.UnitPrice,
+                UnitPrice = Sell.OrderPrice,
                 OrderVolumeWeek = Sell.WeekVolume,
                 OrderVolume = Sell.CurrentVolume,
                 OrderCount = Sell.CurrentOrders,

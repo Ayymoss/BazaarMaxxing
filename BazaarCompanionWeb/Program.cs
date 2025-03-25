@@ -165,5 +165,7 @@ public class Program
         builder.Services.AddScoped<HyPixelService>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();
         builder.Services.AddScoped<IResourceQueryHelper<ProductPagination, ProductDataInfo>, ProductsPaginationQueryHelper>();
+        
+        builder.Services.AddAutoMapper(typeof(ProductProfile));
     }
 }

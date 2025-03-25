@@ -1,5 +1,6 @@
 ﻿services:
   bazaarcompanionweb:
+    restart: always
     image: bazaarcompanionweb
     build:
       context: .

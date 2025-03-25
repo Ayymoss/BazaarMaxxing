@@ -20,7 +20,7 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
     }
 
-    private IEnumerable<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)
+    private static IEnumerable<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)
     {
         var itemMap = itemResponse.Items.ToDictionary(x => x.Id, x => x);
 
@@ -33,14 +33,14 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                 var buy = bazaar.BuySummary.FirstOrDefault();
                 var sell = bazaar.SellSummary.FirstOrDefault();
 
-                var buyPrice = buy?.PricePerUnit ?? double.MaxValue;
-                var sellPrice = Math.Round(sell?.PricePerUnit ?? 0.1f, 1, MidpointRounding.ToZero);
+                var buyOrderPrice = buy?.PricePerUnit ?? double.MaxValue;
+                var sellOrderPrice = Math.Round(sell?.PricePerUnit ?? 0.1f, 1, MidpointRounding.ToZero);
                 var buyMovingWeek = bazaar.QuickStatus.BuyMovingWeek;
                 var sellMovingWeek = bazaar.QuickStatus.SellMovingWeek;
 
-                var margin = buyPrice - sellPrice;
+                var margin = buyOrderPrice - sellOrderPrice;
                 var totalWeekVolume = buyMovingWeek + sellMovingWeek;
-                var potentialProfitMultiplier = buyPrice / sellPrice;
+                var potentialProfitMultiplier = buyOrderPrice / sellOrderPrice;
                 var buyingPower = (float)buyMovingWeek / sellMovingWeek;
 
                 var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
@@ -51,12 +51,13 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                     Item = new Item
                     {
                         FriendlyName = friendlyName,
-                        Tier = item?.Tier ?? ItemTier.Unknown,
+                        Tier = item?.Tier ?? ItemTier.Common,
                         Unstackable = item?.Unstackable ?? false
                     },
                     Buy = new OrderInfo
                     {
-                        UnitPrice = buyPrice,
+                        Last = bazaar.QuickStatus.BuyPrice,
+                        OrderPrice = buyOrderPrice,
                         WeekVolume = buyMovingWeek,
                         CurrentOrders = bazaar.QuickStatus.BuyOrders,
                         CurrentVolume = bazaar.QuickStatus.BuyVolume,
@@ -69,7 +70,8 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                     },
                     Sell = new OrderInfo
                     {
-                        UnitPrice = sellPrice,
+                        Last = bazaar.QuickStatus.SellPrice,
+                        OrderPrice = sellOrderPrice,
                         WeekVolume = sellMovingWeek,
                         CurrentOrders = bazaar.QuickStatus.SellOrders,
                         CurrentVolume = bazaar.QuickStatus.SellVolume,
@@ -86,7 +88,7 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
                         Margin = margin,
                         TotalWeekVolume = totalWeekVolume,
                         BuyOrderPower = buyingPower,
-                        FlipOpportunityScore = FlipOpportunityScore(buyPrice, sellPrice, buyMovingWeek, sellMovingWeek,
+                        FlipOpportunityScore = FlipOpportunityScore(buyOrderPrice, sellOrderPrice, buyMovingWeek, sellMovingWeek,
                             potentialProfitMultiplier)
                     }
                 };

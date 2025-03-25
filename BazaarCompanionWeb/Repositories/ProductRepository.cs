@@ -1,4 +1,5 @@
-﻿using BazaarCompanionWeb.Context;
+﻿using AutoMapper;
+using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -6,7 +7,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Repositories;
 
-public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger)
+public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger, IMapper mapper)
     : IProductRepository
 {
     public async Task UpdateOrAddProductsAsync(List<EFProduct> products, CancellationToken cancellationToken)
@@ -100,27 +101,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             {
                 var incomingProduct = productMap[product.ProductKey];
 
-                product.ProductKey = incomingProduct.ProductKey;
-                product.FriendlyName = incomingProduct.FriendlyName;
-                product.Tier = incomingProduct.Tier;
-                product.Unstackable = incomingProduct.Unstackable;
-
-                product.Buy.UnitPrice = incomingProduct.Buy.UnitPrice;
-                product.Buy.OrderVolumeWeek = incomingProduct.Buy.OrderVolumeWeek;
-                product.Buy.OrderVolume = incomingProduct.Buy.OrderVolume;
-                product.Buy.OrderCount = incomingProduct.Buy.OrderCount;
-                product.Buy.BookValue = incomingProduct.Buy.BookValue;
-
-                product.Sell.UnitPrice = incomingProduct.Sell.UnitPrice;
-                product.Sell.OrderVolumeWeek = incomingProduct.Sell.OrderVolumeWeek;
-                product.Sell.OrderVolume = incomingProduct.Sell.OrderVolume;
-                product.Sell.OrderCount = incomingProduct.Sell.OrderCount;
-                product.Sell.BookValue = incomingProduct.Sell.BookValue;
-
-                product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
-                product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
-                product.Meta.Margin = incomingProduct.Meta.Margin;
-                product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
+                mapper.Map(incomingProduct, product);
 
                 if (product.Snapshots.Count is 0)
                 {
@@ -228,7 +209,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var snapshots = await context.PriceSnapshots
             .Where(x => x.ProductKey == productKey)
-            .Where(x => DateOnly.FromDateTime(DateTime.Now.AddDays(-30)) < x.Taken)
+            .Where(x => DateOnly.FromDateTime(DateTime.Now.AddDays(-64)) < x.Taken)
             .GroupBy(x => x.Taken)
             .Select(x => new PriceHistorySnapshot(x.Key, x.Max(y => y.BuyUnitPrice), x.Max(y => y.SellUnitPrice)))
             .ToListAsync(cancellationToken);

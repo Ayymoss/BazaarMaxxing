@@ -57,12 +57,11 @@
                     </Template>
                 </RadzenDataGridColumn>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderUnitPrice))"
-                                      Title="Insta. Buy Price"
-                                      MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
-                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderUnitPrice))"
-                                      Title="Insta. Sell Price" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                                      Title="Ask" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaMargin))" Title="Spread"
                                       MinWidth="60px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderUnitPrice))"
+                                      Title="Bid" MinWidth="100px" FormatString="{0:C2}" FormatProvider="@_usProvider"/>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier))"
                                       Title="Profit Multi." MinWidth="60px">
                     <Template Context="context">
@@ -88,22 +87,22 @@
                                       Title="Buy Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
                 <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderWeekVolume))"
                                       Title="Sell Week Vol." MinWidth="60px" FormatString="{0:N0}"/>
-                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
-                                      Title="Buy Orders" MinWidth="80px">
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
+                                      Title="Ask Orders" MinWidth="80px">
                     <Template Context="context">
                         @{
-                            var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
+                            var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
                         }
                         <RadzenText TextStyle="TextStyle.Body2">
                             @textResult.ToString()
                         </RadzenText>
                     </Template>
                 </RadzenDataGridColumn>
-                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.SellOrderCurrentOrders))"
-                                      Title="Sell Orders" MinWidth="80px">
+                <RadzenDataGridColumn TItem="ProductDataInfo" Property="@(nameof(ProductDataInfo.BuyOrderCurrentOrders))"
+                                      Title="Bid Orders" MinWidth="80px">
                     <Template Context="context">
                         @{
-                            var textResult = new StringBuilder($"Odr: {context.BuyOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.BuyOrderCurrentVolume.ToMetric(decimals: 0)}");
+                            var textResult = new StringBuilder($"Odr: {context.SellOrderCurrentOrders.ToMetric(decimals: 0)} | Vol: {context.SellOrderCurrentVolume.ToMetric(decimals: 0)}");
                         }
                         <RadzenText TextStyle="TextStyle.Body2">
                             @textResult.ToString()

@@ -27,7 +27,7 @@ public static class HelperMethods
     {
         return itemTier switch
         {
-            ItemTier.Unknown => "#808080",
+            ItemTier.Common => "#FFFFFF",
             ItemTier.Uncommon => "#78F86A",
             ItemTier.Rare => "#535FF8",
             ItemTier.Epic => "#A22EA5",
@@ -37,7 +37,7 @@ public static class HelperMethods
             ItemTier.Special => "#F5655A",
             ItemTier.VerySpecial => "#F5655A",
             ItemTier.Unobtainable => "#A2240F",
-            _ => "#FFFFFF"
+            _ => "#808080"
         };
     }
 
@@ -60,7 +60,7 @@ public static class HelperMethods
     {
         return reference switch
         {
-            < 0 => "#808080",
+            < 0.01 => "#808080",
             < 0.5 => "#FFFFFF",
             < 1 => "#78F86A",
             < 2 => "#535FF8",

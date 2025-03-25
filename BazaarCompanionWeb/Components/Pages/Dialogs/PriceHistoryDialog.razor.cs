@@ -19,6 +19,10 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
 
     private StatCard? _buyRef;
     private StatCard? _sellRef;
+    private StatCard? _spreadRef;
+
+    private double _spreadLast;
+    private double _spreadOpen;
 
     protected override async Task OnInitializedAsync()
     {
@@ -65,6 +69,7 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
                     var history = GetLastPriceHistoryAverage();
                     _buyRef?.UpdateValues(Product.BuyOrderUnitPrice ?? double.MaxValue, history.Buy);
                     _sellRef?.UpdateValues(Product.SellOrderUnitPrice ?? 0.1, history.Sell);
+                    _spreadRef?.UpdateValues(Product.OrderMetaMargin, history.Buy - history.Sell);
                 }
 
                 _loading = false;
@@ -73,7 +78,7 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
         }
     }
 
-    private (double Buy, double Sell) GetLastPriceHistoryAverage()
+    private (double Buy, double Sell ) GetLastPriceHistoryAverage()
     {
         var buy = 0d;
         var sell = 0d;
