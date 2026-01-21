@@ -1,0 +1,118 @@
+@using BazaarCompanionWeb.Dtos
+@using Microsoft.AspNetCore.Components
+
+<div class="flex flex-wrap items-center gap-2 p-2 rounded-lg border border-slate-700/50 bg-slate-800/40">
+    <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Indicators:</span>
+    
+    <!-- Moving Averages -->
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowSMA10" @onchange="@(e => { Config.ShowSMA10 = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">SMA 10</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowSMA20" @onchange="@(e => { Config.ShowSMA20 = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">SMA 20</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowSMA50" @onchange="@(e => { Config.ShowSMA50 = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">SMA 50</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowEMA12" @onchange="@(e => { Config.ShowEMA12 = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-green-500 focus:ring-green-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">EMA 12</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowEMA26" @onchange="@(e => { Config.ShowEMA26 = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-green-500 focus:ring-green-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">EMA 26</span>
+        </label>
+    </div>
+    
+    <!-- Advanced Indicators -->
+    <div class="h-4 w-px bg-slate-700"></div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowBollingerBands" @onchange="@(e => { Config.ShowBollingerBands = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-purple-500 focus:ring-purple-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">BB</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowRSI" @onchange="@(e => { Config.ShowRSI = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-yellow-500 focus:ring-yellow-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">RSI</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowMACD" @onchange="@(e => { Config.ShowMACD = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">MACD</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowVWAP" @onchange="@(e => { Config.ShowVWAP = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">VWAP</span>
+        </label>
+    </div>
+    
+    <div class="h-4 w-px bg-slate-700"></div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowVolume" @onchange="@(e => { Config.ShowVolume = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">Volume</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowSpread" @onchange="@(e => { Config.ShowSpread = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-cyan-500 focus:ring-cyan-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">Spread</span>
+        </label>
+    </div>
+    
+    <div class="flex items-center gap-1">
+        <label class="flex items-center gap-1.5 cursor-pointer group">
+            <input type="checkbox" checked="@Config.ShowSupportResistance" @onchange="@(e => { Config.ShowSupportResistance = e.Value is bool b && b; OnConfigChanged(); })" 
+                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-emerald-500 focus:ring-emerald-500 focus:ring-1" />
+            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">S/R</span>
+        </label>
+    </div>
+</div>
+
+@code {
+    [Parameter] public required ChartIndicatorConfig Config { get; set; }
+    [Parameter] public EventCallback<ChartIndicatorConfig> ConfigChanged { get; set; }
+
+    private void OnConfigChanged()
+    {
+        ConfigChanged.InvokeAsync(Config);
+    }
+}

@@ -1,6 +1,8 @@
 ﻿@page "/"
 @using BazaarCompanionWeb.Components.Pages.Components
+@rendermode InteractiveServer
 
 <PageTitle>Bazaar Maxxing</PageTitle>
 
 <ProductList @ref="_productList"/>
+<MarketInsightsPanel ProductClicked="OnInsightProductClicked" />

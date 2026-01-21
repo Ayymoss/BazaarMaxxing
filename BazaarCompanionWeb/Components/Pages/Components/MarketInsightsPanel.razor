@@ -1,0 +1,218 @@
+@namespace BazaarCompanionWeb.Components.Pages.Components
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Services
+@using BazaarCompanionWeb.Utilities
+@using BazaarCompanionWeb.Components.Shared
+@using Humanizer
+@inject MarketInsightsService InsightsService
+@inject TimeCache TimeCache
+@implements IDisposable
+
+<div class="fixed right-0 top-14 bottom-0 z-40 flex transition-transform duration-300 ease-out
+            @(_isCollapsed ? "translate-x-[calc(100%-2.5rem)]" : "translate-x-0")">
+    
+    <!-- Toggle Button -->
+    <button @onclick="Toggle"
+            class="absolute -left-10 top-4 w-10 h-10 rounded-l-lg 
+                   bg-slate-900/90 border border-r-0 border-slate-700/50 
+                   backdrop-blur-xl shadow-lg
+                   flex items-center justify-center
+                   text-slate-400 hover:text-white hover:bg-slate-800/90
+                   transition-all duration-200">
+        <svg class="w-5 h-5 transition-transform duration-200 @(_isCollapsed ? "" : "rotate-180")"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"/>
+        </svg>
+    </button>
+    
+    <!-- Panel Content -->
+    <div class="w-80 h-full bg-slate-900/95 backdrop-blur-xl 
+                border-l border-slate-700/50 shadow-2xl
+                flex flex-col overflow-hidden">
+        
+        <!-- Header -->
+        <div class="p-4 border-b border-slate-700/50 bg-slate-800/30">
+            <div class="flex items-center justify-between">
+                <h2 class="text-base font-semibold text-white flex items-center gap-2">
+                    <span class="text-lg">📊</span>
+                    Market Insights
+                </h2>
+                @if (_insights?.NewInsightsCount > 0)
+                {
+                    <span class="px-2 py-0.5 text-xs font-medium rounded-full 
+                                 bg-amber-500/20 text-amber-400 border border-amber-500/30
+                                 animate-pulse">
+                        @_insights.NewInsightsCount new
+                    </span>
+                }
+            </div>
+            <div class="flex items-center gap-2 mt-1.5 text-xs text-slate-500">
+                <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_6px_rgba(16,185,129,0.5)]"></span>
+                <span>Updated @(_insights?.LastUpdated.Humanize() ?? "Loading...")</span>
+            </div>
+        </div>
+        
+        <!-- Sections -->
+        <div class="flex-1 overflow-y-auto">
+            <!-- Hot Products -->
+            <AccordionSection Title="Hot Products" Icon="🔥" IconColor="orange" 
+                              DefaultOpen="true" Count="@(_insights?.HotProducts.Count ?? 0)">
+                @foreach (var product in _insights?.HotProducts ?? [])
+                {
+                    <div @onclick="() => OnProductClick(product.ProductKey)"
+                         class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer
+                                hover:bg-slate-800/50 transition-colors
+                                @(product.IsNew ? "bg-amber-500/5 border-l-2 border-amber-400" : "")">
+                        <span class="w-2 h-2 rounded-full @GetTierColor(product.Tier)"></span>
+                        <span class="flex-1 truncate text-xs text-slate-300">@product.ProductName</span>
+                        <span class="text-xs font-mono @(product.IsIncreasing ? "text-emerald-400" : "text-rose-400")">
+                            @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("F1")%
+                        </span>
+                    </div>
+                }
+            </AccordionSection>
+            
+            <!-- Volume Surges -->
+            <AccordionSection Title="Volume Surges" Icon="📈" IconColor="blue" 
+                              Count="@(_insights?.VolumeSurges.Count ?? 0)">
+                @foreach (var surge in _insights?.VolumeSurges ?? [])
+                {
+                    <div @onclick="() => OnProductClick(surge.ProductKey)"
+                         class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-slate-800/50 transition-colors">
+                        <span class="w-2 h-2 rounded-full @GetTierColor(surge.Tier)"></span>
+                        <span class="flex-1 truncate text-xs text-slate-300">@surge.ProductName</span>
+                        <span class="text-xs font-mono text-cyan-400">@surge.SurgeRatio.ToString("F1")x</span>
+                        <span class="text-[10px] px-1 rounded @(surge.IsBuyingSurge ? "bg-emerald-500/20 text-emerald-400" : "bg-rose-500/20 text-rose-400")">
+                            @(surge.IsBuyingSurge ? "BUY" : "SELL")
+                        </span>
+                    </div>
+                }
+            </AccordionSection>
+            
+            <!-- Spread Opportunities -->
+            <AccordionSection Title="Spread Opportunities" Icon="💰" IconColor="green" 
+                              Count="@(_insights?.SpreadOpportunities.Count ?? 0)">
+                @foreach (var opp in _insights?.SpreadOpportunities ?? [])
+                {
+                    <div @onclick="() => OnProductClick(opp.ProductKey)"
+                         class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-slate-800/50 transition-colors">
+                        <span class="w-2 h-2 rounded-full @GetTierColor(opp.Tier)"></span>
+                        <span class="flex-1 truncate text-xs text-slate-300">@opp.ProductName</span>
+                        <div class="text-right">
+                            <div class="text-xs text-slate-300">@opp.CurrentSpread.ToString("C1")</div>
+                            <div class="text-[10px] text-slate-500">vs @opp.Avg7DaySpread.ToString("C1")</div>
+                        </div>
+                        <span class="text-xs font-mono text-amber-400">+@opp.SpreadChangePercent.ToString("F0")%</span>
+                    </div>
+                }
+            </AccordionSection>
+            
+            <!-- Fire Sale Alerts -->
+            <AccordionSection Title="Fire Sales" Icon="🔥" IconColor="red" 
+                              Count="@(_insights?.FireSales.Count ?? 0)">
+                @foreach (var alert in _insights?.FireSales ?? [])
+                {
+                    <div @onclick="() => OnProductClick(alert.ProductKey)"
+                         class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-slate-800/50 transition-colors">
+                        <span class="text-sm">🔥</span>
+                        <span class="flex-1 truncate text-xs text-slate-300">@alert.ProductName</span>
+                        <div class="w-12 h-1.5 bg-slate-700 rounded-full overflow-hidden">
+                            <div class="h-full bg-gradient-to-r from-amber-500 to-rose-500 transition-all" 
+                                 style="width: @((alert.ManipulationIntensity * 100).ToString("F0"))%"></div>
+                        </div>
+                        <span class="text-xs font-mono text-rose-400">@alert.PriceDeviationPercent.ToString("F0")%↓</span>
+                    </div>
+                }
+            </AccordionSection>
+            
+            <!-- Market Movers -->
+            <AccordionSection Title="Market Movers" Icon="📊" IconColor="purple" 
+                              Count="@((_insights?.Gainers.Count ?? 0) + (_insights?.Losers.Count ?? 0))">
+                <div class="flex gap-1 mb-2">
+                    <button @onclick="() => _showGainers = true"
+                            class="flex-1 py-1 text-xs rounded transition-colors
+                                   @(_showGainers ? "bg-emerald-500/20 text-emerald-400 border border-emerald-500/30" : "text-slate-400 hover:bg-slate-800")">
+                        Gainers
+                    </button>
+                    <button @onclick="() => _showGainers = false"
+                            class="flex-1 py-1 text-xs rounded transition-colors
+                                   @(!_showGainers ? "bg-rose-500/20 text-rose-400 border border-rose-500/30" : "text-slate-400 hover:bg-slate-800")">
+                        Losers
+                    </button>
+                </div>
+                
+                @foreach (var mover in (_showGainers ? _insights?.Gainers : _insights?.Losers) ?? [])
+                {
+                    <div @onclick="() => OnProductClick(mover.ProductKey)"
+                         class="flex items-center gap-2 py-1.5 px-1 rounded cursor-pointer hover:bg-slate-800/50 transition-colors">
+                        <span class="w-2 h-2 rounded-full @GetTierColor(mover.Tier)"></span>
+                        <span class="flex-1 truncate text-xs text-slate-300">@mover.ProductName</span>
+                        <span class="text-xs font-mono @(mover.IsGainer ? "text-emerald-400" : "text-rose-400")">
+                            @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("F1")%
+                        </span>
+                        <span class="text-[10px] text-slate-500">@mover.CurrentPrice.ToString("C1")</span>
+                    </div>
+                }
+            </AccordionSection>
+        </div>
+    </div>
+</div>
+
+@code {
+    [Parameter] public EventCallback<string> ProductClicked { get; set; }
+    
+    private MarketInsights? _insights;
+    private bool _isCollapsed;
+    private bool _showGainers = true;
+    private Timer? _refreshTimer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadInsightsAsync();
+        
+        // Auto-refresh every 30 seconds
+        _refreshTimer = new Timer(async _ =>
+        {
+            await LoadInsightsAsync();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+    }
+
+    private async Task LoadInsightsAsync()
+    {
+        try
+        {
+            _insights = await InsightsService.GetInsightsAsync();
+        }
+        catch
+        {
+            // Silently fail - insights are non-critical
+        }
+    }
+
+    private void Toggle() => _isCollapsed = !_isCollapsed;
+
+    private async Task OnProductClick(string productKey)
+    {
+        await ProductClicked.InvokeAsync(productKey);
+    }
+
+    private static string GetTierColor(string tier) => tier switch
+    {
+        "Common" => "bg-slate-400",
+        "Uncommon" => "bg-emerald-400",
+        "Rare" => "bg-blue-400",
+        "Epic" => "bg-purple-400",
+        "Legendary" => "bg-amber-400",
+        "Mythic" => "bg-rose-400",
+        "Divine" => "bg-cyan-400",
+        "Special" => "bg-pink-400",
+        "VerySpecial" => "bg-rose-500",
+        _ => "bg-slate-500"
+    };
+
+    public void Dispose()
+    {
+        _refreshTimer?.Dispose();
+    }
+}

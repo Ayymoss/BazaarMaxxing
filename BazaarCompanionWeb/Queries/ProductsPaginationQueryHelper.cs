@@ -1,16 +1,21 @@
-﻿using BazaarCompanionWeb.Context;
+using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces;
+using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models.Pagination;
 using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
+using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
 namespace BazaarCompanionWeb.Queries;
 
-public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contextFactory, IOptionsMonitor<Configuration> optionsMonitor)
+public class ProductsPaginationQueryHelper(
+    IDbContextFactory<DataContext> contextFactory, 
+    IOptionsMonitor<Configuration> optionsMonitor,
+    IOhlcRepository ohlcRepository)
     : IResourceQueryHelper<ProductPagination, ProductDataInfo>
 {
     private readonly Configuration _configuration = optionsMonitor.CurrentValue;
@@ -31,8 +36,23 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
             query = ApplyFilterQuery(query);
         }
 
+        // Apply advanced filters if provided
+        if (request.AdvancedFilters != null)
+        {
+            query = ApplyAdvancedFilters(query, request.AdvancedFilters);
+        }
+
         if (!string.IsNullOrWhiteSpace(request.Search))
-            query = ApplySearchQuery(query, request.Search);
+        {
+            if (request.UseFuzzySearch)
+            {
+                query = ApplyFuzzySearchQuery(query, request.Search);
+            }
+            else
+            {
+                query = ApplySearchQuery(query, request.Search);
+            }
+        }
 
         if (request.Sorts.Any())
             query = ApplySortQuery(query, request.Sorts);
@@ -60,6 +80,118 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
         return query;
     }
 
+    private static IQueryable<EFProduct> ApplyFuzzySearchQuery(IQueryable<EFProduct> query, string search)
+    {
+        // For database queries, we still use LIKE for performance
+        // Fuzzy matching will be done client-side if needed
+        // This is a simplified version - full fuzzy search would require client-side filtering
+        var searchWords = search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
+        var regularSearchWords = searchWords.Where(x => x.Length >= 2); // Lower threshold for fuzzy
+
+        query = regularSearchWords.Aggregate(query, (current, word) =>
+            current.Where(product => EF.Functions.Like(product.FriendlyName, $"%{word}%")));
+
+        return query;
+    }
+
+    private IQueryable<EFProduct> ApplyAdvancedFilters(IQueryable<EFProduct> query, AdvancedFilterOptions filters)
+    {
+        // Tier filter
+        if (filters.SelectedTiers.Any())
+        {
+            query = query.Where(p => filters.SelectedTiers.Contains(p.Tier));
+        }
+
+        // Manipulation status
+        if (filters.ManipulationStatus == ManipulationFilter.Manipulated)
+        {
+            query = query.Where(p => p.Meta.IsManipulated);
+        }
+        else if (filters.ManipulationStatus == ManipulationFilter.NotManipulated)
+        {
+            query = query.Where(p => !p.Meta.IsManipulated);
+        }
+
+        // Price range
+        if (filters.MinPrice.HasValue)
+        {
+            query = query.Where(p => p.Buy.UnitPrice >= filters.MinPrice.Value);
+        }
+        if (filters.MaxPrice.HasValue)
+        {
+            query = query.Where(p => p.Buy.UnitPrice <= filters.MaxPrice.Value);
+        }
+
+        // Spread range
+        if (filters.MinSpread.HasValue)
+        {
+            query = query.Where(p => p.Meta.Margin >= filters.MinSpread.Value);
+        }
+        if (filters.MaxSpread.HasValue)
+        {
+            query = query.Where(p => p.Meta.Margin <= filters.MaxSpread.Value);
+        }
+
+        // Volume range
+        if (filters.MinVolume.HasValue)
+        {
+            query = query.Where(p => p.Meta.TotalWeekVolume >= filters.MinVolume.Value);
+        }
+        if (filters.MaxVolume.HasValue)
+        {
+            query = query.Where(p => p.Meta.TotalWeekVolume <= filters.MaxVolume.Value);
+        }
+
+        // Volume tier
+        if (filters.VolumeTier != VolumeTierFilter.All)
+        {
+            query = filters.VolumeTier switch
+            {
+                VolumeTierFilter.Low => query.Where(p => p.Meta.TotalWeekVolume < 100_000),
+                VolumeTierFilter.Medium => query.Where(p => p.Meta.TotalWeekVolume >= 100_000 && p.Meta.TotalWeekVolume <= 1_000_000),
+                VolumeTierFilter.High => query.Where(p => p.Meta.TotalWeekVolume > 1_000_000),
+                _ => query
+            };
+        }
+
+        // Opportunity score range
+        if (filters.MinOpportunityScore.HasValue)
+        {
+            query = query.Where(p => p.Meta.FlipOpportunityScore >= filters.MinOpportunityScore.Value);
+        }
+        if (filters.MaxOpportunityScore.HasValue)
+        {
+            query = query.Where(p => p.Meta.FlipOpportunityScore <= filters.MaxOpportunityScore.Value);
+        }
+
+        // Profit multiplier range
+        if (filters.MinProfitMultiplier.HasValue)
+        {
+            query = query.Where(p => p.Meta.ProfitMultiplier >= filters.MinProfitMultiplier.Value);
+        }
+        if (filters.MaxProfitMultiplier.HasValue)
+        {
+            query = query.Where(p => p.Meta.ProfitMultiplier <= filters.MaxProfitMultiplier.Value);
+        }
+
+        // Order count range
+        if (filters.MinOrderCount.HasValue)
+        {
+            query = query.Where(p => p.Buy.OrderCount >= filters.MinOrderCount.Value || p.Sell.OrderCount >= filters.MinOrderCount.Value);
+        }
+        if (filters.MaxOrderCount.HasValue)
+        {
+            query = query.Where(p => p.Buy.OrderCount <= filters.MaxOrderCount.Value && p.Sell.OrderCount <= filters.MaxOrderCount.Value);
+        }
+
+        // Note: Volatility, trend direction, and correlation filters would require
+        // additional data that's not in the database. These would need to be calculated
+        // separately or stored in the database. For now, we'll skip them in the query
+        // and apply them client-side if needed.
+
+        return query;
+    }
+
     private static IQueryable<EFProduct> ApplySortQuery(IQueryable<EFProduct> query, IEnumerable<SortDescriptor> sorts)
     {
         var sortDescriptors = sorts as SortDescriptor[] ?? sorts.ToArray();
@@ -76,8 +208,8 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
             nameof(ProductDataInfo.BuyOrderWeekVolume) => current.ApplySort(sort, p => p.Buy.OrderVolumeWeek),
             nameof(ProductDataInfo.SellOrderWeekVolume) => current.ApplySort(sort, p => p.Sell.OrderVolumeWeek),
             nameof(ProductDataInfo.OrderMetaFlipOpportunityScore) => current.ApplySort(sort, p => p.Meta.FlipOpportunityScore),
-            nameof(ProductDataInfo.BuyOrderCurrentOrders) => current.ApplySort(sort, p => p.Sell.OrderCount),
-            nameof(ProductDataInfo.SellOrderCurrentOrders) => current.ApplySort(sort, p => p.Buy.OrderCount),
+            nameof(ProductDataInfo.BuyOrderCurrentOrders) => current.ApplySort(sort, p => p.Buy.OrderCount),
+            nameof(ProductDataInfo.SellOrderCurrentOrders) => current.ApplySort(sort, p => p.Sell.OrderCount),
             _ => current
         });
         return query;
@@ -123,6 +255,9 @@ public class ProductsPaginationQueryHelper(IDbContextFactory<DataContext> contex
             OrderMetaMargin = product.Meta.Margin,
             OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume,
             OrderMetaFlipOpportunityScore = product.Meta.FlipOpportunityScore,
+            IsManipulated = product.Meta.IsManipulated,
+            ManipulationIntensity = product.Meta.ManipulationIntensity,
+            PriceDeviationPercent = product.Meta.PriceDeviationPercent,
         };
     }
 }

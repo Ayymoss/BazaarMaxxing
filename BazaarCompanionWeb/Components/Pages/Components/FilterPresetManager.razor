@@ -1,0 +1,174 @@
+@using BazaarCompanionWeb.Models.Pagination
+@using BazaarCompanionWeb.Utilities
+@using Microsoft.AspNetCore.Components
+@using System.Text.Json
+@inject BrowserStorage BrowserStorage
+
+<div class="flex flex-col gap-2">
+    <div class="flex items-center justify-between">
+        <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Filter Presets</label>
+        <button @onclick="ShowSaveDialog" 
+                class="text-[10px] text-blue-400 hover:text-blue-300 transition-colors px-2 py-1 rounded hover:bg-slate-800/50">
+            <i class="ph ph-floppy-disk mr-1"></i> Save
+        </button>
+    </div>
+
+    <select @onchange="@(async (ChangeEventArgs e) => await LoadPreset(e))" 
+            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+        <option value="">Select preset...</option>
+        @foreach (var preset in _presets)
+        {
+            <option value="@preset.Name">@preset.Name</option>
+        }
+    </select>
+
+    @if (_presets.Any())
+    {
+        <div class="flex flex-wrap gap-1 mt-1">
+            @foreach (var preset in _presets)
+            {
+                <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/40 border border-slate-700/50">
+                    <button @onclick="@(async () => await LoadPresetByName(preset.Name))"
+                            class="text-[10px] text-slate-300 hover:text-white transition-colors">
+                        @preset.Name
+                    </button>
+                    <button @onclick="@(async () => await DeletePreset(preset.Name))"
+                            class="text-slate-500 hover:text-red-400 transition-colors">
+                        <i class="ph ph-x text-[10px]"></i>
+                    </button>
+                </div>
+            }
+        </div>
+    }
+
+    @if (_showSaveDialog)
+    {
+        <div class="mt-2 p-2 rounded border border-slate-700/50 bg-slate-800/40">
+            <input type="text" 
+                   @bind="_newPresetName"
+                   @bind:event="oninput"
+                   placeholder="Preset name..."
+                   class="w-full text-xs bg-slate-900/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 mb-2" />
+            <div class="flex gap-2">
+                <button @onclick="@(async () => await SavePreset())" 
+                        class="flex-1 text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                    Save
+                </button>
+                <button @onclick="CancelSave" 
+                        class="flex-1 text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors">
+                    Cancel
+                </button>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required AdvancedFilterOptions CurrentFilters { get; set; }
+    [Parameter] public EventCallback<AdvancedFilterOptions> PresetLoaded { get; set; }
+
+    private List<FilterPreset> _presets = new();
+    private bool _showSaveDialog = false;
+    private string _newPresetName = string.Empty;
+    private const string PresetStorageKey = "bazaar_filter_presets";
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadPresetsAsync();
+    }
+
+    private async Task LoadPresetsAsync()
+    {
+        try
+        {
+            var stored = await BrowserStorage.GetItemAsync(PresetStorageKey);
+            if (!string.IsNullOrWhiteSpace(stored))
+            {
+                _presets = JsonSerializer.Deserialize<List<FilterPreset>>(stored) ?? new List<FilterPreset>();
+            }
+        }
+        catch
+        {
+            _presets = new List<FilterPreset>();
+        }
+    }
+
+    private async Task SavePresetsAsync()
+    {
+        try
+        {
+            var json = JsonSerializer.Serialize(_presets);
+            await BrowserStorage.SetItemAsync(PresetStorageKey, json);
+        }
+        catch
+        {
+            // Ignore storage errors
+        }
+    }
+
+    private void ShowSaveDialog()
+    {
+        _showSaveDialog = true;
+        _newPresetName = string.Empty;
+    }
+
+    private void CancelSave()
+    {
+        _showSaveDialog = false;
+        _newPresetName = string.Empty;
+    }
+
+    private async Task SavePreset()
+    {
+        if (string.IsNullOrWhiteSpace(_newPresetName))
+            return;
+
+        var preset = new FilterPreset
+        {
+            Name = _newPresetName,
+            Filters = JsonSerializer.Deserialize<AdvancedFilterOptions>(
+                JsonSerializer.Serialize(CurrentFilters)) ?? new AdvancedFilterOptions(),
+            CreatedAt = DateTime.Now
+        };
+
+        // Remove existing preset with same name
+        _presets.RemoveAll(p => p.Name == preset.Name);
+        _presets.Add(preset);
+
+        await SavePresetsAsync();
+        _showSaveDialog = false;
+        _newPresetName = string.Empty;
+        StateHasChanged();
+    }
+
+    private async Task LoadPreset(ChangeEventArgs e)
+    {
+        var presetName = e.Value?.ToString();
+        if (!string.IsNullOrWhiteSpace(presetName))
+        {
+            await LoadPresetByName(presetName);
+        }
+    }
+
+    private async Task LoadPresetByName(string presetName)
+    {
+        var preset = _presets.FirstOrDefault(p => p.Name == presetName);
+        if (preset != null)
+        {
+            var loadedFilters = JsonSerializer.Deserialize<AdvancedFilterOptions>(
+                JsonSerializer.Serialize(preset.Filters)) ?? new AdvancedFilterOptions();
+            
+            preset.LastUsed = DateTime.Now;
+            await SavePresetsAsync();
+            
+            await PresetLoaded.InvokeAsync(loadedFilters);
+        }
+    }
+
+    private async Task DeletePreset(string presetName)
+    {
+        _presets.RemoveAll(p => p.Name == presetName);
+        await SavePresetsAsync();
+        StateHasChanged();
+    }
+}

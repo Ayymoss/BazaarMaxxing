@@ -1,0 +1,278 @@
+@using BazaarCompanionWeb.Models.Pagination
+@using BazaarCompanionWeb.Models.Api.Items
+@using BazaarCompanionWeb.Utilities
+@using Humanizer
+@using Microsoft.AspNetCore.Components
+
+<div class="rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl p-4">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-bold text-white flex items-center gap-2">
+            <i class="ph ph-funnel text-blue-400"></i>
+            Advanced Filters
+        </h3>
+        <div class="flex items-center gap-2">
+            <button @onclick="ClearAllFilters" 
+                    class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded hover:bg-slate-800/50">
+                Clear All
+            </button>
+            <button @onclick="ToggleCollapse" 
+                    class="text-slate-500 hover:text-slate-300 transition-colors">
+                <i class="ph ph-@(_collapsed ? "caret-down" : "caret-up") text-sm"></i>
+            </button>
+        </div>
+    </div>
+
+    @if (!_collapsed)
+    {
+        <div class="space-y-4">
+            <!-- Tier Filter -->
+            <div class="flex flex-col gap-2">
+                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Tier</label>
+                <div class="flex flex-wrap gap-2">
+                    @foreach (ItemTier tier in Enum.GetValues<ItemTier>())
+                    {
+                        var isSelected = Filters.SelectedTiers.Contains(tier);
+                        <label class="flex items-center gap-1.5 cursor-pointer group">
+                            <input type="checkbox" 
+                                   checked="@isSelected"
+                                   @onchange="@(e => ToggleTier(tier, e.Value is bool b && b))"
+                                   class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+                            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors" 
+                                  style="@($"color: {tier.ProductTierColor()}")">
+                                @tier.Humanize()
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <!-- Manipulation Status -->
+            <div class="flex flex-col gap-2">
+                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Manipulation Status</label>
+                <div class="flex gap-2">
+                    @foreach (ManipulationFilter status in Enum.GetValues<ManipulationFilter>())
+                    {
+                        <label class="flex items-center gap-1.5 cursor-pointer group">
+                            <input type="radio" 
+                                   name="manipulation"
+                                   checked="@(Filters.ManipulationStatus == status)"
+                                   @onchange="@(() => { Filters.ManipulationStatus = status; OnFiltersChanged(); })"
+                                   class="w-3 h-3 border-slate-600 bg-slate-700 text-orange-500 focus:ring-orange-500 focus:ring-1" />
+                            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">
+                                @status.Humanize()
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <!-- Price Range -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Price</label>
+                    <input type="number" 
+                           value="@Filters.MinPrice" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinPrice = val; } else { Filters.MinPrice = null; } OnFiltersChanged(); })"
+                           placeholder="Min"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Price</label>
+                    <input type="number" 
+                           value="@Filters.MaxPrice" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxPrice = val; } else { Filters.MaxPrice = null; } OnFiltersChanged(); })"
+                           placeholder="Max"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <!-- Spread Range -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Spread</label>
+                    <input type="number" 
+                           value="@Filters.MinSpread" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinSpread = val; } else { Filters.MinSpread = null; } OnFiltersChanged(); })"
+                           placeholder="Min"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Spread</label>
+                    <input type="number" 
+                           value="@Filters.MaxSpread" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxSpread = val; } else { Filters.MaxSpread = null; } OnFiltersChanged(); })"
+                           placeholder="Max"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <!-- Volume Range -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Volume</label>
+                    <input type="number" 
+                           value="@Filters.MinVolume" 
+                           @oninput="@(e => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MinVolume = val; } else { Filters.MinVolume = null; } OnFiltersChanged(); })"
+                           placeholder="Min"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Volume</label>
+                    <input type="number" 
+                           value="@Filters.MaxVolume" 
+                           @oninput="@(e => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxVolume = val; } else { Filters.MaxVolume = null; } OnFiltersChanged(); })"
+                           placeholder="Max"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <!-- Opportunity Score Range -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Opportunity Score</label>
+                    <input type="number" 
+                           value="@Filters.MinOpportunityScore" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinOpportunityScore = val; } else { Filters.MinOpportunityScore = null; } OnFiltersChanged(); })"
+                           placeholder="Min"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Opportunity Score</label>
+                    <input type="number" 
+                           value="@Filters.MaxOpportunityScore" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxOpportunityScore = val; } else { Filters.MaxOpportunityScore = null; } OnFiltersChanged(); })"
+                           placeholder="Max"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <!-- Profit Multiplier Range -->
+            <div class="grid grid-cols-2 gap-3">
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Profit Multiplier</label>
+                    <input type="number" 
+                           value="@Filters.MinProfitMultiplier" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinProfitMultiplier = val; } else { Filters.MinProfitMultiplier = null; } OnFiltersChanged(); })"
+                           placeholder="Min"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+                <div class="flex flex-col gap-1">
+                    <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Profit Multiplier</label>
+                    <input type="number" 
+                           value="@Filters.MaxProfitMultiplier" 
+                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxProfitMultiplier = val; } else { Filters.MaxProfitMultiplier = null; } OnFiltersChanged(); })"
+                           placeholder="Max"
+                           step="0.1"
+                           class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <!-- Volume Tier -->
+            <div class="flex flex-col gap-2">
+                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Volume Tier</label>
+                <div class="flex gap-2">
+                    @foreach (VolumeTierFilter tier in Enum.GetValues<VolumeTierFilter>())
+                    {
+                        <label class="flex items-center gap-1.5 cursor-pointer group">
+                            <input type="radio" 
+                                   name="volumetier"
+                                   checked="@(Filters.VolumeTier == tier)"
+                                   @onchange="@(() => { Filters.VolumeTier = tier; OnFiltersChanged(); })"
+                                   class="w-3 h-3 border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+                            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">
+                                @tier.Humanize()
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <!-- Volatility Filter -->
+            <div class="flex flex-col gap-2">
+                <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Volatility</label>
+                <div class="flex gap-2">
+                    @foreach (VolatilityFilter vol in Enum.GetValues<VolatilityFilter>())
+                    {
+                        <label class="flex items-center gap-1.5 cursor-pointer group">
+                            <input type="radio" 
+                                   name="volatility"
+                                   checked="@(Filters.Volatility == vol)"
+                                   @onchange="@(() => { Filters.Volatility = vol; OnFiltersChanged(); })"
+                                   class="w-3 h-3 border-slate-600 bg-slate-700 text-yellow-500 focus:ring-yellow-500 focus:ring-1" />
+                            <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">
+                                @vol.Humanize()
+                            </span>
+                        </label>
+                    }
+                </div>
+            </div>
+
+            <!-- Active Filter Count -->
+            <div class="flex items-center justify-between pt-2 border-t border-slate-700/50">
+                <span class="text-[10px] text-slate-500">
+                    @GetActiveFilterCount() active filter(s)
+                </span>
+            </div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required AdvancedFilterOptions Filters { get; set; }
+    [Parameter] public EventCallback<AdvancedFilterOptions> FiltersChanged { get; set; }
+
+    private bool _collapsed = false;
+
+    private void ToggleCollapse()
+    {
+        _collapsed = !_collapsed;
+    }
+
+    private void ToggleTier(ItemTier tier, bool isSelected)
+    {
+        if (isSelected && !Filters.SelectedTiers.Contains(tier))
+        {
+            Filters.SelectedTiers.Add(tier);
+        }
+        else if (!isSelected)
+        {
+            Filters.SelectedTiers.Remove(tier);
+        }
+        OnFiltersChanged();
+    }
+
+    private void ClearAllFilters()
+    {
+        Filters = new AdvancedFilterOptions();
+        OnFiltersChanged();
+    }
+
+    private void OnFiltersChanged()
+    {
+        FiltersChanged.InvokeAsync(Filters);
+    }
+
+    private int GetActiveFilterCount()
+    {
+        int count = 0;
+        if (Filters.SelectedTiers.Any()) count++;
+        if (Filters.ManipulationStatus != ManipulationFilter.All) count++;
+        if (Filters.VolumeTier != VolumeTierFilter.All) count++;
+        if (Filters.Volatility != VolatilityFilter.All) count++;
+        if (Filters.MinPrice.HasValue || Filters.MaxPrice.HasValue) count++;
+        if (Filters.MinSpread.HasValue || Filters.MaxSpread.HasValue) count++;
+        if (Filters.MinVolume.HasValue || Filters.MaxVolume.HasValue) count++;
+        if (Filters.MinOpportunityScore.HasValue || Filters.MaxOpportunityScore.HasValue) count++;
+        if (Filters.MinProfitMultiplier.HasValue || Filters.MaxProfitMultiplier.HasValue) count++;
+        if (Filters.TrendDirection.HasValue) count++;
+        if (!string.IsNullOrWhiteSpace(Filters.CorrelationProductKey)) count++;
+        return count;
+    }
+}

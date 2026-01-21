@@ -1,4 +1,3 @@
-﻿using AutoMapper;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
@@ -7,7 +6,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Repositories;
 
-public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger, IMapper mapper)
+public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger)
     : IProductRepository
 {
     public async Task UpdateOrAddProductsAsync(List<EFProduct> products, CancellationToken cancellationToken)
@@ -36,6 +35,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                     Margin = x.Meta.Margin,
                     TotalWeekVolume = x.Meta.TotalWeekVolume,
                     FlipOpportunityScore = x.Meta.FlipOpportunityScore,
+                    IsManipulated = x.Meta.IsManipulated,
+                    ManipulationIntensity = x.Meta.ManipulationIntensity,
+                    PriceDeviationPercent = x.Meta.PriceDeviationPercent,
                     ProductKey = x.ProductKey
                 },
                 Snapshots =
@@ -101,7 +103,33 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             {
                 var incomingProduct = productMap[product.ProductKey];
 
-                mapper.Map(incomingProduct, product);
+                // Map top-level properties
+                product.ProductKey = incomingProduct.ProductKey;
+                product.FriendlyName = incomingProduct.FriendlyName;
+                product.Tier = incomingProduct.Tier;
+                product.Unstackable = incomingProduct.Unstackable;
+
+                // Map Meta properties
+                product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
+                product.Meta.Margin = incomingProduct.Meta.Margin;
+                product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
+                product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
+
+                // Map Buy properties
+                product.Buy.UnitPrice = incomingProduct.Buy.UnitPrice;
+                product.Buy.OrderVolumeWeek = incomingProduct.Buy.OrderVolumeWeek;
+                product.Buy.OrderVolume = incomingProduct.Buy.OrderVolume;
+                product.Buy.OrderCount = incomingProduct.Buy.OrderCount;
+                product.Buy.BookValue = incomingProduct.Buy.BookValue;
+
+                // Map Sell properties
+                product.Sell.UnitPrice = incomingProduct.Sell.UnitPrice;
+                product.Sell.OrderVolumeWeek = incomingProduct.Sell.OrderVolumeWeek;
+                product.Sell.OrderVolume = incomingProduct.Sell.OrderVolume;
+                product.Sell.OrderCount = incomingProduct.Sell.OrderCount;
+                product.Sell.BookValue = incomingProduct.Sell.BookValue;
+
+                // Snapshots are intentionally NOT mapped (preserved from existing product)
 
                 if (product.Snapshots.Count is 0)
                 {
@@ -189,6 +217,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 OrderMetaMargin = x.Meta.Margin,
                 OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
                 OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
+                IsManipulated = x.Meta.IsManipulated,
+                ManipulationIntensity = x.Meta.ManipulationIntensity,
+                PriceDeviationPercent = x.Meta.PriceDeviationPercent,
             }).FirstAsync(cancellationToken: cancellationToken);
 
         product.PriceHistory = await GetPriceHistoryAsync(product.ItemId, cancellationToken);

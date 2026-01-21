@@ -1,0 +1,115 @@
+@using BazaarCompanionWeb.Dtos
+
+<div class="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-md">
+    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <i class="ph ph-scales mr-1"></i> Order Book Imbalance
+    </h4>
+
+    @if (Imbalance is not null)
+    {
+        <!-- Circular Gauge -->
+        <div class="relative w-32 h-16 overflow-hidden">
+            <svg viewBox="0 0 100 50" class="w-full h-full">
+                <!-- Background arc -->
+                <path d="M 5 50 A 45 45 0 0 1 95 50"
+                      fill="none"
+                      stroke="rgb(51 65 85)"
+                      stroke-width="8"
+                      stroke-linecap="round"/>
+                <!-- Value arc -->
+                <path d="M 5 50 A 45 45 0 0 1 95 50"
+                      fill="none"
+                      stroke="@GetGaugeColor()"
+                      stroke-width="8"
+                      stroke-linecap="round"
+                      stroke-dasharray="@GetDashArray()"
+                      stroke-dashoffset="@GetDashOffset()"/>
+                <!-- Indicator needle -->
+                <line x1="50" y1="50" x2="@GetNeedleX()" y2="@GetNeedleY()"
+                      stroke="white" stroke-width="2" stroke-linecap="round"/>
+                <circle cx="50" cy="50" r="4" fill="white"/>
+            </svg>
+        </div>
+
+        <!-- Value Display -->
+        <div class="text-center">
+            <span class="text-2xl font-bold" style="color: @GetGaugeColor()">
+                @((Imbalance.ImbalanceRatio * 100).ToString("F1"))%
+            </span>
+            <div class="text-[10px] text-slate-500 mt-1">
+                @GetTrendLabel()
+            </div>
+        </div>
+
+        <!-- Buy/Sell Comparison -->
+        <div class="flex items-center gap-4 mt-2 text-xs">
+            <div class="flex flex-col items-center">
+                <span class="text-green-400 font-mono">@Imbalance.BuyPressurePercent.ToString("F1")%</span>
+                <span class="text-slate-500 text-[10px]">Buy</span>
+            </div>
+            <div class="flex flex-col items-center">
+                <span class="text-red-400 font-mono">@Imbalance.SellPressurePercent.ToString("F1")%</span>
+                <span class="text-slate-500 text-[10px]">Sell</span>
+            </div>
+        </div>
+
+        <!-- Volume Totals -->
+        <div class="flex items-center gap-4 mt-1 text-[10px] text-slate-500">
+            <span>Buy Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalBuyVolume.ToString("N0")</span></span>
+            <span>Sell Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalSellVolume.ToString("N0")</span></span>
+        </div>
+    }
+    else
+    {
+        <div class="h-24 flex items-center justify-center text-slate-500 text-xs">
+            No data available
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public OrderBookImbalance? Imbalance { get; set; }
+
+    private string GetGaugeColor() => Imbalance?.ImbalanceRatio switch
+    {
+        > 0.3 => "#22c55e",   // Strong buy - green
+        > 0.1 => "#86efac",   // Moderate buy - light green
+        < -0.3 => "#ef4444",  // Strong sell - red
+        < -0.1 => "#fca5a5",  // Moderate sell - light red
+        _ => "#64748b"        // Neutral - slate
+    };
+
+    private string GetTrendLabel() => Imbalance?.Trend switch
+    {
+        ImbalanceTrend.Improving => "↗ Buyers dominating",
+        ImbalanceTrend.Worsening => "↘ Sellers dominating",
+        _ => "⟷ Balanced"
+    };
+
+    // Arc calculations for SVG gauge
+    private const double ArcLength = 141.37; // π * 45 (half circle)
+
+    private string GetDashArray() => $"{ArcLength} {ArcLength}";
+
+    private string GetDashOffset()
+    {
+        var ratio = Imbalance?.ImbalanceRatio ?? 0;
+        var normalized = (ratio + 1) / 2; // Convert -1..1 to 0..1
+        var offset = ArcLength * (1 - normalized);
+        return offset.ToString("F2");
+    }
+
+    private string GetNeedleX()
+    {
+        var ratio = Imbalance?.ImbalanceRatio ?? 0;
+        var angle = Math.PI * (1 - (ratio + 1) / 2); // Map to 0..π
+        return (50 + 35 * Math.Cos(angle)).ToString("F2");
+    }
+
+    private string GetNeedleY()
+    {
+        var ratio = Imbalance?.ImbalanceRatio ?? 0;
+        var angle = Math.PI * (1 - (ratio + 1) / 2);
+        return (50 - 35 * Math.Sin(angle)).ToString("F2");
+    }
+}

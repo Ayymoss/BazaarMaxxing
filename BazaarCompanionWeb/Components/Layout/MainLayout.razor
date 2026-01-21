@@ -1,34 +1,55 @@
 ﻿@using BazaarCompanionWeb.Utilities
 @inherits LayoutComponentBase
 
-<RadzenComponents @rendermode="InteractiveServer" />
-
-<RadzenLayout
-    Style="height: 100vh; grid-template-columns: auto 1fr auto; grid-template-areas: 'rz-header rz-header rz-header' 'rz-sidebar rz-body rz-right-sidebar'">
-    <RadzenHeader>
+<div class="flex min-h-screen flex-col bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]">
+    <!-- Sticky Header -->
+    <header class="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/70 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/60">
         <TopBar @ref="_topBar"/>
-    </RadzenHeader>
-    <RadzenBody @ref="_body" class="rz-p-8">
-        <ChildContent>
-            <RadzenContentContainer Name="main">
-                <div style="height: 100%">
-                    @Body
-                    <RadzenStack Orientation="Orientation.Horizontal" JustifyContent="JustifyContent.Center" AlignItems="AlignItems.Center">
-                        @{
-                            var version = HelperMethods.GetVersion();
-                            var versionString = $"Hypixel Bazaar Maxing | Discord ayymoss | Version {version}";
-                        }
-                        <RadzenText TextAlign="TextAlign.Center" Text="@versionString" TextStyle="TextStyle.Caption"
-                                    class="rz-mb-0 rz-my-2 rz-color-secondary-dark"/>
-                    </RadzenStack>
+    </header>
+
+    <!-- Main Content -->
+    <main class="flex-1 px-4 py-8 sm:px-6 lg:px-8">
+        <div class="animate-in fade-in slide-in-from-bottom-2 duration-500">
+            @Body
+        </div>
+    </main>
+
+    <!-- Footer -->
+    <footer class="mt-auto border-t border-slate-800/60 bg-slate-950/50 py-8 backdrop-blur-sm">
+        <div class="mx-auto flex max-w-[1920px] flex-col items-center justify-center gap-4 px-6 text-center sm:flex-row sm:justify-between">
+            @{
+                var version = HelperMethods.GetVersion();
+            }
+            <div class="flex flex-col items-center gap-1 sm:items-start">
+                <p class="text-sm font-semibold text-slate-300">Bazaar Maxxing</p>
+                <p class="text-xs text-slate-500">Not affiliated with Hypixel Studios.</p>
+            </div>
+            
+            <div class="flex flex-col items-center gap-2 sm:items-end">
+                <div class="flex items-center gap-2 text-xs text-slate-500">
+                    <span>v@(version)</span>
+                    <span class="text-slate-700">•</span>
+                    <a href="#" class="hover:text-blue-400 transition-colors">Changelog</a>
+                    <span class="text-slate-700">•</span>
+                    <a href="#" class="hover:text-blue-400 transition-colors">Privacy</a>
                 </div>
-            </RadzenContentContainer>
-        </ChildContent>
-    </RadzenBody>
-</RadzenLayout>
+                <p class="text-[10px] text-slate-600">
+                    Developed by <span class="font-medium text-slate-400">ayymoss</span>
+                </p>
+            </div>
+        </div>
+    </footer>
+</div>
 
 <div id="blazor-error-ui">
-    An unhandled error has occurred.
-    <a href="" class="reload">Reload</a>
-    <a class="dismiss">🗙</a>
+    <div class="flex items-center justify-between gap-4">
+        <span class="flex items-center gap-2">
+            <i class="ph ph-warning-circle text-xl"></i>
+            An unhandled error has occurred.
+        </span>
+        <div class="flex gap-2">
+            <a href="" class="reload underline hover:text-white">Reload</a>
+            <a class="dismiss cursor-pointer opacity-70 hover:opacity-100">Dismiss</a>
+        </div>
+    </div>
 </div>

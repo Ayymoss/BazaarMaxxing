@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using System.Reflection;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Models.Api.Items;
@@ -68,6 +68,22 @@ public static class HelperMethods
             < 4 => "#F9AD35",
             < 5 => "#F46DF9",
             _ => "#76FBFE"
+        };
+    }
+
+    /// <summary>
+    /// Returns a color for manipulation intensity, ranging from orange to red as intensity increases.
+    /// </summary>
+    /// <param name="intensity">Manipulation intensity from 0.0 to 1.0</param>
+    /// <returns>Hex color code</returns>
+    public static string ManipulationColor(this double intensity)
+    {
+        // Gradient from orange (#F97316) to red (#EF4444) based on intensity
+        return intensity switch
+        {
+            < 0.33 => "#F97316", // Orange
+            < 0.66 => "#FB923C", // Light orange
+            _ => "#EF4444"        // Red for high intensity
         };
     }
 }

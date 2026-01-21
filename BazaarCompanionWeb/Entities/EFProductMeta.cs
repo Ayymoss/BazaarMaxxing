@@ -11,6 +11,9 @@ public class EFProductMeta
     public required double Margin { get; set; }
     public required double TotalWeekVolume { get; set; }
     public required double FlipOpportunityScore { get; set; }
+    public required bool IsManipulated { get; set; }
+    public required double ManipulationIntensity { get; set; }
+    public required double PriceDeviationPercent { get; set; }
 
     [MaxLength(64)] public required string ProductKey { get; set; }
     [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }

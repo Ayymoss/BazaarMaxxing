@@ -6,6 +6,7 @@
       context: .
       dockerfile: BazaarCompanionWeb/Dockerfile
     environment:
+      - DATA_DIR=/app/data
       - ConnectionStrings__DefaultConnection=Data Source=/app/data/Database.db
     volumes:
       - /opt/bazaar-data/:/app/data/

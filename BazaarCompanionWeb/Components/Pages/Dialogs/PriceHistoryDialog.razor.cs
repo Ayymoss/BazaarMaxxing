@@ -1,13 +1,19 @@
-﻿using BazaarCompanionWeb.Components.Pages.Components;
+using BazaarCompanionWeb.Components.Pages.Components;
 using BazaarCompanionWeb.Dtos;
+using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Serilog;
 
 namespace BazaarCompanionWeb.Components.Pages.Dialogs;
 
-public partial class PriceHistoryDialog(IProductRepository productRepository, TimeCache timeCache) : ComponentBase, IDisposable
+public partial class PriceHistoryDialog(
+    IProductRepository productRepository,
+    TimeCache timeCache,
+    MarketAnalyticsService marketAnalyticsService,
+    OrderBookAnalysisService orderBookAnalysisService) : ComponentBase, IDisposable
 {
     [Parameter] public required ProductDataInfo Product { get; set; }
 
@@ -23,17 +29,44 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
 
     private double _spreadLast;
     private double _spreadOpen;
+    internal CandleInterval _selectedInterval = CandleInterval.FifteenMinute;
+    private List<RelatedProduct> _relatedProducts = new();
+
+    // Order book analysis
+    private OrderBookAnalysisResult? _orderBookAnalysis;
+    private bool _showOrderBookAnalysis;
+
+    private Task OnIntervalChangedAsync(CandleInterval interval)
+    {
+        _selectedInterval = interval;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
 
     protected override async Task OnInitializedAsync()
     {
         _cancellationTokenSource = new CancellationTokenSource();
 
         await FetchProductDataAsync(_cancellationTokenSource.Token);
+        await LoadRelatedProductsAsync(_cancellationTokenSource.Token);
 
         _refreshTimer = new System.Timers.Timer(TimeSpan.FromSeconds(12).TotalMilliseconds);
         _refreshTimer.Elapsed += async (sender, e) => await OnRefreshTimerElapsed();
         _refreshTimer.AutoReset = true;
         _refreshTimer.Enabled = true;
+    }
+
+    private async Task LoadRelatedProductsAsync(CancellationToken cancellationToken = default)
+    {
+        try
+        {
+            _relatedProducts = await marketAnalyticsService.GetRelatedProductsAsync(Product.ItemId, 5, cancellationToken);
+            await InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Error loading related products for {ProductKey}", Product.ItemId);
+        }
     }
 
     private async Task OnRefreshTimerElapsed()
@@ -49,6 +82,12 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
         {
             Product = await productRepository.GetProductAsync(Product.ItemId, cancellationToken);
             _lastServerRefresh = timeCache.LastUpdated;
+
+            // Load order book analysis if we have order book data
+            if (Product.BuyBook is not null && Product.SellBook is not null)
+            {
+                _orderBookAnalysis = await orderBookAnalysisService.AnalyzeAsync(Product.ItemId, cancellationToken);
+            }
         }
         catch (OperationCanceledException)
         {
@@ -92,6 +131,19 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
         return (buy, sell);
     }
 
+    private void ToggleOrderBookAnalysis()
+    {
+        _showOrderBookAnalysis = !_showOrderBookAnalysis;
+    }
+
+    private void NavigateToProduct(string productKey)
+    {
+        // Close current dialog and open new one
+        // This would need to be handled by parent component
+        // For now, we'll just log - parent component should handle navigation
+        Log.Information("Navigate to product: {ProductKey}", productKey);
+    }
+
     public void Dispose()
     {
         _refreshTimer?.Stop();
@@ -100,3 +152,4 @@ public partial class PriceHistoryDialog(IProductRepository productRepository, Ti
         _cancellationTokenSource?.Dispose();
     }
 }
+

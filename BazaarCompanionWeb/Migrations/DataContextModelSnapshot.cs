@@ -15,7 +15,7 @@ namespace BazaarCompanionWeb.Migrations
         protected override void BuildModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
-            modelBuilder.HasAnnotation("ProductVersion", "9.0.1");
+            modelBuilder.HasAnnotation("ProductVersion", "10.0.2");
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFMarketData", b =>
                 {
@@ -47,6 +47,83 @@ namespace BazaarCompanionWeb.Migrations
                     b.UseTptMappingStrategy();
                 });
 
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOhlcCandle", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Close")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("High")
+                        .HasColumnType("REAL");
+
+                    b.Property<int>("Interval")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("Low")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Open")
+                        .HasColumnType("REAL");
+
+                    b.Property<DateTime>("PeriodStart")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double?>("Volume")
+                        .HasColumnType("REAL");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductKey", "Interval", "PeriodStart");
+
+                    b.ToTable("EFOhlcCandles", (string)null);
+                });
+
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOrderBookSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuyOrderCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuyVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("PriceLevel")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SellOrderCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SellVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("ProductKey", "Timestamp");
+
+                    b.ToTable("EFOrderBookSnapshots", (string)null);
+                });
+
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceSnapshot", b =>
                 {
                     b.Property<int>("Id")
@@ -72,6 +149,39 @@ namespace BazaarCompanionWeb.Migrations
                     b.HasIndex("ProductKey");
 
                     b.ToTable("EFPriceSnapshots", (string)null);
+                });
+
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceTick", b =>
+                {
+                    b.Property<long>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("BuyPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<long?>("BuyVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<double>("SellPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<long?>("SellVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("ProductKey", "Timestamp");
+
+                    b.ToTable("EFPriceTicks", (string)null);
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFProduct", b =>
@@ -105,7 +215,16 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("FlipOpportunityScore")
                         .HasColumnType("REAL");
 
+                    b.Property<bool>("IsManipulated")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("ManipulationIntensity")
+                        .HasColumnType("REAL");
+
                     b.Property<double>("Margin")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("PriceDeviationPercent")
                         .HasColumnType("REAL");
 
                     b.Property<string>("ProductKey")
@@ -157,10 +276,32 @@ namespace BazaarCompanionWeb.Migrations
                     b.ToTable("EFSellMarketData", (string)null);
                 });
 
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOhlcCandle", b =>
+                {
+                    b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
+                        .WithMany()
+                        .HasForeignKey("ProductKey")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceSnapshot", b =>
                 {
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
                         .WithMany("Snapshots")
+                        .HasForeignKey("ProductKey")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Product");
+                });
+
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceTick", b =>
+                {
+                    b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
+                        .WithMany()
                         .HasForeignKey("ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();

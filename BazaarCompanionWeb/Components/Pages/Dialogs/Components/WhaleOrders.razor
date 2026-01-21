@@ -1,0 +1,53 @@
+@using BazaarCompanionWeb.Dtos
+
+<div class="flex flex-col gap-2 p-3 rounded-xl border border-amber-900/30 bg-slate-900/40 backdrop-blur-md">
+    <h4 class="text-xs font-bold text-amber-400 uppercase tracking-wider flex items-center gap-2">
+        <i class="ph ph-fish mr-1"></i> Whale Orders
+        @if (Orders.Count > 0)
+        {
+            <span class="px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-300 text-[10px]">
+                @Orders.Count detected
+            </span>
+        }
+    </h4>
+
+    @if (Orders.Count > 0)
+    {
+        <div class="max-h-[200px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700">
+            <div class="flex flex-col gap-1.5">
+                @foreach (var whale in Orders)
+                {
+                    var bgColor = whale.IsBuyOrder ? "bg-green-500/10 border-green-900/30" : "bg-red-500/10 border-red-900/30";
+                    var textColor = whale.IsBuyOrder ? "text-green-400" : "text-red-400";
+                    var icon = whale.IsBuyOrder ? "ph-trend-up" : "ph-trend-down";
+
+                    <div class="flex items-center justify-between p-2 rounded-lg border @bgColor text-xs">
+                        <div class="flex items-center gap-2">
+                            <i class="ph @icon @textColor"></i>
+                            <span class="font-mono text-slate-300">@whale.UnitPrice.ToString("N1")</span>
+                        </div>
+                        <div class="flex items-center gap-3">
+                            <span class="text-slate-400">@whale.Amount.ToString("N0") qty</span>
+                            <span class="px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-300 text-[10px] font-mono">
+                                @whale.ZScore.ToString("F1")σ
+                            </span>
+                        </div>
+                    </div>
+                }
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="py-4 text-center text-slate-500 text-xs">
+            <i class="ph ph-wave-sine text-lg mb-1"></i>
+            <p>No whale orders detected</p>
+            <p class="text-[10px] text-slate-600 mt-1">Orders must be &gt;3σ from mean</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public List<WhaleOrder> Orders { get; set; } = [];
+}
+

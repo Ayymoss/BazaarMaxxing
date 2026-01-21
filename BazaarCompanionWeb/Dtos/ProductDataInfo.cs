@@ -1,4 +1,4 @@
-﻿using BazaarCompanionWeb.Models.Api.Items;
+using BazaarCompanionWeb.Models.Api.Items;
 
 namespace BazaarCompanionWeb.Dtos;
 
@@ -22,6 +22,9 @@ public class ProductDataInfo
     public double OrderMetaMargin { get; set; }
     public double OrderMetaTotalWeekVolume { get; set; }
     public double OrderMetaFlipOpportunityScore { get; set; }
+    public bool IsManipulated { get; set; }
+    public double ManipulationIntensity { get; set; }
+    public double PriceDeviationPercent { get; set; }
     public List<PriceHistorySnapshot>? PriceHistory { get; set; }
     public List<Order>? SellBook { get; set; }
     public List<Order>? BuyBook { get; set; }

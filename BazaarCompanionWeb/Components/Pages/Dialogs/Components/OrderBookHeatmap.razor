@@ -1,0 +1,109 @@
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Services
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+
+<div class="flex flex-col gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-md">
+    <div class="flex items-center justify-between">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+            <i class="ph ph-grid-nine mr-1"></i> Order Book Heatmap
+        </h4>
+        <select @bind="_hours" @bind:after="LoadHeatmapAsync"
+                class="text-[10px] bg-slate-800 border border-slate-700 rounded px-2 py-1 text-slate-300">
+            <option value="6">6h</option>
+            <option value="12">12h</option>
+            <option value="24">24h</option>
+        </select>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="h-64 flex items-center justify-center">
+            <div class="h-1 w-24 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-blue-500"></div>
+            </div>
+        </div>
+    }
+    else if (_heatmapData.Count > 0)
+    {
+        <div class="relative w-full h-64 overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+            <canvas id="heatmap-canvas-@_chartId" class="absolute inset-0 w-full h-full"></canvas>
+        </div>
+
+        <!-- Legend -->
+        <div class="flex items-center justify-center gap-2 text-[10px] text-slate-500">
+            <span>Low Volume</span>
+            <div class="flex h-2 w-24 rounded overflow-hidden">
+                <div class="flex-1 bg-blue-900"></div>
+                <div class="flex-1 bg-blue-600"></div>
+                <div class="flex-1 bg-yellow-500"></div>
+                <div class="flex-1 bg-orange-500"></div>
+                <div class="flex-1 bg-red-500"></div>
+            </div>
+            <span>High Volume</span>
+        </div>
+
+        <div class="text-center text-[10px] text-slate-600">
+            @_heatmapData.Count data points over @_hours hours
+        </div>
+    }
+    else
+    {
+        <div class="h-64 flex flex-col items-center justify-center text-slate-500 text-xs">
+            <i class="ph ph-database text-2xl mb-2"></i>
+            <p>No historical data available</p>
+            <p class="text-[10px] text-slate-600 mt-1">Heatmap data is collected over time</p>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public required string ProductKey { get; set; }
+
+    [Inject] private OrderBookAnalysisService AnalysisService { get; set; } = null!;
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+
+    private List<HeatmapDataPoint> _heatmapData = [];
+    private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
+    private int _hours = 24;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        await LoadHeatmapAsync();
+    }
+
+    private async Task LoadHeatmapAsync()
+    {
+        _loading = true;
+        StateHasChanged();
+
+        _heatmapData = await AnalysisService.GetHeatmapDataAsync(ProductKey, _hours);
+        _loading = false;
+        StateHasChanged();
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (!_loading && _heatmapData.Count > 0)
+        {
+            await RenderHeatmapAsync();
+        }
+    }
+
+    private async Task RenderHeatmapAsync()
+    {
+        var data = _heatmapData.Select(d => new {
+            time = d.Time.ToString("O"),
+            price = d.Price,
+            volume = d.Volume
+        }).ToArray();
+
+        await JSRuntime.InvokeVoidAsync("renderHeatmap", $"heatmap-canvas-{_chartId}", data);
+    }
+
+    public ValueTask DisposeAsync()
+    {
+        return ValueTask.CompletedTask;
+    }
+}

@@ -1,4 +1,4 @@
-﻿namespace BazaarCompanionWeb.Models;
+namespace BazaarCompanionWeb.Models;
 
 public class OrderMeta
 {
@@ -7,4 +7,7 @@ public class OrderMeta
     public double TotalWeekVolume { get; set; }
     public double BuyOrderPower { get; set; }
     public double FlipOpportunityScore { get; set; }
+    public bool IsManipulated { get; set; }
+    public double ManipulationIntensity { get; set; }
+    public double PriceDeviationPercent { get; set; }
 }

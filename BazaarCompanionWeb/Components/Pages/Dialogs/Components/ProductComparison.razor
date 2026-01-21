@@ -1,0 +1,196 @@
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Entities
+@using BazaarCompanionWeb.Interfaces.Database
+@using Microsoft.AspNetCore.Components
+@using Microsoft.JSInterop
+
+<div class="flex flex-col gap-2 rounded-xl border border-slate-700/50 bg-slate-900/40 p-3 shadow-inner backdrop-blur-md">
+    <div class="flex items-center justify-between">
+        <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+            <i class="ph ph-git-compare text-blue-400"></i>
+            Compare Products
+        </h4>
+        <button @onclick="ClearComparison" 
+                class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors">
+            Clear
+        </button>
+    </div>
+
+    <!-- Product Selection -->
+    <div class="flex flex-wrap gap-2">
+        @for (int i = 0; i < _selectedProducts.Count; i++)
+        {
+            var index = i;
+            <div class="flex items-center gap-1.5 px-2 py-1 rounded-lg border border-slate-700/50 bg-slate-800/40">
+                <input type="text" 
+                       value="@_selectedProducts[index]"
+                       @oninput="@(async (ChangeEventArgs e) => await OnProductInput(index, e.Value?.ToString()))"
+                       placeholder="Product ID..."
+                       class="w-32 text-xs bg-transparent text-slate-300 placeholder-slate-600 border-none outline-none" />
+                <button @onclick="@(async () => await RemoveProduct(index))" 
+                        class="text-slate-500 hover:text-red-400 transition-colors">
+                    <i class="ph ph-x text-xs"></i>
+                </button>
+            </div>
+        }
+        
+        @if (_selectedProducts.Count < 4)
+        {
+            <button @onclick="AddProductSlot" 
+                    class="px-2 py-1 rounded-lg border border-dashed border-slate-700/50 text-slate-500 hover:border-slate-600 hover:text-slate-300 transition-colors text-xs">
+                <i class="ph ph-plus mr-1"></i> Add Product
+            </button>
+        }
+    </div>
+
+    @if (_selectedProducts.Any(p => !string.IsNullOrWhiteSpace(p)))
+    {
+        <div class="relative w-full h-64 overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+            <div id="comparison-chart-@_chartId" class="absolute inset-0 w-full h-full"></div>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? CurrentProductKey { get; set; }
+    [Parameter] public EventCallback<List<string>> ComparisonChanged { get; set; }
+
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+    [Inject] private IOhlcRepository OhlcRepository { get; set; } = null!;
+
+    private IJSObjectReference? _chartModule;
+    private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
+    private List<string> _selectedProducts = new();
+    private CandleInterval _interval = CandleInterval.FifteenMinute;
+
+    protected override async Task OnInitializedAsync()
+    {
+        if (!string.IsNullOrWhiteSpace(CurrentProductKey))
+        {
+            _selectedProducts.Add(CurrentProductKey);
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/tradingview-chart.js");
+        }
+
+        if (_selectedProducts.Any(p => !string.IsNullOrWhiteSpace(p)))
+        {
+            await UpdateComparisonChartAsync();
+        }
+    }
+
+    private async Task OnProductInput(int index, string? value)
+    {
+        if (index < _selectedProducts.Count)
+        {
+            _selectedProducts[index] = value ?? string.Empty;
+            await ComparisonChanged.InvokeAsync(_selectedProducts);
+            await UpdateComparisonChartAsync();
+        }
+    }
+
+    private void AddProductSlot()
+    {
+        if (_selectedProducts.Count < 4)
+        {
+            _selectedProducts.Add(string.Empty);
+            StateHasChanged();
+        }
+    }
+
+    private async Task RemoveProduct(int index)
+    {
+        if (index < _selectedProducts.Count)
+        {
+            _selectedProducts.RemoveAt(index);
+            await ComparisonChanged.InvokeAsync(_selectedProducts);
+            await UpdateComparisonChartAsync();
+        }
+    }
+
+    private async Task ClearComparison()
+    {
+        _selectedProducts.Clear();
+        if (!string.IsNullOrWhiteSpace(CurrentProductKey))
+        {
+            _selectedProducts.Add(CurrentProductKey);
+        }
+        await ComparisonChanged.InvokeAsync(_selectedProducts);
+        await UpdateComparisonChartAsync();
+    }
+
+    private async Task UpdateComparisonChartAsync()
+    {
+        if (_chartModule == null) return;
+
+        var validProducts = _selectedProducts.Where(p => !string.IsNullOrWhiteSpace(p)).ToList();
+        if (!validProducts.Any()) return;
+
+        try
+        {
+            var allCandles = new Dictionary<string, List<OhlcDataPoint>>();
+            
+            foreach (var productKey in validProducts)
+            {
+                var candles = await OhlcRepository.GetCandlesAsync(productKey, _interval, limit: 100);
+                if (candles.Any())
+                {
+                    allCandles[productKey] = candles;
+                }
+            }
+
+            if (allCandles.Any())
+            {
+                // Normalize prices to percentage change from first value for comparison
+                var normalizedData = new Dictionary<string, object>();
+                
+                foreach (var kvp in allCandles)
+                {
+                    var candles = kvp.Value.OrderBy(c => c.Time).ToList();
+                    if (!candles.Any()) continue;
+
+                    var firstClose = candles.First().Close;
+                    if (firstClose <= 0) continue;
+
+                    var normalized = candles.Select(c => new
+                    {
+                        time = c.Time,
+                        value = ((c.Close - firstClose) / firstClose) * 100 // Percentage change
+                    }).ToArray();
+
+                    normalizedData[kvp.Key] = normalized;
+                }
+
+                await _chartModule.InvokeVoidAsync("createComparisonChart", 
+                    $"comparison-chart-{_chartId}", 
+                    normalizedData,
+                    validProducts.ToArray());
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating comparison chart: {ex.Message}");
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_chartModule is not null)
+        {
+            try
+            {
+                await _chartModule.InvokeVoidAsync("disposeChart", $"comparison-chart-{_chartId}");
+                await _chartModule.DisposeAsync();
+            }
+            catch (JSDisconnectedException)
+            {
+                // Ignore if JS is disconnected
+            }
+        }
+    }
+}

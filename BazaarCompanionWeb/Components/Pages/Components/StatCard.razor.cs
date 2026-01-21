@@ -1,18 +1,18 @@
-﻿using Microsoft.AspNetCore.Components;
-using Radzen;
+using Microsoft.AspNetCore.Components;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
 public partial class StatCard : ComponentBase
 {
-    [Parameter] public Variant Variant { get; set; } = Variant.Filled;
     [Parameter] public required string Title { get; set; }
     [Parameter] public required double Value { get; set; }
     [Parameter] public required double ReferenceValue { get; set; }
     [Parameter] public bool Inverse { get; set; }
 
-    private string _icon = "trending_flat";
-    private string _color = "rz-base";
+    private string _icon = "arrow-right";
+    private string _iconClass = "ph ph-arrow-right";
+    private string _iconColor = "text-slate-400";
+    private string _textColor = "text-slate-400";
     private decimal _percentage;
 
     protected override void OnInitialized()
@@ -31,13 +31,18 @@ public partial class StatCard : ComponentBase
     {
         if (Math.Abs(ReferenceValue / Value - 1) > 0.05)
         {
-            _color = (Inverse ? Value < ReferenceValue : Value > ReferenceValue) ? "rz-color-success-light" : "rz-color-danger-light";
-            _icon = Value > ReferenceValue ? "trending_up" : "trending_down";
+            var isPositive = Inverse ? Value < ReferenceValue : Value > ReferenceValue;
+            _iconColor = isPositive ? "text-green-400" : "text-red-400";
+            _textColor = isPositive ? "text-green-400" : "text-red-400";
+            _icon = Value > ReferenceValue ? "arrow-up" : "arrow-down";
+            _iconClass = $"ph ph-{_icon}";
         }
         else
         {
-            _icon = "trending_flat";
-            _color = "rz-base";
+            _icon = "arrow-right";
+            _iconClass = "ph ph-arrow-right";
+            _iconColor = "text-slate-400";
+            _textColor = "text-slate-400";
         }
 
         _percentage = Math.Round((decimal)Value / (decimal)ReferenceValue - 1, 4);

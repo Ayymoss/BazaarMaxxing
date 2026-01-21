@@ -1,0 +1,25 @@
+@page "/not-found"
+@layout MainLayout
+
+<PageTitle>Page Not Found</PageTitle>
+
+<div class="flex min-h-[60vh] flex-col items-center justify-center text-center">
+    <div class="relative mb-6">
+        <div class="flex h-24 w-24 items-center justify-center rounded-3xl bg-slate-800/50 shadow-inner ring-1 ring-white/10 backdrop-blur-md">
+            <i class="ph ph-mask-sad text-5xl text-slate-500"></i>
+        </div>
+        <div class="absolute -right-2 -top-2 flex h-8 w-8 items-center justify-center rounded-full bg-red-500/20 text-red-400 ring-1 ring-red-500/50 backdrop-blur-md">
+            <span class="text-xs font-bold">404</span>
+        </div>
+    </div>
+    
+    <h1 class="mb-2 text-2xl font-bold tracking-tight text-white">Page Not Found</h1>
+    <p class="mb-8 max-w-md text-slate-400">
+        Sorry, we couldn't find the page you're looking for. It might have been moved or deleted.
+    </p>
+    
+    <a href="/" class="group flex items-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 font-semibold text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-500 hover:scale-105 active:scale-95">
+        <i class="ph ph-house"></i>
+        <span>Return Home</span>
+    </a>
+</div>

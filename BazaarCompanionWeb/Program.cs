@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using BazaarCompanionWeb.Components;
 using BazaarCompanionWeb.Context;
@@ -12,7 +13,6 @@ using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Radzen;
 using Refit;
 using Serilog;
 using Serilog.Events;
@@ -26,23 +26,39 @@ public class Program
     {
         var builder = WebApplication.CreateBuilder(args);
 
-#if DEBUG
-        builder.WebHost.ConfigureKestrel(options => { options.ListenLocalhost(8123); });
-#else
-        builder.WebHost.UseKestrel(options =>
+        // Configure Kestrel based on environment
+        if (builder.Environment.IsDevelopment())
         {
-            options.ListenAnyIP(6969);
-        });
-#endif
+            builder.WebHost.ConfigureKestrel(options => { options.ListenLocalhost(8123); });
+        }
+        else
+        {
+            builder.WebHost.UseKestrel(options =>
+            {
+                options.ListenAnyIP(6969);
+            });
+        }
 
         builder.Services.AddDbContextFactory<DataContext>(options =>
         {
-#if DEBUG
-            options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
-#else
-            options.UseSqlite(builder.Configuration.GetConnectionString("DefaultConnection"),
-            //options.UseSqlite($"Data Source={Path.Join(AppContext.BaseDirectory, "_Database", "Database.db")}",
-#endif
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                // Fallback to default path in data directory
+                var dataDirectory = GetDataDirectory(builder.Environment);
+                var dbPath = Path.Join(dataDirectory, "Database.db");
+                connectionString = $"Data Source={dbPath}";
+            }
+            else
+            {
+                // Normalize the connection string to use absolute paths
+                connectionString = NormalizeConnectionString(connectionString, builder.Environment);
+            }
+            
+            // Ensure the database directory exists
+            EnsureDatabaseDirectoryFromConnectionString(connectionString);
+            
+            options.UseSqlite(connectionString,
                 sqlOpt => sqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         });
 
@@ -50,21 +66,42 @@ public class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
+        var dataDirectory = GetDataDirectory(builder.Environment);
+        var dataProtectionKeysPath = Path.Join(dataDirectory, "DataProtection-Keys");
+        if (!Directory.Exists(dataProtectionKeysPath))
+            Directory.CreateDirectory(dataProtectionKeysPath);
+
         builder.Services.AddDataProtection()
             .SetApplicationName("BazaarWeb")
-            .PersistKeysToFileSystem(new DirectoryInfo("/app/data/"));
+            .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
         RegisterCustomServices(builder);
         RegisterPackageServices(builder);
-        RegisterLogging();
+        RegisterLogging(builder.Environment, dataDirectory);
 
         var app = builder.Build();
+
+        // Ensure database directory exists before attempting migration
+        EnsureDatabaseDirectoryExists(app.Configuration, app.Environment);
 
         using (var scope = app.Services.CreateScope())
         {
             var services = scope.ServiceProvider;
-            var dbContext = services.GetRequiredService<DataContext>();
-            dbContext.Database.Migrate();
+            try
+            {
+                var dbContext = services.GetRequiredService<DataContext>();
+                dbContext.Database.Migrate();
+            }
+            catch (Exception ex)
+            {
+                Log.Error(ex, "Failed to migrate database. Application will continue but database operations may fail.");
+                // Don't throw - allow application to start even if migration fails
+                // This is useful for debugging connection string issues
+                if (app.Environment.IsDevelopment())
+                {
+                    throw; // Re-throw in development for easier debugging
+                }
+            }
         }
 
         // Configure the HTTP request pipeline.
@@ -77,6 +114,7 @@ public class Program
 
         app.Services.GetRequiredService<ScheduledTaskRunner>().StartTimer();
 
+        app.UseStatusCodePagesWithReExecute("/not-found", createScopeForStatusCodePages: true);
         //app.UseHttpsRedirection();
 
         app.UseAntiforgery();
@@ -89,28 +127,145 @@ public class Program
         Log.CloseAndFlush();
     }
 
-    private static void RegisterLogging()
+    private static string GetDataDirectory(IWebHostEnvironment environment)
     {
-#if DEBUG
-        var logBaseDirectory = Path.Join(AppContext.BaseDirectory, "_Log");
+        // Check for environment variable first
+        var dataDir = Environment.GetEnvironmentVariable("DATA_DIR");
+        if (!string.IsNullOrEmpty(dataDir))
+            return dataDir;
+
+        // For development (typically Windows local debugging): use _Data subdirectory in base directory
+        if (environment.IsDevelopment())
+        {
+            return Path.Join(AppContext.BaseDirectory, "_Data");
+        }
+
+        // For production (typically Linux Docker): use /app/data
+        // Also check if we're running on Windows in production (unlikely but possible)
+        if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
+        {
+            return Path.Join(AppContext.BaseDirectory, "_Data");
+        }
+
+        return "/app/data";
+    }
+
+    private static string NormalizeConnectionString(string connectionString, IWebHostEnvironment environment)
+    {
+        // Parse the connection string to extract the database file path
+        // Format: "Data Source=path/to/Database.db" or "Data Source=path/to/Database.db;Mode=ReadWrite"
+        var dataSourceKey = "Data Source=";
+        var dataSourceIndex = connectionString.IndexOf(dataSourceKey, StringComparison.OrdinalIgnoreCase);
+        if (dataSourceIndex < 0)
+            return connectionString; // Not a SQLite connection string, return as-is
+
+        var startIndex = dataSourceIndex + dataSourceKey.Length;
+        var endIndex = connectionString.IndexOf(';', startIndex);
+        var dbPath = endIndex >= 0 
+            ? connectionString.Substring(startIndex, endIndex - startIndex).Trim()
+            : connectionString.Substring(startIndex).Trim();
+        
+        // Remove quotes if present
+        if ((dbPath.StartsWith('"') && dbPath.EndsWith('"')) || 
+            (dbPath.StartsWith('\'') && dbPath.EndsWith('\'')))
+        {
+            dbPath = dbPath.Substring(1, dbPath.Length - 2);
+        }
+        
+        // Convert relative paths to absolute paths
+        if (dbPath.StartsWith("./") || dbPath.StartsWith(".\\"))
+        {
+            dbPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, dbPath.Substring(2)));
+        }
+        else if (!Path.IsPathRooted(dbPath))
+        {
+            // Relative path without ./ prefix
+            dbPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, dbPath));
+        }
+        else
+        {
+            // Already absolute, but normalize it
+            dbPath = Path.GetFullPath(dbPath);
+        }
+
+        // Reconstruct the connection string with the normalized path
+        var prefix = connectionString.Substring(0, startIndex);
+        var suffix = endIndex >= 0 ? connectionString.Substring(endIndex) : string.Empty;
+        return $"{prefix}{dbPath}{suffix}";
+    }
+
+    private static void EnsureDatabaseDirectoryFromConnectionString(string connectionString)
+    {
+        try
+        {
+            // Parse the connection string to extract the database file path
+            var dataSourceKey = "Data Source=";
+            var dataSourceIndex = connectionString.IndexOf(dataSourceKey, StringComparison.OrdinalIgnoreCase);
+            if (dataSourceIndex < 0)
+                return;
+
+            var startIndex = dataSourceIndex + dataSourceKey.Length;
+            var endIndex = connectionString.IndexOf(';', startIndex);
+            var dbPath = endIndex >= 0 
+                ? connectionString.Substring(startIndex, endIndex - startIndex).Trim()
+                : connectionString.Substring(startIndex).Trim();
+            
+            // Remove quotes if present
+            if ((dbPath.StartsWith('"') && dbPath.EndsWith('"')) || 
+                (dbPath.StartsWith('\'') && dbPath.EndsWith('\'')))
+            {
+                dbPath = dbPath.Substring(1, dbPath.Length - 2);
+            }
+
+            // Normalize to absolute path
+            dbPath = Path.GetFullPath(dbPath);
+
+            var dbDirectory = Path.GetDirectoryName(dbPath);
+            if (!string.IsNullOrEmpty(dbDirectory) && !Directory.Exists(dbDirectory))
+            {
+                Directory.CreateDirectory(dbDirectory);
+                Log.Information("Created database directory: {Directory}", dbDirectory);
+            }
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to ensure database directory exists. Database operations may fail.");
+        }
+    }
+
+    private static void EnsureDatabaseDirectoryExists(IConfiguration configuration, IWebHostEnvironment environment)
+    {
+        try
+        {
+            var connectionString = configuration.GetConnectionString("DefaultConnection");
+            if (string.IsNullOrEmpty(connectionString))
+            {
+                // Fallback to default path in data directory
+                var dataDirectory = GetDataDirectory(environment);
+                var dbPath = Path.Join(dataDirectory, "Database.db");
+                connectionString = $"Data Source={dbPath}";
+            }
+            else
+            {
+                // Normalize the connection string
+                connectionString = NormalizeConnectionString(connectionString, environment);
+            }
+
+            EnsureDatabaseDirectoryFromConnectionString(connectionString);
+        }
+        catch (Exception ex)
+        {
+            Log.Warning(ex, "Failed to ensure database directory exists. Database operations may fail.");
+        }
+    }
+
+    private static void RegisterLogging(IWebHostEnvironment environment, string dataDirectory)
+    {
+        var logBaseDirectory = Path.Join(dataDirectory, "_Log");
         if (!Directory.Exists(logBaseDirectory))
             Directory.CreateDirectory(logBaseDirectory);
-#else
-        var logBaseDirectory = Path.Join("data", "_Log");
-        if (!Directory.Exists(logBaseDirectory))
-            Directory.CreateDirectory(logBaseDirectory);
-#endif
 
-
-        Log.Logger = new LoggerConfiguration()
-#if DEBUG
-            .MinimumLevel.Information()
-            .MinimumLevel.Override("BazaarCompanionWeb", LogEventLevel.Debug)
-            .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
-#else
-            .MinimumLevel.Warning()
-            .MinimumLevel.Override("BazaarCompanionWeb", LogEventLevel.Information)
-#endif
+        var loggerConfig = new LoggerConfiguration()
             .Enrich.FromLogContext()
             .Enrich.With<ShortSourceContextEnricher>()
             .WriteTo.Console()
@@ -118,8 +273,24 @@ public class Program
                 Path.Join(logBaseDirectory, "bc-.log"),
                 rollingInterval: RollingInterval.Day,
                 retainedFileCountLimit: 10,
-                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{ShortSourceContext}] {Message:lj}{NewLine}{Exception}")
-            .CreateLogger();
+                outputTemplate: "[{Timestamp:yyyy-MM-dd HH:mm:ss.fff} {Level:u3}] [{ShortSourceContext}] {Message:lj}{NewLine}{Exception}");
+
+        // Configure log levels based on environment
+        if (environment.IsDevelopment())
+        {
+            loggerConfig
+                .MinimumLevel.Information()
+                .MinimumLevel.Override("BazaarCompanionWeb", LogEventLevel.Debug)
+                .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning);
+        }
+        else
+        {
+            loggerConfig
+                .MinimumLevel.Warning()
+                .MinimumLevel.Override("BazaarCompanionWeb", LogEventLevel.Information);
+        }
+
+        Log.Logger = loggerConfig.CreateLogger();
     }
 
     private static readonly JsonSerializerOptions JsonOptions = new() { WriteIndented = true };
@@ -154,7 +325,6 @@ public class Program
 
         builder.Services.AddHttpClient("BMClient", options => options.DefaultRequestHeaders.UserAgent
             .ParseAdd("BazaarMaxxing/1.0.0"));
-        builder.Services.AddRadzenComponents();
     }
 
     private static void RegisterCustomServices(IHostApplicationBuilder builder)
@@ -164,8 +334,15 @@ public class Program
 
         builder.Services.AddScoped<HyPixelService>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();
+        builder.Services.AddScoped<IOhlcRepository, OhlcRepository>();
+        builder.Services.AddScoped<IOpportunityScoringService, OpportunityScoringService>();
         builder.Services.AddScoped<IResourceQueryHelper<ProductPagination, ProductDataInfo>, ProductsPaginationQueryHelper>();
-        
-        builder.Services.AddAutoMapper(typeof(ProductProfile));
+        builder.Services.AddSingleton<MarketAnalyticsService>();
+        builder.Services.AddSingleton<MarketInsightsService>();
+        builder.Services.AddScoped<TechnicalAnalysisService>();
+        builder.Services.AddScoped<OrderBookAnalysisService>();
+        builder.Services.AddScoped<BrowserStorage>();
+
+        builder.Services.AddHostedService<OhlcAggregationService>();
     }
 }

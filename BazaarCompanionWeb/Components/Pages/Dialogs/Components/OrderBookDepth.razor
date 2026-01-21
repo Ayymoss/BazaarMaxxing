@@ -1,0 +1,129 @@
+@using BazaarCompanionWeb.Dtos
+@using Microsoft.JSInterop
+@implements IAsyncDisposable
+
+<div class="flex flex-col gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-md">
+    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
+        <i class="ph ph-chart-bar mr-1"></i> Market Depth
+    </h4>
+
+    @if (DepthMetrics is not null && DepthChart.Count > 0)
+    {
+        <!-- Depth Metrics Grid -->
+        <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs">
+            <div class="p-2 rounded-lg bg-slate-800/50">
+                <span class="text-slate-500 block text-[10px]">Bid Depth (5%)</span>
+                <span class="text-green-400 font-mono">@DepthMetrics.BidDepth5Percent.ToString("N0")</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-800/50">
+                <span class="text-slate-500 block text-[10px]">Ask Depth (5%)</span>
+                <span class="text-red-400 font-mono">@DepthMetrics.AskDepth5Percent.ToString("N0")</span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-800/50">
+                <span class="text-slate-500 block text-[10px]">Depth Ratio</span>
+                <span class="@(DepthMetrics.DepthImbalanceRatio > 1 ? "text-green-400" : "text-red-400") font-mono">
+                    @DepthMetrics.DepthImbalanceRatio.ToString("F2")
+                </span>
+            </div>
+            <div class="p-2 rounded-lg bg-slate-800/50">
+                <span class="text-slate-500 block text-[10px]">Liquidity Score</span>
+                <span class="font-mono" style="color: @GetLiquidityColor()">
+                    @DepthMetrics.LiquidityScore.ToString("F0")
+                </span>
+            </div>
+        </div>
+
+        <!-- Spread Info -->
+        <div class="flex items-center justify-center gap-4 text-xs text-slate-500">
+            <span>Spread: <span class="text-slate-300 font-mono">@DepthMetrics.Spread.ToString("N1")</span></span>
+            <span>(<span class="text-slate-300 font-mono">@DepthMetrics.SpreadPercent.ToString("F2")%</span>)</span>
+        </div>
+
+        <!-- Depth Chart -->
+        <div class="relative w-full h-48 overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+            <div id="depth-chart-@_chartId" class="absolute inset-0 w-full h-full"></div>
+        </div>
+
+        <!-- Walls Section -->
+        @if (DepthMetrics.Walls.Count > 0)
+        {
+            <div class="flex flex-col gap-1">
+                <span class="text-[10px] text-slate-500 uppercase tracking-wider">Detected Walls</span>
+                <div class="flex flex-wrap gap-1">
+                    @foreach (var wall in DepthMetrics.Walls.Take(5))
+                    {
+                        var color = wall.IsBuyWall ? "bg-green-500/20 text-green-400 border-green-900/30"
+                                                   : "bg-red-500/20 text-red-400 border-red-900/30";
+                        <span class="px-2 py-1 rounded border @color text-[10px] font-mono">
+                            @wall.Price.ToString("N1") (@wall.Volume.ToString("N0"))
+                        </span>
+                    }
+                </div>
+            </div>
+        }
+    }
+    else
+    {
+        <div class="h-48 flex items-center justify-center text-slate-500 text-xs">
+            No depth data available
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public OrderBookDepthMetrics? DepthMetrics { get; set; }
+    [Parameter] public List<DepthChartPoint> DepthChart { get; set; } = [];
+
+    [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
+
+    private IJSObjectReference? _chartModule;
+    private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
+    private bool _chartRendered;
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/tradingview-chart.js");
+        }
+
+        if (_chartModule is not null && DepthChart.Count > 0 && !_chartRendered)
+        {
+            await RenderDepthChartAsync();
+            _chartRendered = true;
+        }
+    }
+
+    private async Task RenderDepthChartAsync()
+    {
+        if (_chartModule is null) return;
+
+        var bidData = DepthChart.Where(p => p.IsBid)
+            .OrderByDescending(p => p.Price)
+            .Select(p => new { price = p.Price, volume = p.CumulativeVolume })
+            .ToArray();
+
+        var askData = DepthChart.Where(p => !p.IsBid)
+            .OrderBy(p => p.Price)
+            .Select(p => new { price = p.Price, volume = p.CumulativeVolume })
+            .ToArray();
+
+        await _chartModule.InvokeVoidAsync("createDepthChart", $"depth-chart-{_chartId}", bidData, askData);
+    }
+
+    private string GetLiquidityColor() => DepthMetrics?.LiquidityScore switch
+    {
+        >= 70 => "#22c55e",
+        >= 40 => "#f59e0b",
+        _ => "#ef4444"
+    };
+
+    public async ValueTask DisposeAsync()
+    {
+        if (_chartModule is not null)
+        {
+            try { await _chartModule.DisposeAsync(); }
+            catch { /* ignore */ }
+        }
+    }
+}

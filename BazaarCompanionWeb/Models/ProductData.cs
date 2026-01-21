@@ -1,4 +1,4 @@
-﻿using System.Text.Json;
+using System.Text.Json;
 using BazaarCompanionWeb.Entities;
 
 namespace BazaarCompanionWeb.Models;
@@ -26,6 +26,9 @@ public class ProductData
                 Margin = Buy.OrderPrice - Sell.OrderPrice,
                 TotalWeekVolume = Buy.WeekVolume + Sell.WeekVolume,
                 FlipOpportunityScore = OrderMeta.FlipOpportunityScore,
+                IsManipulated = OrderMeta.IsManipulated,
+                ManipulationIntensity = OrderMeta.ManipulationIntensity,
+                PriceDeviationPercent = OrderMeta.PriceDeviationPercent,
                 ProductKey = ItemId
             },
             Snapshots =

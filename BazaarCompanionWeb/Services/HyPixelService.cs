@@ -1,4 +1,5 @@
-﻿using BazaarCompanionWeb.Interfaces.Api;
+using BazaarCompanionWeb.Interfaces;
+using BazaarCompanionWeb.Interfaces.Api;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Models.Api.Bazaar;
@@ -9,91 +10,131 @@ using Item = BazaarCompanionWeb.Models.Item;
 
 namespace BazaarCompanionWeb.Services;
 
-public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRepository, TimeCache timeCache)
+public class HyPixelService(
+    IHyPixelApi hyPixelApi,
+    IProductRepository productRepository,
+    IOhlcRepository ohlcRepository,
+    IOpportunityScoringService opportunityScoringService,
+    MarketInsightsService marketInsightsService,
+    TimeCache timeCache)
 {
     public async Task FetchDataAsync(CancellationToken cancellationToken)
     {
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
         var itemResponse = await hyPixelApi.GetItemsAsync();
-        var products = BuildProductData(bazaarResponse, itemResponse).Select(x => x.Map()).ToList();
-        await productRepository.UpdateOrAddProductsAsync(products, cancellationToken);
+        var products = await BuildProductDataAsync(bazaarResponse, itemResponse, cancellationToken);
+        var mappedProducts = products.Select(x => x.Map()).ToList();
+        await productRepository.UpdateOrAddProductsAsync(mappedProducts, cancellationToken);
+
+        // Record granular price ticks for OHLC chart with volume
+        var ticks = products.Select(p => (
+            p.ItemId, 
+            p.Buy.OrderPrice, 
+            p.Sell.OrderPrice,
+            (long?)p.Buy.CurrentVolume,
+            (long?)p.Sell.CurrentVolume
+        ));
+        await ohlcRepository.RecordTicksAsync(ticks, cancellationToken);
+
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
+
+        // Trigger market insights recalculation after data is updated
+        await marketInsightsService.RefreshInsightsAsync(cancellationToken);
     }
 
-    private static IEnumerable<ProductData> BuildProductData(BazaarResponse bazaarResponse, ItemResponse itemResponse)
+    private async Task<IEnumerable<ProductData>> BuildProductDataAsync(BazaarResponse bazaarResponse, ItemResponse itemResponse, CancellationToken cancellationToken)
     {
         var itemMap = itemResponse.Items.ToDictionary(x => x.Id, x => x);
 
-        var products = bazaarResponse.Products.Values
-            .Where(x => x.BuySummary.Count is not 0)
-            .Select(bazaar =>
+        var productList = new List<ProductData>();
+        
+        foreach (var bazaar in bazaarResponse.Products.Values.Where(x => x.BuySummary.Count is not 0))
+        {
+            var item = itemMap.GetValueOrDefault(bazaar.ProductId);
+
+            var buy = bazaar.BuySummary.FirstOrDefault();
+            var sell = bazaar.SellSummary.FirstOrDefault();
+
+            var buyOrderPrice = buy?.PricePerUnit ?? double.MaxValue;
+            var sellOrderPrice = Math.Round(sell?.PricePerUnit ?? 0.1f, 1, MidpointRounding.ToZero);
+            var buyMovingWeek = bazaar.QuickStatus.BuyMovingWeek;
+            var sellMovingWeek = bazaar.QuickStatus.SellMovingWeek;
+
+            var margin = buyOrderPrice - sellOrderPrice;
+            var totalWeekVolume = buyMovingWeek + sellMovingWeek;
+            var potentialProfitMultiplier = buyOrderPrice / sellOrderPrice;
+            var buyingPower = (float)buyMovingWeek / sellMovingWeek;
+
+            var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
+
+            // Calculate opportunity score using the new service
+            var flipOpportunityScore = await opportunityScoringService.CalculateOpportunityScoreAsync(
+                bazaar.ProductId,
+                buyOrderPrice,
+                sellOrderPrice,
+                buyMovingWeek,
+                sellMovingWeek,
+                cancellationToken);
+
+            // Calculate manipulation score to detect fire sale opportunities
+            var manipulationScore = await opportunityScoringService.CalculateManipulationScoreAsync(
+                bazaar.ProductId,
+                buyOrderPrice,
+                sellOrderPrice,
+                cancellationToken);
+
+            productList.Add(new ProductData
             {
-                var item = itemMap.GetValueOrDefault(bazaar.ProductId);
-
-                var buy = bazaar.BuySummary.FirstOrDefault();
-                var sell = bazaar.SellSummary.FirstOrDefault();
-
-                var buyOrderPrice = buy?.PricePerUnit ?? double.MaxValue;
-                var sellOrderPrice = Math.Round(sell?.PricePerUnit ?? 0.1f, 1, MidpointRounding.ToZero);
-                var buyMovingWeek = bazaar.QuickStatus.BuyMovingWeek;
-                var sellMovingWeek = bazaar.QuickStatus.SellMovingWeek;
-
-                var margin = buyOrderPrice - sellOrderPrice;
-                var totalWeekVolume = buyMovingWeek + sellMovingWeek;
-                var potentialProfitMultiplier = buyOrderPrice / sellOrderPrice;
-                var buyingPower = (float)buyMovingWeek / sellMovingWeek;
-
-                var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
-
-                return new ProductData
+                ItemId = bazaar.ProductId,
+                Item = new Item
                 {
-                    ItemId = bazaar.ProductId,
-                    Item = new Item
+                    FriendlyName = friendlyName,
+                    Tier = item?.Tier ?? ItemTier.Common,
+                    Unstackable = item?.Unstackable ?? false
+                },
+                Buy = new OrderInfo
+                {
+                    Last = bazaar.QuickStatus.BuyPrice,
+                    OrderPrice = buyOrderPrice,
+                    WeekVolume = buyMovingWeek,
+                    CurrentOrders = bazaar.QuickStatus.BuyOrders,
+                    CurrentVolume = bazaar.QuickStatus.BuyVolume,
+                    OrderBook = bazaar.BuySummary.Select(x => new OrderBook
                     {
-                        FriendlyName = friendlyName,
-                        Tier = item?.Tier ?? ItemTier.Common,
-                        Unstackable = item?.Unstackable ?? false
-                    },
-                    Buy = new OrderInfo
+                        UnitPrice = x.PricePerUnit,
+                        Orders = x.Orders,
+                        Amount = x.Amount
+                    })
+                },
+                Sell = new OrderInfo
+                {
+                    Last = bazaar.QuickStatus.SellPrice,
+                    OrderPrice = sellOrderPrice,
+                    WeekVolume = sellMovingWeek,
+                    CurrentOrders = bazaar.QuickStatus.SellOrders,
+                    CurrentVolume = bazaar.QuickStatus.SellVolume,
+                    OrderBook = bazaar.SellSummary.Select(x => new OrderBook
                     {
-                        Last = bazaar.QuickStatus.BuyPrice,
-                        OrderPrice = buyOrderPrice,
-                        WeekVolume = buyMovingWeek,
-                        CurrentOrders = bazaar.QuickStatus.BuyOrders,
-                        CurrentVolume = bazaar.QuickStatus.BuyVolume,
-                        OrderBook = bazaar.BuySummary.Select(x => new OrderBook
-                        {
-                            UnitPrice = x.PricePerUnit,
-                            Orders = x.Orders,
-                            Amount = x.Amount
-                        })
-                    },
-                    Sell = new OrderInfo
-                    {
-                        Last = bazaar.QuickStatus.SellPrice,
-                        OrderPrice = sellOrderPrice,
-                        WeekVolume = sellMovingWeek,
-                        CurrentOrders = bazaar.QuickStatus.SellOrders,
-                        CurrentVolume = bazaar.QuickStatus.SellVolume,
-                        OrderBook = bazaar.SellSummary.Select(x => new OrderBook
-                        {
-                            UnitPrice = x.PricePerUnit,
-                            Orders = x.Orders,
-                            Amount = x.Amount
-                        })
-                    },
-                    OrderMeta = new OrderMeta
-                    {
-                        PotentialProfitMultiplier = potentialProfitMultiplier,
-                        Margin = margin,
-                        TotalWeekVolume = totalWeekVolume,
-                        BuyOrderPower = buyingPower,
-                        FlipOpportunityScore = FlipOpportunityScore(buyOrderPrice, sellOrderPrice, buyMovingWeek, sellMovingWeek,
-                            potentialProfitMultiplier)
-                    }
-                };
+                        UnitPrice = x.PricePerUnit,
+                        Orders = x.Orders,
+                        Amount = x.Amount
+                    })
+                },
+                OrderMeta = new OrderMeta
+                {
+                    PotentialProfitMultiplier = potentialProfitMultiplier,
+                    Margin = margin,
+                    TotalWeekVolume = totalWeekVolume,
+                    BuyOrderPower = buyingPower,
+                    FlipOpportunityScore = flipOpportunityScore,
+                    IsManipulated = manipulationScore.IsManipulated,
+                    ManipulationIntensity = manipulationScore.ManipulationIntensity,
+                    PriceDeviationPercent = manipulationScore.DeviationPercent
+                }
             });
-        return products;
+        }
+        
+        return productList;
     }
 
     private static string ProductIdToName(string productId)
@@ -106,24 +147,4 @@ public class HyPixelService(IHyPixelApi hyPixelApi, IProductRepository productRe
         return $"{baseName} {level.ToRoman()}";
     }
 
-    private static double FlipOpportunityScore(double buyPrice, double sellPrice, long buyMovingWeek, long sellMovingWeek,
-        double multiplier)
-    {
-        if (buyMovingWeek is 0 || sellMovingWeek is 0) return 0;
-
-        var volumeRatio = buyMovingWeek / (float)sellMovingWeek;
-        var ratioWeight = Math.Min(volumeRatio, 1 / volumeRatio);
-        var hourlyVolume = buyMovingWeek / 7 / 24;
-        var profitPerItem = buyPrice - sellPrice;
-
-        const float riskTolerance = 0.1f;
-        var riskAdjustment = 1.0 / (1.0 + sellPrice * (1.0 / (buyMovingWeek + 1)) * riskTolerance);
-
-        var result = hourlyVolume * profitPerItem * ratioWeight * riskAdjustment *
-                     (1 + Math.Log(multiplier));
-
-        // Some arbitrary baseline that's achievable via working in-game
-        const int inGameWorkEffortForCoins = 10_000_000;
-        return result / inGameWorkEffortForCoins;
-    }
 }

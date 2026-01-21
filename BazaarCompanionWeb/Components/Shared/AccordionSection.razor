@@ -1,0 +1,63 @@
+@namespace BazaarCompanionWeb.Components.Shared
+
+<div class="border-b border-slate-700/30">
+    <button @onclick="Toggle"
+            class="w-full flex items-center justify-between p-3 text-left hover:bg-slate-800/30 transition-colors">
+        <div class="flex items-center gap-2">
+            <span class="text-base">@Icon</span>
+            <span class="text-sm font-medium @GetTitleColorClass()">@Title</span>
+            @if (Count > 0)
+            {
+                <span class="px-1.5 py-0.5 text-xs rounded-full bg-slate-700/50 text-slate-300">
+                    @Count
+                </span>
+            }
+        </div>
+        <svg class="w-4 h-4 text-slate-400 transition-transform duration-200 @(_isExpanded ? "rotate-180" : "")"
+             fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7"/>
+        </svg>
+    </button>
+    
+    @if (_isExpanded)
+    {
+        <div class="px-3 pb-3 animate-in slide-in-from-top-1 duration-200">
+            @if (Count == 0)
+            {
+                <div class="text-xs text-slate-500 italic py-2">No data available</div>
+            }
+            else
+            {
+                @ChildContent
+            }
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Icon { get; set; } = "📊";
+    [Parameter] public string IconColor { get; set; } = "blue";
+    [Parameter] public bool DefaultOpen { get; set; }
+    [Parameter] public int Count { get; set; }
+    [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private bool _isExpanded;
+
+    protected override void OnInitialized()
+    {
+        _isExpanded = DefaultOpen;
+    }
+
+    private void Toggle() => _isExpanded = !_isExpanded;
+
+    private string GetTitleColorClass() => IconColor switch
+    {
+        "orange" => "text-amber-400",
+        "red" => "text-rose-400",
+        "green" => "text-emerald-400",
+        "blue" => "text-cyan-400",
+        "purple" => "text-violet-400",
+        _ => "text-slate-300"
+    };
+}

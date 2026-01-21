@@ -1,18 +1,30 @@
-﻿<RadzenCard Variant="Variant.Filled">
-    <RadzenChart Style="width: 100%" class="rz-mb-6">
-        <RadzenChartTooltipOptions Shared="true"/>
-        <RadzenAreaSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Buy" ValueProperty="Buy"
-                          Stroke="var(--rz-success)" Fill="var(--rz-success-lighter)">
-            <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
-        </RadzenAreaSeries>
-        <RadzenAreaSeries Smooth="true" Data="@Product.PriceHistory" CategoryProperty="Date" Title="Sell" ValueProperty="Sell"
-                          Stroke="var(--rz-danger)" Fill="var(--rz-danger-lighter)">
-            <RadzenMarkers Visible="true" MarkerType="MarkerType.Circle"/>
-        </RadzenAreaSeries>
-        <RadzenCategoryAxis Padding="20" LabelAutoRotation="35" Formatter="AxisFormat"/>
-        <RadzenValueAxis Formatter="ValueFormat">
-            <RadzenGridLines Visible="true"/>
-        </RadzenValueAxis>
-        <RadzenLegend Visible="false"/>
-    </RadzenChart>
-</RadzenCard>
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Entities
+@rendermode InteractiveServer
+
+<div class="flex flex-col gap-1.5 rounded-xl border border-slate-700/50 bg-slate-900/40 p-1 shadow-inner backdrop-blur-md h-full">
+    <div class="flex items-center justify-between px-2 pt-1 pb-1 pb-0.5">
+        <h4 class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            <i class="ph ph-chart-line-up text-blue-500/80"></i> Price History
+        </h4>
+        <ChartIntervalSelector SelectedInterval="Interval" OnIntervalChanged="OnIntervalChangedAsync" />
+    </div>
+    
+    <!-- Indicator Controls -->
+    <ChartIndicators Config="@_indicatorConfig" ConfigChanged="@OnIndicatorConfigChanged" />
+    
+    <div class="relative w-full flex-1 min-h-[320px] overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+        <div id="chart-container-@_chartId" class="absolute inset-0 w-full h-full"></div>
+        
+        @if (!_chartInitialized)
+        {
+            <div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-[2px]">
+                <div class="p-4 rounded-full bg-slate-800/50 mb-3">
+                    <i class="ph ph-chart-line text-2xl text-slate-500"></i>
+                </div>
+                <p class="text-xs text-slate-400 font-medium tracking-wide">Insufficient chart data for this period</p>
+                <p class="text-[10px] text-slate-500 mt-1">Collecting price ticks in the background...</p>
+            </div>
+        }
+    </div>
+</div>
