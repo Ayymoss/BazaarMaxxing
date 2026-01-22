@@ -30,10 +30,6 @@ public partial class Product(
     private bool _loading = true;
     private DateTimeOffset? _lastServerRefresh;
 
-    private StatCard? _buyRef;
-    private StatCard? _sellRef;
-    private StatCard? _spreadRef;
-
     internal CandleInterval _selectedInterval = CandleInterval.FifteenMinute;
     private List<RelatedProduct> _relatedProducts = [];
 
@@ -66,7 +62,7 @@ public partial class Product(
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<ProductDataInfo>("ProductUpdated", async (product) =>
+        _hubConnection.On<ProductDataInfo>("ProductUpdated", (product) =>
         {
             if (_product is not null)
             {
@@ -74,13 +70,13 @@ public partial class Product(
                 product.PriceHistory = _product.PriceHistory;
                 
                 // Only update books if the incoming data has them
-                if (product.BuyBook is null) product.BuyBook = _product.BuyBook;
-                if (product.SellBook is null) product.SellBook = _product.SellBook;
+                product.BuyBook ??= _product.BuyBook;
+                product.SellBook ??= _product.SellBook;
             }
             
             _product = product;
             _lastServerRefresh = timeCache.LastUpdated;
-            await UpdateUiElementsAsync();
+            return Task.CompletedTask;
         });
 
         _hubConnection.On<object>("TickUpdated", async (tick) =>
@@ -150,31 +146,8 @@ public partial class Product(
         }
         finally
         {
-            await UpdateUiElementsAsync();
             _loading = false;
         }
-    }
-
-    private async Task UpdateUiElementsAsync()
-    {
-        await InvokeAsync(async () =>
-        {
-            if (_product?.PriceHistory is not null)
-            {
-                var history = GetLastPriceHistoryAverage();
-                
-                // Explicitly update card references to trigger percentage recalculation
-                // Use rounding to match chart display if necessary
-                if (_buyRef is not null)
-                    await _buyRef.UpdateValuesAsync(_product.BuyOrderUnitPrice ?? double.MaxValue, history.Buy);
-                if (_sellRef is not null)
-                    await _sellRef.UpdateValuesAsync(_product.SellOrderUnitPrice ?? 0.1, history.Sell);
-                if (_spreadRef is not null)
-                    await _spreadRef.UpdateValuesAsync(_product.OrderMetaMargin, history.Buy - history.Sell);
-            }
-
-            StateHasChanged();
-        });
     }
 
     private (double Buy, double Sell) GetLastPriceHistoryAverage()

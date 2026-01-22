@@ -5,6 +5,12 @@ import { themeOptions, candleSeriesOptions, volumeSeriesOptions } from './chart-
 // Store sub-charts for oscillators
 const subCharts = {};
 
+// Store visible range persistently (survives chart recreation)
+const savedVisibleRanges = {};
+
+// Lock to prevent rapid calls from overwriting saved range
+const rangeSaveLocks = {};
+
 export async function createChart(containerId, data) {
     const LightweightCharts = await waitForLibrary();
     if (!LightweightCharts) return;
@@ -89,18 +95,46 @@ export async function createChartWithIndicators(containerId, data, indicators, s
     const container = document.getElementById(containerId);
     if (!container) return;
 
+    // FIRST: Save the current visible range BEFORE ANY changes
+    // Use a lock to prevent rapid subsequent calls from overwriting a good saved range
+    const isLocked = rangeSaveLocks[containerId];
+    
+    if (fitContent) {
+        // Explicit fit content - clear everything
+        delete savedVisibleRanges[containerId];
+        delete rangeSaveLocks[containerId];
+    } else if (!isLocked && charts[containerId]) {
+        // Only save if not locked (first call in a rapid sequence)
+        try {
+            const currentRange = charts[containerId].timeScale().getVisibleLogicalRange();
+            if (currentRange) {
+                savedVisibleRanges[containerId] = currentRange;
+                // Lock for 500ms to prevent subsequent rapid calls from overwriting
+                rangeSaveLocks[containerId] = true;
+                setTimeout(() => { delete rangeSaveLocks[containerId]; }, 500);
+            }
+        } catch (e) { /* ignore */ }
+    }
+    // If locked, we keep the previously saved range (don't overwrite)
+
     const chartData = data.map(item => ({
         time: Math.floor(new Date(item.time).getTime() / 1000),
         open: item.open, high: item.high, low: item.low, close: item.close,
     }));
+
+    // Store timestamps for padding sub-chart data
+    mainChartTimestamps[containerId] = chartData.map(c => c.time);
 
     // Determine which oscillators are enabled
     const hasRSI = indicators?.some(i => (i.type || '').toString() === 'RSI');
     const hasMACD = indicators?.some(i => (i.type || '').toString().includes('MACD'));
     const hasSpread = spreadData && spreadData.length > 0;
 
-    // Clean up existing sub-charts if layout changed
+    // Clean up everything
     cleanupSubCharts(containerId);
+    if (charts[containerId]) {
+        disposeChart(containerId);
+    }
 
     // Setup container structure for multi-pane layout
     setupChartContainers(container, containerId, hasRSI, hasMACD, hasSpread);
@@ -108,12 +142,6 @@ export async function createChartWithIndicators(containerId, data, indicators, s
     // Get the main chart container
     const mainChartContainer = document.getElementById(`${containerId}-main`);
     
-    // Dispose existing main chart
-    if (charts[containerId]) {
-        disposeChart(containerId);
-    }
-
-    // Create main price chart - use clientWidth/clientHeight for accurate pixel dimensions
     const mainHeight = mainChartContainer.clientHeight || parseInt(mainChartContainer.style.height) || 300;
     const mainWidth = mainChartContainer.clientWidth || container.clientWidth || 600;
     
@@ -126,7 +154,6 @@ export async function createChartWithIndicators(containerId, data, indicators, s
 
     const candlestickSeries = mainChart.addCandlestickSeries(candleSeriesOptions);
     
-    // Apply margins for volume
     candlestickSeries.priceScale().applyOptions({
         scaleMargins: { top: 0.05, bottom: showVolume ? 0.20 : 0.05 },
     });
@@ -135,13 +162,20 @@ export async function createChartWithIndicators(containerId, data, indicators, s
 
     // Create legend
     const legend = createLegend(mainChartContainer);
+    mainChart.subscribeCrosshairMove((param) => updateLegend(param, containerId, candlestickSeries, chartData, showVolume, data, legend));
+
+    // Subscribe to visible range changes - but ignore during setup
+    let ignoreRangeChanges = true;
+    mainChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
+        if (range && !ignoreRangeChanges) {
+            savedVisibleRanges[containerId] = range;
+        }
+    });
 
     charts[containerId] = mainChart;
     series[containerId] = { candlestick: candlestickSeries };
     indicatorSeries[containerId] = {};
     subCharts[containerId] = [];
-
-    mainChart.subscribeCrosshairMove((param) => updateLegend(param, containerId, candlestickSeries, chartData, showVolume, data, legend));
 
     // Handle volume on main chart
     if (showVolume) {
@@ -163,7 +197,10 @@ export async function createChartWithIndicators(containerId, data, indicators, s
     }
 
     if (hasMACD) {
-        const macdIndicators = indicators.filter(i => (i.type || '').toString().includes('MACD'));
+        const macdIndicators = indicators.filter(i => 
+            (i.type || '').toString().includes('MACD') || 
+            (i.name || '').includes('MACD')
+        );
         if (macdIndicators.length > 0 && macdIndicators.some(i => i.dataPoints?.length > 0)) {
             createMACDChart(LightweightCharts, containerId, macdIndicators, mainChart);
         }
@@ -173,19 +210,31 @@ export async function createChartWithIndicators(containerId, data, indicators, s
         createSpreadChart(LightweightCharts, containerId, spreadData, mainChart);
     }
 
-    // Fit content to show all data
-    mainChart.timeScale().fitContent();
+    // LAST: Restore visible range or fit content
+    const finalRange = savedVisibleRanges[containerId] || null;
     
-    // Sync the visible range to all sub-charts after a brief delay
+    // Use double requestAnimationFrame to ensure chart is fully rendered
     requestAnimationFrame(() => {
-        const visibleRange = mainChart.timeScale().getVisibleLogicalRange();
-        if (visibleRange && subCharts[containerId]) {
-            subCharts[containerId].forEach(({ chart }) => {
-                try {
-                    chart.timeScale().setVisibleLogicalRange(visibleRange);
-                } catch (e) { /* ignore */ }
-            });
-        }
+        requestAnimationFrame(() => {
+            if (finalRange) {
+                mainChart.timeScale().setVisibleLogicalRange(finalRange);
+            } else {
+                mainChart.timeScale().fitContent();
+            }
+            
+            // Sync sub-charts
+            const logicalRange = mainChart.timeScale().getVisibleLogicalRange();
+            if (logicalRange && subCharts[containerId]) {
+                subCharts[containerId].forEach(({ chart }) => {
+                    try {
+                        chart.timeScale().setVisibleLogicalRange(logicalRange);
+                    } catch (e) { /* ignore */ }
+                });
+            }
+            
+            // Enable range saving after everything settles
+            setTimeout(() => { ignoreRangeChanges = false; }, 200);
+        });
     });
 }
 
@@ -263,7 +312,7 @@ function createRSIChart(LightweightCharts, containerId, rsiIndicator, mainChart)
     const container = document.getElementById(`${containerId}-rsi`);
     if (!container) return;
 
-    // Get dimensions from inline style since clientHeight might not be ready
+    const timestamps = mainChartTimestamps[containerId] || [];
     const height = parseInt(container.style.height) || container.clientHeight || 100;
     const width = parseInt(container.style.width) || container.clientWidth || 600;
 
@@ -276,6 +325,7 @@ function createRSIChart(LightweightCharts, containerId, rsiIndicator, mainChart)
             borderVisible: false,
         },
         timeScale: {
+            ...themeOptions.timeScale,
             visible: false, // Hide time scale on sub-charts
         },
         crosshair: {
@@ -298,8 +348,11 @@ function createRSIChart(LightweightCharts, containerId, rsiIndicator, mainChart)
         value: dp.value,
     })).filter(d => d.value != null && !isNaN(d.value));
 
-    if (dataPoints.length > 0) {
-        rsiSeries.setData(dataPoints);
+    // Pad with whitespace to match main chart bar count
+    const paddedData = padIndicatorDataWithWhitespace(dataPoints, timestamps);
+
+    if (paddedData.length > 0) {
+        rsiSeries.setData(paddedData);
     }
 
     // Add reference lines
@@ -312,6 +365,7 @@ function createMACDChart(LightweightCharts, containerId, macdIndicators, mainCha
     const container = document.getElementById(`${containerId}-macd`);
     if (!container) return;
 
+    const timestamps = mainChartTimestamps[containerId] || [];
     const height = parseInt(container.style.height) || container.clientHeight || 100;
     const width = parseInt(container.style.width) || container.clientWidth || 600;
 
@@ -324,6 +378,7 @@ function createMACDChart(LightweightCharts, containerId, macdIndicators, mainCha
             borderVisible: false,
         },
         timeScale: {
+            ...themeOptions.timeScale,
             visible: false,
         },
         crosshair: {
@@ -335,19 +390,30 @@ function createMACDChart(LightweightCharts, containerId, macdIndicators, mainCha
     // Sync time scale with main chart
     syncTimeScales(mainChart, macdChart);
 
+    // Helper to convert and pad indicator data
+    const convertAndPad = (dataPoints, addColor = false) => {
+        const converted = (dataPoints || []).map(dp => {
+            const point = {
+                time: Math.floor(new Date(dp.time).getTime() / 1000),
+                value: dp.value,
+            };
+            if (addColor) {
+                point.color = dp.value >= 0 ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)';
+            }
+            return point;
+        }).filter(d => d.value != null && !isNaN(d.value));
+        
+        // Pad with whitespace to match main chart bar count
+        return padIndicatorDataWithWhitespace(converted, timestamps);
+    };
+
     // Add MACD histogram
     const histIndicator = macdIndicators.find(i => (i.type || '').toString() === 'MACDHistogram');
     if (histIndicator && histIndicator.dataPoints?.length > 0) {
         const histSeries = macdChart.addHistogramSeries({
             priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
         });
-        
-        const histData = (histIndicator.dataPoints || []).map(dp => ({
-            time: Math.floor(new Date(dp.time).getTime() / 1000),
-            value: dp.value,
-            color: dp.value >= 0 ? 'rgba(38, 166, 154, 0.5)' : 'rgba(239, 83, 80, 0.5)',
-        })).filter(d => d.value != null && !isNaN(d.value));
-        
+        const histData = convertAndPad(histIndicator.dataPoints, true);
         if (histData.length > 0) {
             histSeries.setData(histData);
         }
@@ -361,12 +427,7 @@ function createMACDChart(LightweightCharts, containerId, macdIndicators, mainCha
             lineWidth: 2,
             priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
         });
-        
-        const macdData = (macdLine.dataPoints || []).map(dp => ({
-            time: Math.floor(new Date(dp.time).getTime() / 1000),
-            value: dp.value,
-        })).filter(d => d.value != null && !isNaN(d.value));
-        
+        const macdData = convertAndPad(macdLine.dataPoints);
         if (macdData.length > 0) {
             macdSeries.setData(macdData);
         }
@@ -380,12 +441,7 @@ function createMACDChart(LightweightCharts, containerId, macdIndicators, mainCha
             lineWidth: 1,
             priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
         });
-        
-        const signalData = (signalLine.dataPoints || []).map(dp => ({
-            time: Math.floor(new Date(dp.time).getTime() / 1000),
-            value: dp.value,
-        })).filter(d => d.value != null && !isNaN(d.value));
-        
+        const signalData = convertAndPad(signalLine.dataPoints);
         if (signalData.length > 0) {
             signalSeries.setData(signalData);
         }
@@ -426,6 +482,7 @@ function createSpreadChart(LightweightCharts, containerId, spreadData, mainChart
             borderVisible: false,
         },
         timeScale: {
+            ...themeOptions.timeScale,
             visible: false,
         },
         crosshair: {
@@ -457,34 +514,52 @@ function createSpreadChart(LightweightCharts, containerId, spreadData, mainChart
 
 function syncTimeScales(mainChart, subChart) {
     let isSyncing = false;
-    let enableBidirectional = false;
 
-    // Sync from main to sub (always enabled)
+    // Standard approach: sync using logical range
+    // This works because we pad indicator data to match main chart length
     mainChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
         if (range && !isSyncing) {
             isSyncing = true;
-            try {
-                subChart.timeScale().setVisibleLogicalRange(range);
-            } catch (e) { /* ignore */ }
+            subChart.timeScale().setVisibleLogicalRange(range);
             isSyncing = false;
         }
     });
 
-    // Sync from sub to main (only after initial setup, for user interactions)
     subChart.timeScale().subscribeVisibleLogicalRangeChange((range) => {
-        if (range && !isSyncing && enableBidirectional) {
+        if (range && !isSyncing) {
             isSyncing = true;
-            try {
-                mainChart.timeScale().setVisibleLogicalRange(range);
-            } catch (e) { /* ignore */ }
+            mainChart.timeScale().setVisibleLogicalRange(range);
             isSyncing = false;
         }
     });
+}
 
-    // Enable bidirectional sync after a delay to prevent interference during initialization
-    setTimeout(() => {
-        enableBidirectional = true;
-    }, 200);
+// Store main chart timestamps for padding sub-chart data
+let mainChartTimestamps = {};
+
+// Pad indicator data with whitespace to match main chart bar count
+// LightweightCharts uses "whitespace" data (time only, no value) to maintain bar alignment
+function padIndicatorDataWithWhitespace(indicatorData, allTimestamps) {
+    if (!indicatorData || indicatorData.length === 0 || !allTimestamps || allTimestamps.length === 0) {
+        return indicatorData;
+    }
+    
+    // Create a map of indicator values by timestamp
+    const indicatorMap = new Map();
+    indicatorData.forEach(point => {
+        indicatorMap.set(point.time, point);
+    });
+    
+    // Build array with all timestamps - use whitespace for missing values
+    return allTimestamps.map(time => {
+        const existing = indicatorMap.get(time);
+        if (existing) {
+            return existing; // Has actual value
+        }
+        // Whitespace data - just time, no value field
+        // This maintains bar count alignment while not drawing anything
+        return { time };
+    });
 }
 
 function cleanupSubCharts(containerId) {
@@ -584,13 +659,35 @@ function handleVolume(chart, containerId, data) {
     indicatorSeries[containerId]['Volume'] = volumeSeries;
 }
 
+function removeOverlayIndicators(chart, containerId) {
+    // Remove all overlay indicator series from the chart
+    const indicatorNames = Object.keys(indicatorSeries[containerId] || {});
+    indicatorNames.forEach(name => {
+        if (name === 'Volume') return; // Keep volume, it's handled separately
+        try {
+            const series = indicatorSeries[containerId][name];
+            if (series) {
+                chart.removeSeries(series);
+            }
+        } catch (e) { /* ignore */ }
+    });
+    // Clear the indicator series (except volume)
+    const volumeSeries = indicatorSeries[containerId]?.['Volume'];
+    indicatorSeries[containerId] = {};
+    if (volumeSeries) {
+        indicatorSeries[containerId]['Volume'] = volumeSeries;
+    }
+}
+
 function handleOverlayIndicators(chart, containerId, indicators) {
     if (!indicators) return;
 
     // Only handle overlay indicators (not oscillators)
+    // Exclude by type AND name to catch 'MACD Signal' which has type='EMA'
     const overlayIndicators = indicators.filter(i => {
         const type = (i.type || '').toString();
-        return !type.includes('RSI') && !type.includes('MACD');
+        const name = (i.name || '').toString();
+        return !type.includes('RSI') && !type.includes('MACD') && !name.includes('MACD');
     });
 
     overlayIndicators.forEach(indicator => {

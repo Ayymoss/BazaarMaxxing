@@ -13,6 +13,16 @@ public class TechnicalAnalysisService(IOhlcRepository ohlcRepository, ILogger<Te
         CancellationToken ct = default)
     {
         var candles = await ohlcRepository.GetCandlesAsync(productKey, interval, limit: 200, ct);
+        return CalculateIndicatorsFromCandles(candles, config);
+    }
+
+    /// <summary>
+    /// Calculate indicators from provided candle data (including live candles)
+    /// </summary>
+    public List<TechnicalIndicator> CalculateIndicatorsFromCandles(
+        List<OhlcDataPoint> candles,
+        ChartIndicatorConfig config)
+    {
         if (candles.Count < 2)
         {
             return new List<TechnicalIndicator>();
@@ -351,29 +361,42 @@ public class TechnicalAnalysisService(IOhlcRepository ohlcRepository, ILogger<Te
         var emaFast = CalculateEMA(candles, fastPeriod, "MACD Fast", "#3b82f6");
         var emaSlow = CalculateEMA(candles, slowPeriod, "MACD Slow", "#8b5cf6");
 
+        // Use index-based alignment since both EMAs are from the same ordered candle list
+        // Fast EMA[i] corresponds to candle[fastPeriod-1+i]
+        // Slow EMA[i] corresponds to candle[slowPeriod-1+i]
+        // To match slow EMA index I with fast EMA: fastIndex = slowPeriod - fastPeriod + I
+        var fastOffset = slowPeriod - fastPeriod;
+        
         var macdLine = new List<IndicatorDataPoint>();
-        var minLength = Math.Min(emaFast.DataPoints.Count, emaSlow.DataPoints.Count);
-
-        for (int i = 0; i < minLength; i++)
+        for (int i = 0; i < emaSlow.DataPoints.Count; i++)
         {
-            var fast = emaFast.DataPoints[i].Value;
-            var slow = emaSlow.DataPoints[i].Value;
-            var macd = fast - slow;
-            macdLine.Add(new IndicatorDataPoint(emaFast.DataPoints[i].Time, macd));
+            var fastIndex = fastOffset + i;
+            if (fastIndex >= 0 && fastIndex < emaFast.DataPoints.Count)
+            {
+                var slowPoint = emaSlow.DataPoints[i];
+                var fastValue = emaFast.DataPoints[fastIndex].Value;
+                var macd = fastValue - slowPoint.Value;
+                macdLine.Add(new IndicatorDataPoint(slowPoint.Time, macd));
+            }
         }
 
         // Calculate signal line (EMA of MACD)
         var signalLine = CalculateEMAFromValues(macdLine, signalPeriod, "MACD Signal", "#ec4899");
 
-        // Calculate histogram
+        // Calculate histogram using index alignment
+        // Signal line[i] corresponds to macdLine[signalPeriod-1+i]
+        var signalOffset = signalPeriod - 1;
         var histogram = new List<IndicatorDataPoint>();
-        var signalMinLength = Math.Min(macdLine.Count, signalLine.DataPoints.Count);
-        for (int i = 0; i < signalMinLength; i++)
+        for (int i = 0; i < signalLine.DataPoints.Count; i++)
         {
-            var macdValue = macdLine[i].Value;
-            var signalValue = signalLine.DataPoints[i].Value;
-            var hist = macdValue - signalValue;
-            histogram.Add(new IndicatorDataPoint(macdLine[i].Time, hist));
+            var macdIndex = signalOffset + i;
+            if (macdIndex >= 0 && macdIndex < macdLine.Count)
+            {
+                var signalPoint = signalLine.DataPoints[i];
+                var macdValue = macdLine[macdIndex].Value;
+                var hist = macdValue - signalPoint.Value;
+                histogram.Add(new IndicatorDataPoint(signalPoint.Time, hist));
+            }
         }
 
         return new List<TechnicalIndicator>

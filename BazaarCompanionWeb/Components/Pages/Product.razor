@@ -100,96 +100,9 @@
     {
         <!-- Top Row: Key Metrics Cards -->
         <div class="flex flex-col gap-4 w-full max-w-6xl mx-auto">
-
-            <!-- LOGIC BLOCK -->
-            @{
-                var history = GetLastPriceHistoryAverage();
-
-                // Buy Calculations
-                double buyPrice = ProductData.BuyOrderUnitPrice ?? 0;
-                double buyAvg = history.Buy;
-                double buyDiff = buyAvg > 0 ? ((buyPrice - buyAvg) / buyAvg) * 100 : 0;
-                string buySign = buyDiff > 0 ? "+" : "";
-                // For Bid/Buy: Price going UP is green (bullish), Down is red (bearish) - or swap if you prefer "cheaper is better"
-                string buyColor = buyDiff >= 0 ? "text-emerald-400" : "text-rose-400";
-
-                // Sell Calculations
-                double sellPrice = ProductData.SellOrderUnitPrice ?? 0;
-                double sellAvg = history.Sell;
-                double sellDiff = sellAvg > 0 ? ((sellPrice - sellAvg) / sellAvg) * 100 : 0;
-                string sellSign = sellDiff > 0 ? "+" : "";
-                string sellColor = sellDiff >= 0 ? "text-emerald-400" : "text-rose-400";
-
-                var spreadPercent = (ProductData.OrderMetaMargin / ProductData.BuyOrderUnitPrice) * 100;
-            }
-
+            @{ var history = GetLastPriceHistoryAverage(); }
             <!-- SECTION 1: THE TRADING DESK (Primary Stats) -->
-            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
-
-                <!-- 1. BUY CARD (Bid) -->
-                <div
-                    class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-emerald-500/50">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price (Buy)</p>
-                            <div class="text-3xl font-black tracking-tight text-emerald-400">
-                                @((ProductData.BuyOrderUnitPrice ?? 0).ToString("N0"))
-                            </div>
-                        </div>
-                        <!-- Icon/indicator -->
-                        <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
-                            </svg>
-                        </div>
-                    </div>
-                    <!-- Historical Context -->
-                    <div class="mt-4 flex items-center justify-between text-xs font-medium">
-                        <span class="text-emerald-600/80">Avg: @history.Buy.ToString("N0")</span>
-                        <span class="@buyColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
-                    @buySign@buyDiff.ToString("F2")%
-                </span>
-                    </div>
-                </div>
-
-                <!-- 2. SPREAD CARD (The Bridge) -->
-                <div
-                    class="md:col-span-2 flex flex-col justify-center items-center rounded-2xl border border-slate-700 bg-slate-800/60 p-4 shadow-inner text-center">
-                    <p class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Spread</p>
-                    <div class="text-xl font-bold text-white my-1">
-                        @ProductData.OrderMetaMargin.ToString("N0")
-                    </div>
-                    <!-- Margin Badge -->
-                    <span class="inline-flex items-center rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-300">
-                @(spreadPercent?.ToString("F1"))%
-            </span>
-                </div>
-
-                <!-- 3. SELL CARD (Ask) -->
-                <div
-                    class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-rose-500/50">
-                    <div class="flex justify-between items-start">
-                        <div>
-                            <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price (Sell)</p>
-                            <div class="text-3xl font-black tracking-tight text-rose-400">
-                                @((ProductData.SellOrderUnitPrice ?? 0).ToString("N0"))
-                            </div>
-                        </div>
-                        <div class="p-2 rounded-lg bg-rose-500/10 text-rose-400">
-                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/>
-                            </svg>
-                        </div>
-                    </div>
-                    <div class="mt-4 flex items-center justify-between text-xs font-medium">
-                        <span class="text-rose-600/80">Avg: @history.Sell.ToString("N0")</span>
-                        <span class="@sellColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
-                    @sellSign@sellDiff.ToString("F2")%
-                </span>
-                    </div>
-                </div>
-
-            </div>
+            <TradingDesk Product="ProductData" BuyAverage="history.Buy" SellAverage="history.Sell"/>
 
             <!-- SECTION 2: CONTEXT METRICS (Secondary Stats) -->
             <div class="grid grid-cols-3 gap-3">
@@ -206,9 +119,7 @@
                            Value="@ProductData.SellOrderWeekVolume.ToString("N0")"
                            ValueCss="text-slate-400"/>
             </div>
-
         </div>
-
 
         <!-- Full Width Chart -->
         <div class="w-full">

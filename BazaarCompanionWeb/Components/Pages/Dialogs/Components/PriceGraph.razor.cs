@@ -115,13 +115,45 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 return;
             }
 
-            // Load indicators if any are enabled
+            // APPEND current price as the absolute latest tick BEFORE calculating indicators
+            // This ensures indicators align with the live candle
+            if (Product.BuyOrderUnitPrice.HasValue)
+            {
+                var bucketedTime = DateTime.UtcNow.GetPeriodStart(Interval);
+                var lastCandle = ohlcData.LastOrDefault();
+                var price = Product.BuyOrderUnitPrice.Value;
+                
+                if (lastCandle != null && lastCandle.Time == bucketedTime)
+                {
+                    // Replace the last candle with updated values (records are immutable)
+                    ohlcData[^1] = lastCandle with
+                    {
+                        High = Math.Max(lastCandle.High, price),
+                        Low = Math.Min(lastCandle.Low, price),
+                        Close = price
+                    };
+                }
+                else
+                {
+                    // Add a new partial candle using positional constructor
+                    ohlcData.Add(new OhlcDataPoint(
+                        Time: bucketedTime,
+                        Open: price,
+                        High: price,
+                        Low: price,
+                        Close: price,
+                        Volume: 0d,
+                        Spread: 0d
+                    ));
+                }
+            }
+
+            // Load indicators from the complete data (including live candle)
             if (_indicatorConfig.ShowSMA10 || _indicatorConfig.ShowSMA20 || _indicatorConfig.ShowSMA50 ||
                 _indicatorConfig.ShowEMA12 || _indicatorConfig.ShowEMA26 || _indicatorConfig.ShowBollingerBands ||
                 _indicatorConfig.ShowRSI || _indicatorConfig.ShowMACD || _indicatorConfig.ShowVWAP)
             {
-                _indicators = await TechnicalAnalysisService.CalculateIndicatorsAsync(
-                    Product.ItemId, Interval, _indicatorConfig);
+                _indicators = TechnicalAnalysisService.CalculateIndicatorsFromCandles(ohlcData, _indicatorConfig);
             }
             else
             {
@@ -167,7 +199,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 touchCount = sr.TouchCount
             }).ToArray();
 
-            // Include volume data in OHLC data
+            // Include volume data in OHLC data for JS
             var ohlcDataWithVolume = ohlcData.Select(c => new
             {
                 time = c.Time,
@@ -177,41 +209,6 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 close = c.Close,
                 volume = c.Volume
             }).ToList();
-
-            // APPEND current price as the absolute latest tick to avoid desync after refresh
-            if (Product.BuyOrderUnitPrice.HasValue)
-            {
-                var bucketedTime = DateTime.UtcNow.GetPeriodStart(Interval);
-                var lastCandle = ohlcDataWithVolume.LastOrDefault();
-                
-                if (lastCandle != null && lastCandle.time == bucketedTime)
-                {
-                    // Update the last candle
-                    var index = ohlcDataWithVolume.Count - 1;
-                    ohlcDataWithVolume[index] = new
-                    {
-                        time = bucketedTime,
-                        open = lastCandle.open,
-                        high = Math.Max(lastCandle.high, Product.BuyOrderUnitPrice.Value),
-                        low = Math.Min(lastCandle.low, Product.BuyOrderUnitPrice.Value),
-                        close = Product.BuyOrderUnitPrice.Value,
-                        volume = lastCandle.volume
-                    };
-                }
-                else
-                {
-                    // Add a new partial candle
-                    ohlcDataWithVolume.Add(new
-                    {
-                        time = bucketedTime,
-                        open = Product.BuyOrderUnitPrice.Value,
-                        high = Product.BuyOrderUnitPrice.Value,
-                        low = Product.BuyOrderUnitPrice.Value,
-                        close = Product.BuyOrderUnitPrice.Value,
-                        volume = 0d
-                    });
-                }
-            }
 
             // Create or update chart with all data
             await _chartModule.InvokeVoidAsync("createChartWithIndicators", 
