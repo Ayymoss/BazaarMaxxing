@@ -2,8 +2,10 @@ using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Services;
+using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
+using System.Text.Json;
 
 namespace BazaarCompanionWeb.Components.Pages.Dialogs.Components;
 
@@ -52,7 +54,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         try
         {
             _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/tradingview-chart.js");
-            await LoadChartDataAsync();
+            await LoadChartDataAsync(true);
         }
         catch (JSException ex)
         {
@@ -64,6 +66,40 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
     {
         if (_chartModule is null) return;
         await LoadChartDataAsync(fitContent);
+    }
+
+    public async Task UpdateTickAsync(object tick)
+    {
+        if (_chartModule is null || !_chartInitialized) return;
+        
+        try
+        {
+            // Parse the incoming tick (which is typically a JsonElement from SignalR)
+            var json = tick.ToString();
+            if (string.IsNullOrEmpty(json)) return;
+            
+            var liveTick = JsonSerializer.Deserialize<LiveTick>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+            if (liveTick is null) return;
+
+            // ALIGN the tick time to the current interval bucket start
+            var bucketedTime = liveTick.Time.GetPeriodStart(Interval);
+            
+            var processedTick = new
+            {
+                time = bucketedTime,
+                open = liveTick.Open,
+                high = liveTick.High,
+                low = liveTick.Low,
+                close = liveTick.Close,
+                volume = liveTick.Volume
+            };
+
+            await _chartModule.InvokeVoidAsync("updateChartWithTick", $"chart-container-{_chartId}", processedTick);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error updating tick: {ex.Message}");
+        }
     }
 
     private async Task LoadChartDataAsync(bool fitContent = false)
@@ -140,7 +176,42 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 low = c.Low,
                 close = c.Close,
                 volume = c.Volume
-            }).ToArray();
+            }).ToList();
+
+            // APPEND current price as the absolute latest tick to avoid desync after refresh
+            if (Product.BuyOrderUnitPrice.HasValue)
+            {
+                var bucketedTime = DateTime.UtcNow.GetPeriodStart(Interval);
+                var lastCandle = ohlcDataWithVolume.LastOrDefault();
+                
+                if (lastCandle != null && lastCandle.time == bucketedTime)
+                {
+                    // Update the last candle
+                    var index = ohlcDataWithVolume.Count - 1;
+                    ohlcDataWithVolume[index] = new
+                    {
+                        time = bucketedTime,
+                        open = lastCandle.open,
+                        high = Math.Max(lastCandle.high, Product.BuyOrderUnitPrice.Value),
+                        low = Math.Min(lastCandle.low, Product.BuyOrderUnitPrice.Value),
+                        close = Product.BuyOrderUnitPrice.Value,
+                        volume = lastCandle.volume
+                    };
+                }
+                else
+                {
+                    // Add a new partial candle
+                    ohlcDataWithVolume.Add(new
+                    {
+                        time = bucketedTime,
+                        open = Product.BuyOrderUnitPrice.Value,
+                        high = Product.BuyOrderUnitPrice.Value,
+                        low = Product.BuyOrderUnitPrice.Value,
+                        close = Product.BuyOrderUnitPrice.Value,
+                        volume = 0d
+                    });
+                }
+            }
 
             // Create or update chart with all data
             await _chartModule.InvokeVoidAsync("createChartWithIndicators", 
@@ -175,7 +246,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         {
             try
             {
-                await _chartModule.InvokeVoidAsync("disposeChart", $"chart-container-{_chartId}");
+                await _chartModule.InvokeVoidAsync("disposeChartWithIndicators", $"chart-container-{_chartId}");
                 await _chartModule.DisposeAsync();
             }
             catch (JSDisconnectedException)

@@ -6,6 +6,6 @@ public enum CandleInterval
     FifteenMinute = 15,
     OneHour = 60,
     FourHour = 240,
-    Daily = 1440,
-    Weekly = 10080,
+    OneDay = 1440,
+    OneWeek = 10080,
 }

@@ -246,4 +246,30 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             .ToListAsync(cancellationToken);
         return snapshots;
     }
+    public async Task<List<ProductDataInfo>> GetProductsAsync(CancellationToken cancellationToken)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
+        return await context.Products
+            .AsNoTracking()
+            .Select(x => new ProductDataInfo
+            {
+                BuyMarketDataId = x.Buy.Id,
+                SellMarketDataId = x.Sell.Id,
+                ItemId = x.ProductKey,
+                ItemFriendlyName = x.FriendlyName,
+                ItemTier = x.Tier,
+                ItemUnstackable = x.Unstackable,
+                BuyOrderUnitPrice = x.Buy.UnitPrice,
+                SellOrderUnitPrice = x.Sell.UnitPrice,
+            }).ToListAsync(cancellationToken);
+    }
+
+    public async Task<List<EFPriceSnapshot>> GetPriceSnapshotsAsync(CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        return await context.PriceSnapshots
+            .AsNoTracking()
+            .OrderBy(x => x.Taken)
+            .ToListAsync(ct);
+    }
 }

@@ -11,6 +11,7 @@ using BazaarCompanionWeb.Queries;
 using BazaarCompanionWeb.Repositories;
 using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
+using BazaarCompanionWeb.Hubs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
 using Refit;
@@ -65,6 +66,8 @@ public class Program
         // Add services to the container.
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
+
+        builder.Services.AddSignalR();
 
         var dataDirectory = GetDataDirectory(builder.Environment);
         var dataProtectionKeysPath = Path.Join(dataDirectory, "DataProtection-Keys");
@@ -122,6 +125,8 @@ public class Program
         app.MapStaticAssets();
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
+
+        app.MapHub<ProductHub>("/hubs/products");
 
         app.Run();
         Log.CloseAndFlush();
@@ -331,6 +336,7 @@ public class Program
     {
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
+        builder.Services.AddSingleton<LiveCandleTracker>();
 
         builder.Services.AddScoped<HyPixelService>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();
@@ -342,6 +348,7 @@ public class Program
         builder.Services.AddScoped<TechnicalAnalysisService>();
         builder.Services.AddScoped<OrderBookAnalysisService>();
         builder.Services.AddScoped<BrowserStorage>();
+        builder.Services.AddSingleton<ComparisonStateService>();
 
         builder.Services.AddHostedService<OhlcAggregationService>();
     }

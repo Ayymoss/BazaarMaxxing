@@ -1,5 +1,6 @@
 using System.Linq.Expressions;
 using System.Reflection;
+using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Models.Api.Items;
 using BazaarCompanionWeb.Models.Pagination;
@@ -85,5 +86,25 @@ public static class HelperMethods
             < 0.66 => "#FB923C", // Light orange
             _ => "#EF4444"        // Red for high intensity
         };
+    }
+
+    public static DateTime GetPeriodStart(this DateTime timestamp, CandleInterval interval)
+    {
+        if (interval == CandleInterval.OneWeek)
+        {
+            // Start of week (Monday)
+            var diff = (7 + (timestamp.DayOfWeek - DayOfWeek.Monday)) % 7;
+            return timestamp.AddDays(-1 * diff).Date;
+        }
+
+        if (interval == CandleInterval.OneDay)
+        {
+            return timestamp.Date;
+        }
+
+        var intervalMinutes = (int)interval;
+        var totalMinutesSinceEpoch = (long)(timestamp - DateTime.UnixEpoch).TotalMinutes;
+        var periodMinutes = totalMinutesSinceEpoch / intervalMinutes * intervalMinutes;
+        return DateTime.UnixEpoch.AddMinutes(periodMinutes);
     }
 }

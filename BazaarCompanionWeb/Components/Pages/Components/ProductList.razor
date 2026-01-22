@@ -1,6 +1,4 @@
 @using System.Text
-@using BazaarCompanionWeb.Components.Shared
-@using BazaarCompanionWeb.Components.Pages.Dialogs
 @using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Utilities
 @using Humanizer
@@ -192,10 +190,3 @@
         </div>
     </div>
 </div>
-
-@if (_selectedProduct != null)
-{
-    <Modal Show="@_showModal" ShowChanged="@((bool show) => { _showModal = show; if (!show) CloseModal(); })" ShowClose="true" CloseOnBackdropClick="true">
-        <PriceHistoryDialog Product="@_selectedProduct"/>
-    </Modal>
-}

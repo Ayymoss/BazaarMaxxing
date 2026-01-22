@@ -15,7 +15,7 @@ public class OpportunityScoringService(
     private const double MinSpreadStability = 0.1; // Minimum acceptable spread stability
     private const int ManipulationLookbackDays = 7;
     private const int ManipulationMinCandles = 24; // 24 hours minimum
-    private const double ManipulationZScoreThreshold = 2.5;
+    private const double ManipulationZScoreThreshold = 2.0;
 
     public async Task<double> CalculateOpportunityScoreAsync(
         string productKey,

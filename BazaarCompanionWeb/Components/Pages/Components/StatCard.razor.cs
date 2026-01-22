@@ -20,11 +20,17 @@ public partial class StatCard : ComponentBase
         UpdateCalculation();
     }
 
-    public void UpdateValues(double value, double reference)
+    protected override void OnParametersSet()
+    {
+        UpdateCalculation();
+    }
+
+    public async Task UpdateValuesAsync(double value, double reference)
     {
         Value = value;
         ReferenceValue = reference;
         UpdateCalculation();
+        await InvokeAsync(StateHasChanged);
     }
 
     private void UpdateCalculation()

@@ -1,7 +1,5 @@
-using System.Globalization;
+﻿using System.Globalization;
 using System.Text.Json;
-using BazaarCompanionWeb.Components.Pages.Dialogs;
-using BazaarCompanionWeb.Components.Shared;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Interfaces;
@@ -17,12 +15,9 @@ using AppSortDirection = BazaarCompanionWeb.Enums.SortDirection;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
-public partial class ProductList(TimeCache timeCache, BrowserStorage browserStorage) : ComponentBase, IDisposable
+public partial class ProductList(TimeCache timeCache, BrowserStorage browserStorage, NavigationManager navigationManager) : ComponentBase, IDisposable
 {
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
-
-    private ProductDataInfo? _selectedProduct;
-    private bool _showModal;
 
     private CultureInfo _usProvider = CultureInfo.CreateSpecificCulture("en-US");
 
@@ -286,46 +281,17 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
 
     private void RowClickEvent(ProductDataInfo product)
     {
-        _selectedProduct = product;
-        _pageTitle = $"{product.ItemFriendlyName} | Bazaar Maxxing";
-        _showModal = true;
-        StateHasChanged();
+        navigationManager.NavigateTo($"/product/{product.ItemId}");
     }
 
     /// <summary>
-    /// Shows the product detail modal for a given product key.
+    /// Shows the product detail page for a given product key.
     /// Called externally by MarketInsightsPanel.
     /// </summary>
-    public async Task ShowProductDetailAsync(string productKey)
+    public Task ShowProductDetailAsync(string productKey)
     {
-        // Query for the specific product
-        var paginationQuery = new ProductPagination
-        {
-            ToggleFilter = false,
-            Sorts = [],
-            Search = productKey,
-            AdvancedFilters = new AdvancedFilterOptions(),
-            UseFuzzySearch = false,
-            Top = 1,
-            Skip = 0,
-        };
-
-        using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
-        var result = await ProductQuery.QueryResourceAsync(paginationQuery, cts.Token);
-        
-        var product = result.Data.FirstOrDefault(p => p.ItemId == productKey);
-        if (product is not null)
-        {
-            RowClickEvent(product);
-        }
-    }
-
-    private void CloseModal()
-    {
-        _showModal = false;
-        _selectedProduct = null;
-        _pageTitle = "Bazaar Maxxing";
-        StateHasChanged();
+        navigationManager.NavigateTo($"/product/{productKey}");
+        return Task.CompletedTask;
     }
 
     private static string? GetPropertyNameFromExpression<T>(System.Linq.Expressions.Expression<Func<ProductDataInfo, T>> expression)

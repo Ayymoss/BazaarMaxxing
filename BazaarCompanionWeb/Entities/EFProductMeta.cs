@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BazaarCompanionWeb.Entities;
 
-public class EFProductMeta
+public sealed record EFProductMeta
 {
     [Key] public int Id { get; set; }
 
@@ -16,5 +16,5 @@ public class EFProductMeta
     public required double PriceDeviationPercent { get; set; }
 
     [MaxLength(64)] public required string ProductKey { get; set; }
-    [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }
+    [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

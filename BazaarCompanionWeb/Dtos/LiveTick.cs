@@ -1,10 +1,9 @@
 namespace BazaarCompanionWeb.Dtos;
 
-public record OhlcDataPoint(
+public record LiveTick(
     DateTime Time, 
     double Open, 
     double High, 
     double Low, 
     double Close, 
-    double Volume,
-    double Spread);
+    double Volume);

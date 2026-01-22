@@ -1,7 +1,6 @@
-using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
-using Microsoft.EntityFrameworkCore;
+using BazaarCompanionWeb.Utilities;
 
 namespace BazaarCompanionWeb.Services;
 
@@ -24,11 +23,11 @@ public class OhlcAggregationService(
             {
                 using var scope = scopeFactory.CreateScope();
                 var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
-                var dbContext = scope.ServiceProvider.GetRequiredService<DataContext>();
-                
+                var productRepository = scope.ServiceProvider.GetRequiredService<IProductRepository>();
+
                 if (!_historySeeded)
                 {
-                    await SeedHistoryAsync(ohlcRepository, dbContext, stoppingToken);
+                    await SeedHistoryAsync(ohlcRepository, productRepository, stoppingToken);
                     _historySeeded = true;
                 }
 
@@ -44,27 +43,25 @@ public class OhlcAggregationService(
         }
     }
 
-    private async Task SeedHistoryAsync(IOhlcRepository ohlcRepository, DataContext dbContext, CancellationToken ct)
+    private async Task SeedHistoryAsync(IOhlcRepository ohlcRepository, IProductRepository productRepository, CancellationToken ct)
     {
         logger.LogInformation("Seeding historical daily candles from PriceSnapshots...");
-        
-        var snapshots = await dbContext.PriceSnapshots
-            .AsNoTracking()
-            .OrderBy(x => x.Taken)
-            .ToListAsync(ct);
+
+        var snapshots = await productRepository.GetPriceSnapshotsAsync(ct);
 
         if (snapshots.Count == 0) return;
 
         var candles = snapshots.Select(s => new EFOhlcCandle
         {
             ProductKey = s.ProductKey,
-            Interval = CandleInterval.Daily,
+            Interval = CandleInterval.OneDay,
             PeriodStart = s.Taken.ToDateTime(TimeOnly.MinValue),
             Open = s.BuyUnitPrice,
             High = s.BuyUnitPrice,
             Low = s.BuyUnitPrice,
             Close = s.BuyUnitPrice,
-            Volume = null // Historical snapshots don't have volume
+            Volume = 0, // Historical snapshots don't have volume
+            Spread = 0 // Historical snapshots don't have spread data
         }).ToList();
 
         await ohlcRepository.SaveCandlesAsync(candles, ct);
@@ -74,7 +71,7 @@ public class OhlcAggregationService(
     private async Task AggregateAllCandlesAsync(IOhlcRepository ohlcRepository, CancellationToken ct)
     {
         var productKeys = await ohlcRepository.GetAllProductKeysAsync(ct);
-        
+
         foreach (var productKey in productKeys)
         {
             foreach (var interval in Enum.GetValues<CandleInterval>())
@@ -84,7 +81,8 @@ public class OhlcAggregationService(
         }
     }
 
-    private async Task AggregateIntervalAsync(IOhlcRepository ohlcRepository, string productKey, CandleInterval interval, CancellationToken ct)
+    private async Task AggregateIntervalAsync(IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
+        CancellationToken ct)
     {
         var intervalMinutes = (int)interval;
         var now = DateTime.UtcNow;
@@ -98,7 +96,7 @@ public class OhlcAggregationService(
 
         // Group ticks into period buckets
         var grouped = ticks
-            .GroupBy(t => GetPeriodStart(t.Timestamp, interval))
+            .GroupBy(t => t.Timestamp.GetPeriodStart(interval))
             .ToList();
 
         if (grouped.Count is 0) return;
@@ -109,9 +107,16 @@ public class OhlcAggregationService(
             {
                 var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
                 var totalVolume = orderedTicks
-                    .Where(t => t.BuyVolume.HasValue && t.SellVolume.HasValue)
-                    .Sum(t => (t.BuyVolume ?? 0) + (t.SellVolume ?? 0));
-                
+                    .Sum(t => t.BuyVolume + t.SellVolume);
+
+                // Calculate average spread (BuyPrice - SellPrice) for the period
+                var spreads = orderedTicks
+                    .Where(t => t.BuyPrice > 0 && t.SellPrice > 0)
+                    .Select(t => t.BuyPrice - t.SellPrice)
+                    .Where(s => s > 0)
+                    .ToList();
+                var avgSpread = spreads.Count > 0 ? spreads.Average() : (double?)null;
+
                 return new EFOhlcCandle
                 {
                     ProductKey = productKey,
@@ -121,31 +126,12 @@ public class OhlcAggregationService(
                     High = orderedTicks.Max(t => t.BuyPrice),
                     Low = orderedTicks.Min(t => t.BuyPrice),
                     Close = orderedTicks.Last().BuyPrice,
-                    Volume = totalVolume > 0 ? totalVolume : null
+                    Volume = totalVolume,
+                    Spread = avgSpread ?? 0
                 };
             })
         ];
 
         await ohlcRepository.SaveCandlesAsync(candles, ct);
-    }
-
-    private static DateTime GetPeriodStart(DateTime timestamp, CandleInterval interval)
-    {
-        if (interval == CandleInterval.Weekly)
-        {
-            // Start of week (Monday)
-            var diff = (7 + (timestamp.DayOfWeek - DayOfWeek.Monday)) % 7;
-            return timestamp.AddDays(-1 * diff).Date;
-        }
-
-        if (interval == CandleInterval.Daily)
-        {
-            return timestamp.Date;
-        }
-
-        var intervalMinutes = (int)interval;
-        var totalMinutesSinceEpoch = (long)(timestamp - DateTime.UnixEpoch).TotalMinutes;
-        var periodMinutes = totalMinutesSinceEpoch / intervalMinutes * intervalMinutes;
-        return DateTime.UnixEpoch.AddMinutes(periodMinutes);
     }
 }

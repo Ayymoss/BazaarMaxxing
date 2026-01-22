@@ -405,12 +405,11 @@ public class TechnicalAnalysisService(IOhlcRepository ohlcRepository, ILogger<Te
         var cumulativeVolume = 0.0;
 
         // Estimate volume if not available (use typical volume)
-        var estimatedVolume = 1000.0; // Placeholder
 
         foreach (var candle in candles)
         {
             var typicalPrice = (candle.High + candle.Low + candle.Close) / 3.0;
-            var volume = candle.Volume ?? estimatedVolume;
+            var volume = candle.Volume;
 
             cumulativePriceVolume += typicalPrice * volume;
             cumulativeVolume += volume;

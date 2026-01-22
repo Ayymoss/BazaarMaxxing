@@ -11,8 +11,8 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BazaarCompanionWeb.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20260121203218_AddManipulationFields")]
-    partial class AddManipulationFields
+    [Migration("20260122133353_Init")]
+    partial class Init
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
@@ -79,11 +79,55 @@ namespace BazaarCompanionWeb.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
+                    b.Property<double>("Spread")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Volume")
+                        .HasColumnType("REAL");
+
                     b.HasKey("Id");
 
                     b.HasIndex("ProductKey", "Interval", "PeriodStart");
 
                     b.ToTable("EFOhlcCandles", (string)null);
+                });
+
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOrderBookSnapshot", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuyOrderCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BuyVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("PriceLevel")
+                        .HasColumnType("REAL");
+
+                    b.Property<string>("ProductKey")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("SellOrderCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("SellVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTime>("Timestamp")
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("Timestamp");
+
+                    b.HasIndex("ProductKey", "Timestamp");
+
+                    b.ToTable("EFOrderBookSnapshots", (string)null);
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFPriceSnapshot", b =>
@@ -122,6 +166,9 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("BuyPrice")
                         .HasColumnType("REAL");
 
+                    b.Property<long>("BuyVolume")
+                        .HasColumnType("INTEGER");
+
                     b.Property<string>("ProductKey")
                         .IsRequired()
                         .HasMaxLength(64)
@@ -129,6 +176,9 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.Property<double>("SellPrice")
                         .HasColumnType("REAL");
+
+                    b.Property<long>("SellVolume")
+                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("TEXT");

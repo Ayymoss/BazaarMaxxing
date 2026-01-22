@@ -9,7 +9,7 @@ namespace BazaarCompanionWeb.Repositories;
 public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOhlcRepository
 {
     public async Task RecordTicksAsync(
-        IEnumerable<(string ProductKey, double BuyPrice, double SellPrice, long? BuyVolume, long? SellVolume)> ticks,
+        IEnumerable<(string ProductKey, double BuyPrice, double SellPrice, long BuyVolume, long SellVolume)> ticks,
         CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
@@ -46,7 +46,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .OrderByDescending(c => c.PeriodStart)
             .Take(limit)
             .OrderBy(c => c.PeriodStart)
-            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume))
+            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread))
             .ToListAsync(ct);
 
         return candles;
@@ -85,6 +85,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
                 existing.Low = candle.Low;
                 existing.Close = candle.Close;
                 existing.Volume = candle.Volume;
+                existing.Spread = candle.Spread;
             }
             else
             {

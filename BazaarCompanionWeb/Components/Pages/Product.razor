@@ -1,0 +1,374 @@
+@page "/product/{ProductKey}"
+@using System.Globalization
+@using BazaarCompanionWeb.Components.Pages.Dialogs.Components
+@using BazaarCompanionWeb.Components.Pages.Components
+@using BazaarCompanionWeb.Utilities
+@using Humanizer
+@rendermode InteractiveServer
+
+<PageTitle>@(ProductData?.ItemFriendlyName ?? "Loading...") | Bazaar Maxxing</PageTitle>
+
+<div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <!-- Page Header with Navigation -->
+    <div class="flex items-center justify-between border-b border-slate-800/60 pb-4">
+        <div class="flex items-center gap-4">
+            <a href="/" class="group flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                <i class="ph ph-arrow-left text-lg group-hover:-translate-x-1 transition-transform"></i>
+                <span class="text-sm font-medium">Back</span>
+            </a>
+            <div class="h-6 w-px bg-slate-700"></div>
+            @if (ProductData is not null)
+            {
+                <div class="flex flex-col">
+                    <h1 class="text-2xl font-bold tracking-tight text-white leading-none">
+                        @ProductData.ItemFriendlyName
+                    </h1>
+                    <div class="flex items-center gap-2 mt-1 text-xs text-slate-500">
+                        <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                        <span>Updated @(_lastServerRefresh?.Humanize() ?? "...")</span>
+                    </div>
+                </div>
+            }
+        </div>
+
+        <!-- Right side: Stats + Actions -->
+        <div class="flex items-center gap-4">
+            @if (ProductData is not null)
+            {
+                <!-- Mini Stats -->
+                <div class="hidden md:flex items-center gap-4 text-xs">
+                    <div class="flex flex-col items-end">
+                        <span class="text-slate-500 uppercase tracking-wider text-[10px]">Tier</span>
+                        <span class="font-medium"
+                              style="@($"color: {ProductData.ItemTier.ProductTierColor()}")">@ProductData.ItemTier.Humanize()</span>
+                    </div>
+                    <div class="h-6 w-px bg-slate-800"></div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-slate-500 uppercase tracking-wider text-[10px]">Profit</span>
+                        <span class="font-medium"
+                              style="@($"color: {ProductData.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">@($"{ProductData.OrderMetaPotentialProfitMultiplier:N2}x")</span>
+                    </div>
+                    <div class="h-6 w-px bg-slate-800"></div>
+                    <div class="flex flex-col items-end">
+                        <span class="text-slate-500 uppercase tracking-wider text-[10px]">Rating</span>
+                        <span class="font-medium"
+                              style="@($"color: {ProductData.OrderMetaFlipOpportunityScore.RatingColor()}")">@ProductData.OrderMetaFlipOpportunityScore.ToString("N2")</span>
+                    </div>
+                </div>
+
+                <div class="h-6 w-px bg-slate-800 hidden md:block"></div>
+            }
+
+            <!-- Add to Compare Button -->
+            <button @onclick="ToggleCompare"
+                    class="@GetCompareButtonClasses()">
+                @if (_isInComparison)
+                {
+                    <i class="ph ph-check-circle text-lg"></i>
+                    <span class="text-sm font-medium">Added</span>
+                }
+                else
+                {
+                    <i class="ph ph-git-diff text-lg"></i>
+                    <span class="text-sm font-medium">Compare</span>
+                }
+            </button>
+        </div>
+    </div>
+
+    @if (_loading)
+    {
+        <div class="flex flex-col items-center justify-center py-32">
+            <div class="h-1 w-32 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-blue-500"></div>
+            </div>
+            <p class="mt-3 text-sm text-slate-500 animate-pulse">Fetching market data...</p>
+        </div>
+    }
+    else if (ProductData is null)
+    {
+        <div class="flex flex-col items-center justify-center py-32 gap-4">
+            <i class="ph ph-warning-circle text-5xl text-amber-500"></i>
+            <p class="text-lg text-slate-300 font-medium">Product not found</p>
+            <p class="text-sm text-slate-500">The product "@ProductKey" could not be found.</p>
+            <a href="/" class="mt-4 px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors">
+                Return Home
+            </a>
+        </div>
+    }
+    else
+    {
+        <!-- Top Row: Key Metrics Cards -->
+        <div class="flex flex-col gap-4 w-full max-w-6xl mx-auto">
+
+            <!-- LOGIC BLOCK -->
+            @{
+                var history = GetLastPriceHistoryAverage();
+
+                // Buy Calculations
+                double buyPrice = ProductData.BuyOrderUnitPrice ?? 0;
+                double buyAvg = history.Buy;
+                double buyDiff = buyAvg > 0 ? ((buyPrice - buyAvg) / buyAvg) * 100 : 0;
+                string buySign = buyDiff > 0 ? "+" : "";
+                // For Bid/Buy: Price going UP is green (bullish), Down is red (bearish) - or swap if you prefer "cheaper is better"
+                string buyColor = buyDiff >= 0 ? "text-emerald-400" : "text-rose-400";
+
+                // Sell Calculations
+                double sellPrice = ProductData.SellOrderUnitPrice ?? 0;
+                double sellAvg = history.Sell;
+                double sellDiff = sellAvg > 0 ? ((sellPrice - sellAvg) / sellAvg) * 100 : 0;
+                string sellSign = sellDiff > 0 ? "+" : "";
+                string sellColor = sellDiff >= 0 ? "text-emerald-400" : "text-rose-400";
+
+                var spreadPercent = (ProductData.OrderMetaMargin / ProductData.BuyOrderUnitPrice) * 100;
+            }
+
+            <!-- SECTION 1: THE TRADING DESK (Primary Stats) -->
+            <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
+
+                <!-- 1. BUY CARD (Bid) -->
+                <div
+                    class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-emerald-500/50">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price (Buy)</p>
+                            <div class="text-3xl font-black tracking-tight text-emerald-400">
+                                @((ProductData.BuyOrderUnitPrice ?? 0).ToString("N0"))
+                            </div>
+                        </div>
+                        <!-- Icon/indicator -->
+                        <div class="p-2 rounded-lg bg-emerald-500/10 text-emerald-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 7h8m0 0v8m0-8l-8 8-4-4-6 6"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <!-- Historical Context -->
+                    <div class="mt-4 flex items-center justify-between text-xs font-medium">
+                        <span class="text-emerald-600/80">Avg: @history.Buy.ToString("N0")</span>
+                        <span class="@buyColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
+                    @buySign@buyDiff.ToString("F2")%
+                </span>
+                    </div>
+                </div>
+
+                <!-- 2. SPREAD CARD (The Bridge) -->
+                <div
+                    class="md:col-span-2 flex flex-col justify-center items-center rounded-2xl border border-slate-700 bg-slate-800/60 p-4 shadow-inner text-center">
+                    <p class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Spread</p>
+                    <div class="text-xl font-bold text-white my-1">
+                        @ProductData.OrderMetaMargin.ToString("N0")
+                    </div>
+                    <!-- Margin Badge -->
+                    <span class="inline-flex items-center rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+                @(spreadPercent?.ToString("F1"))%
+            </span>
+                </div>
+
+                <!-- 3. SELL CARD (Ask) -->
+                <div
+                    class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-rose-500/50">
+                    <div class="flex justify-between items-start">
+                        <div>
+                            <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price (Sell)</p>
+                            <div class="text-3xl font-black tracking-tight text-rose-400">
+                                @((ProductData.SellOrderUnitPrice ?? 0).ToString("N0"))
+                            </div>
+                        </div>
+                        <div class="p-2 rounded-lg bg-rose-500/10 text-rose-400">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 17h8m0 0V9m0 8l-8-8-4 4-6-6"/>
+                            </svg>
+                        </div>
+                    </div>
+                    <div class="mt-4 flex items-center justify-between text-xs font-medium">
+                        <span class="text-rose-600/80">Avg: @history.Sell.ToString("N0")</span>
+                        <span class="@sellColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
+                    @sellSign@sellDiff.ToString("F2")%
+                </span>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- SECTION 2: CONTEXT METRICS (Secondary Stats) -->
+            <div class="grid grid-cols-3 gap-3">
+
+                <ValueCard Title="7d Vol"
+                           Value="@ProductData.OrderMetaTotalWeekVolume.ToString("N0")"
+                           ValueCss="text-slate-300"/>
+
+                <ValueCard Title="Buy Vol"
+                           Value="@ProductData.BuyOrderWeekVolume.ToString("N0")"
+                           ValueCss="text-slate-400"/>
+
+                <ValueCard Title="Sell Vol"
+                           Value="@ProductData.SellOrderWeekVolume.ToString("N0")"
+                           ValueCss="text-slate-400"/>
+            </div>
+
+        </div>
+
+
+        <!-- Full Width Chart -->
+        <div class="w-full">
+            <PriceGraph Product="ProductData" Interval="@_selectedInterval" IntervalChanged="@OnIntervalChangedAsync"/>
+        </div>
+
+        <!-- Order Books -->
+        if (ProductData.BuyBook is not null && ProductData.SellBook is not null)
+        {
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-2">
+                <!-- Bid Orders -->
+                <div class="flex flex-col gap-2">
+                    <h4 class="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-red-400 px-1">
+                        <span><i class="ph ph-trend-down mr-1"></i> Bid Depth</span>
+                        <span class="text-slate-600">Buyers</span>
+                    </h4>
+                    <div class="overflow-hidden rounded-xl border border-red-900/20 bg-slate-900/40 shadow-inner backdrop-blur-md">
+                        <div class="max-h-[280px] overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700">
+                            <table class="w-full text-xs text-left">
+                                <thead class="sticky top-0 z-10 bg-slate-900 text-slate-500 shadow-sm">
+                                <tr>
+                                    <th class="px-3 py-2.5 font-medium">Price</th>
+                                    <th class="px-3 py-2.5 font-medium text-right">Qty</th>
+                                    <th class="px-3 py-2.5 font-medium text-right">Orders</th>
+                                </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/50">
+                                @foreach (var order in ProductData.BuyBook)
+                                {
+                                    <tr class="group hover:bg-red-500/5 transition-colors">
+                                        <td class="px-3 py-2 font-mono text-slate-300 group-hover:text-red-200">@order.UnitPrice.ToString("N1")</td>
+                                        <td class="px-3 py-2 text-right text-slate-500 group-hover:text-slate-400">@order.Amount.ToString("N0")</td>
+                                        <td class="px-3 py-2 text-right text-slate-600 group-hover:text-slate-500">@order.Orders.ToString("N0")</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Ask Orders -->
+                <div class="flex flex-col gap-2">
+                    <h4 class="flex items-center justify-between text-xs font-semibold uppercase tracking-wider text-green-400 px-1">
+                        <span><i class="ph ph-trend-up mr-1"></i> Ask Depth</span>
+                        <span class="text-slate-600">Sellers</span>
+                    </h4>
+                    <div class="overflow-hidden rounded-xl border border-green-900/20 bg-slate-900/40 shadow-inner backdrop-blur-md">
+                        <div class="max-h-[280px] overflow-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700">
+                            <table class="w-full text-xs text-left">
+                                <thead class="sticky top-0 z-10 bg-slate-900 text-slate-500 shadow-sm">
+                                <tr>
+                                    <th class="px-3 py-2.5 font-medium">Price</th>
+                                    <th class="px-3 py-2.5 font-medium text-right">Qty</th>
+                                    <th class="px-3 py-2.5 font-medium text-right">Orders</th>
+                                </tr>
+                                </thead>
+                                <tbody class="divide-y divide-slate-800/50">
+                                @foreach (var order in ProductData.SellBook)
+                                {
+                                    <tr class="group hover:bg-green-500/5 transition-colors">
+                                        <td class="px-3 py-2 font-mono text-slate-300 group-hover:text-green-200">@order.UnitPrice.ToString("N1")</td>
+                                        <td class="px-3 py-2 text-right text-slate-500 group-hover:text-slate-400">@order.Amount.ToString("N0")</td>
+                                        <td class="px-3 py-2 text-right text-slate-600 group-hover:text-slate-500">@order.Orders.ToString("N0")</td>
+                                    </tr>
+                                }
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        }
+
+        <!-- Advanced Order Book Analysis (Toggleable) -->
+        @if (ProductData.BuyBook is not null && ProductData.SellBook is not null)
+        {
+            <div class="mt-4">
+                <button @onclick="ToggleOrderBookAnalysis"
+                        class="w-full flex items-center justify-between p-4 rounded-xl border border-slate-700/50 bg-slate-900/60 hover:bg-slate-800/60 transition-all cursor-pointer">
+                    <div class="flex items-center gap-2">
+                        <i class="ph ph-chart-scatter text-blue-400"></i>
+                        <span class="text-sm font-bold text-white">Advanced Order Book Analysis</span>
+                        @if (_orderBookAnalysis is not null)
+                        {
+                            <span class="px-2 py-0.5 rounded-full bg-blue-500/20 text-blue-300 text-[10px]">
+                                @(_orderBookAnalysis.WhaleOrders.Count > 0 ? $"{_orderBookAnalysis.WhaleOrders.Count} whales" : "Active")
+                            </span>
+                        }
+                    </div>
+                    <i class="ph @(_showOrderBookAnalysis ? "ph-caret-up" : "ph-caret-down") text-slate-400"></i>
+                </button>
+
+                @if (_showOrderBookAnalysis && _orderBookAnalysis is not null)
+                {
+                    <div class="mt-4 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2 duration-200">
+                        <!-- Top Row: Imbalance + Whales -->
+                        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+                            <ImbalanceGauge Imbalance="@_orderBookAnalysis.Imbalance"/>
+                            <WhaleOrders Orders="@_orderBookAnalysis.WhaleOrders"/>
+                        </div>
+
+                        <!-- Depth Chart -->
+                        <OrderBookDepth DepthMetrics="@_orderBookAnalysis.DepthMetrics"
+                                        DepthChart="@_orderBookAnalysis.DepthChart"/>
+
+                        <!-- Support/Resistance from Order Book -->
+                        <OrderBookSupportResistance
+                            SupportLevels="@_orderBookAnalysis.SupportLevels"
+                            ResistanceLevels="@_orderBookAnalysis.ResistanceLevels"/>
+
+                        <!-- Heatmap -->
+                        <OrderBookHeatmap ProductKey="@ProductData.ItemId"/>
+                    </div>
+                }
+            </div>
+        }
+
+        <!-- Related Products -->
+        @if (_relatedProducts.Any())
+        {
+            <div class="mt-4 rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl p-5">
+                <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-4">
+                    <i class="ph ph-link text-blue-400"></i>
+                    Related Products
+                </h4>
+                <div class="text-xs text-slate-400 mb-4">
+                    Products with similar price movements (correlation > 0.7)
+                </div>
+                <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
+                    @foreach (var related in _relatedProducts)
+                    {
+                        var correlationColor = related.CorrelationType switch
+                        {
+                            "Strong" => "#78F86A",
+                            "Moderate" => "#F9AD35",
+                            _ => "#808080"
+                        };
+
+                        <a href="/product/@related.ProductKey"
+                           class="group p-3 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/60 hover:border-blue-500/50 transition-all">
+                            <p class="text-xs font-medium text-slate-200 truncate mb-2 group-hover:text-blue-400 transition-colors">
+                                @related.ProductName
+                            </p>
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-slate-500">@related.CorrelationType</span>
+                                <span class="text-[10px] font-mono" style="color: @correlationColor">
+                                    @related.Correlation.ToString("F2")
+                                </span>
+                            </div>
+                        </a>
+                    }
+                </div>
+            </div>
+        }
+
+        <div class="flex items-center justify-center mt-2">
+            <p class="text-xs text-slate-600 bg-slate-800/30 px-4 py-2 rounded-full">
+                <i class="ph ph-info mr-1"></i> Market depth displays active orders. % change based on 12h EMA.
+            </p>
+        </div>
+    }
+</div>

@@ -5,7 +5,7 @@ using Microsoft.EntityFrameworkCore;
 namespace BazaarCompanionWeb.Entities;
 
 [Index(nameof(ProductKey), nameof(Interval), nameof(PeriodStart))]
-public class EFOhlcCandle
+public sealed record EFOhlcCandle
 {
     [Key] public long Id { get; set; }
 
@@ -16,7 +16,12 @@ public class EFOhlcCandle
     public required double High { get; set; }
     public required double Low { get; set; }
     public required double Close { get; set; }
-    public double? Volume { get; set; }
+    public required double Volume { get; set; }
 
-    [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }
+    /// <summary>
+    /// Average bid-ask spread during this candle period (Buy - Sell price).
+    /// </summary>
+    public required double Spread { get; set; }
+
+    [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

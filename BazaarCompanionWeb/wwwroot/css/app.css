@@ -93,6 +93,17 @@ table[theme] tbody tr:hover {
     background-color: rgba(30, 41, 59, 0.4);
 }
 
+/* Hide empty rows - rows with all empty cells */
+table[theme] tbody tr:empty,
+table[theme] tbody tr:has(td:empty):not(:has(td:not(:empty))) {
+    display: none;
+}
+
+/* Remove border on last visible row for cleaner appearance */
+table[theme] tbody tr:last-child td {
+    border-bottom: none;
+}
+
 /* Numeric alignment - Header */
 table[theme] th:not(:first-child) {
     text-align: right;

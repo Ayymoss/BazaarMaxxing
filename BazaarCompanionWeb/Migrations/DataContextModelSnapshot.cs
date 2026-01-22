@@ -76,7 +76,10 @@ namespace BazaarCompanionWeb.Migrations
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
 
-                    b.Property<double?>("Volume")
+                    b.Property<double>("Spread")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Volume")
                         .HasColumnType("REAL");
 
                     b.HasKey("Id");
@@ -160,7 +163,7 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("BuyPrice")
                         .HasColumnType("REAL");
 
-                    b.Property<long?>("BuyVolume")
+                    b.Property<long>("BuyVolume")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ProductKey")
@@ -171,7 +174,7 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("SellPrice")
                         .HasColumnType("REAL");
 
-                    b.Property<long?>("SellVolume")
+                    b.Property<long>("SellVolume")
                         .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Timestamp")

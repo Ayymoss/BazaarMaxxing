@@ -9,4 +9,6 @@ public interface IProductRepository
     Task<List<PriceHistorySnapshot>> GetPriceHistoryAsync(string productKey, CancellationToken cancellationToken);
     Task<List<Order>> GetOrderBookAsync(int marketDataId, CancellationToken cancellationToken);
     Task<ProductDataInfo> GetProductAsync(string productKey, CancellationToken cancellationToken);
+    Task<List<ProductDataInfo>> GetProductsAsync(CancellationToken cancellationToken);
+    Task<List<EFPriceSnapshot>> GetPriceSnapshotsAsync(CancellationToken ct = default);
 }

@@ -1,4 +1,7 @@
+using BazaarCompanionWeb.Dtos;
+using BazaarCompanionWeb.Hubs;
 using BazaarCompanionWeb.Interfaces;
+using Microsoft.AspNetCore.SignalR;
 using BazaarCompanionWeb.Interfaces.Api;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
@@ -16,7 +19,9 @@ public class HyPixelService(
     IOhlcRepository ohlcRepository,
     IOpportunityScoringService opportunityScoringService,
     MarketInsightsService marketInsightsService,
-    TimeCache timeCache)
+    IHubContext<ProductHub> hubContext,
+    TimeCache timeCache,
+    LiveCandleTracker liveCandleTracker)
 {
     public async Task FetchDataAsync(CancellationToken cancellationToken)
     {
@@ -31,15 +36,59 @@ public class HyPixelService(
             p.ItemId, 
             p.Buy.OrderPrice, 
             p.Sell.OrderPrice,
-            (long?)p.Buy.CurrentVolume,
-            (long?)p.Sell.CurrentVolume
+            (long)p.Buy.CurrentVolume,
+            (long)p.Sell.CurrentVolume
         ));
         await ohlcRepository.RecordTicksAsync(ticks, cancellationToken);
 
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
 
         // Trigger market insights recalculation after data is updated
+        // Trigger market insights recalculation after data is updated
         await marketInsightsService.RefreshInsightsAsync(cancellationToken);
+
+        // Broadcast updates via SignalR
+        foreach (var (product, efProduct) in products.Zip(mappedProducts))
+        {
+            var updateInfo = new ProductDataInfo
+            {
+                ItemId = efProduct.ProductKey,
+                ItemFriendlyName = efProduct.FriendlyName,
+                ItemTier = efProduct.Tier,
+                ItemUnstackable = efProduct.Unstackable,
+                BuyOrderUnitPrice = efProduct.Buy.UnitPrice,
+                BuyOrderWeekVolume = efProduct.Buy.OrderVolumeWeek,
+                BuyOrderCurrentOrders = efProduct.Buy.OrderCount,
+                BuyOrderCurrentVolume = efProduct.Buy.OrderVolume,
+                SellOrderUnitPrice = efProduct.Sell.UnitPrice,
+                SellOrderWeekVolume = efProduct.Sell.OrderVolumeWeek,
+                SellOrderCurrentOrders = efProduct.Sell.OrderCount,
+                SellOrderCurrentVolume = efProduct.Sell.OrderVolume,
+                OrderMetaPotentialProfitMultiplier = efProduct.Meta.ProfitMultiplier,
+                OrderMetaMargin = efProduct.Meta.Margin,
+                OrderMetaTotalWeekVolume = efProduct.Meta.TotalWeekVolume,
+                OrderMetaFlipOpportunityScore = efProduct.Meta.FlipOpportunityScore,
+                IsManipulated = efProduct.Meta.IsManipulated,
+                ManipulationIntensity = efProduct.Meta.ManipulationIntensity,
+                PriceDeviationPercent = efProduct.Meta.PriceDeviationPercent,
+                // These are expensive to fetch and not strictly needed for the quick update, 
+                // but we should at least clear them or preserve if needed.
+                BuyMarketDataId = efProduct.Buy.Id,
+                SellMarketDataId = efProduct.Sell.Id,
+                BuyBook = product.Buy.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
+                SellBook = product.Sell.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
+            };
+
+            await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("ProductUpdated", updateInfo, cancellationToken);
+            
+            // Broadcast a tick for the chart with proper OHLC aggregation
+            var liveTick = liveCandleTracker.UpdateAndGetTick(
+                efProduct.ProductKey,
+                efProduct.Buy.UnitPrice,
+                (double)(efProduct.Buy.OrderVolume + efProduct.Sell.OrderVolume));
+            
+            await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, cancellationToken);
+        }
     }
 
     private async Task<IEnumerable<ProductData>> BuildProductDataAsync(BazaarResponse bazaarResponse, ItemResponse itemResponse, CancellationToken cancellationToken)

@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BazaarCompanionWeb.Entities;
 
-public class EFPriceSnapshot
+public sealed record EFPriceSnapshot
 {
     [Key] public int Id { get; set; }
 
@@ -12,5 +12,5 @@ public class EFPriceSnapshot
     public required DateOnly Taken { get; set; }
 
     [MaxLength(64)] public required string ProductKey { get; set; }
-    [ForeignKey(nameof(ProductKey))] public EFProduct? Product { get; set; }
+    [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

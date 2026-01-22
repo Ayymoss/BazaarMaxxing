@@ -193,12 +193,12 @@ public sealed partial class MarketInsightsService(
             var currentHourCandle = ordered.LastOrDefault();
             var historicalCandles = ordered.SkipLast(1).ToList();
 
-            if (currentHourCandle?.Volume is null || historicalCandles.Count == 0) continue;
+            if (currentHourCandle?.Volume is null or 0 || historicalCandles.Count == 0) continue;
 
-            var currentHourVolume = (long)(currentHourCandle.Volume ?? 0);
+            var currentHourVolume = (long)currentHourCandle.Volume;
             var avgHourlyVolume = historicalCandles
-                .Where(c => c.Volume.HasValue)
-                .Select(c => c.Volume!.Value)
+                .Where(c => c.Volume > 0)
+                .Select(c => c.Volume)
                 .DefaultIfEmpty(1)
                 .Average();
 
@@ -263,14 +263,15 @@ public sealed partial class MarketInsightsService(
 
             if (candles.Count < 24) continue;
 
-            // Calculate average spread from candle high-low as proxy
-            // Note: True spread would need order book snapshots
-            var avgSpread = candles
-                .Select(c => c.High - c.Low)
-                .Where(s => s > 0)
-                .DefaultIfEmpty(currentSpread)
-                .Average();
+            var historicalSpreads = candles
+                .Where(c => c.Spread > 0)
+                .Select(c => c.Spread)
+                .ToList();
 
+            // If no historical spread data, skip this product (data not yet populated)
+            if (historicalSpreads.Count < 12) continue;
+
+            var avgSpread = historicalSpreads.Average();
             if (avgSpread <= 0) continue;
 
             var spreadChangePercent = ((currentSpread - avgSpread) / avgSpread) * 100;
@@ -370,7 +371,7 @@ public sealed partial class MarketInsightsService(
             if (price24hAgo <= 0) continue;
 
             var changePercent = ((currentPrice - price24hAgo) / price24hAgo) * 100;
-            var volume24h = (long)ordered.Sum(c => c.Volume ?? 0);
+            var volume24h = (long)ordered.Sum(c => c.Volume);
 
             allMovers.Add(new MarketMoverInsight(
                 product.ProductKey,

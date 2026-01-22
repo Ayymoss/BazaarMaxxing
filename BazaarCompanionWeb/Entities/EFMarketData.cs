@@ -5,7 +5,7 @@ using BazaarCompanionWeb.Models;
 
 namespace BazaarCompanionWeb.Entities;
 
-public abstract class EFMarketData
+public abstract record EFMarketData
 {
     [Key] public int Id { get; set; }
 
@@ -15,5 +15,5 @@ public abstract class EFMarketData
     public required int OrderCount { get; set; }
 
     [MaxLength(8192)] public required string BookValue { get; set; }
-    [NotMapped] public List<OrderBook> Books => JsonSerializer.Deserialize<List<OrderBook>>(BookValue) ?? [];
+    [NotMapped] public IReadOnlyList<OrderBook> Books => JsonSerializer.Deserialize<List<OrderBook>>(BookValue) ?? [];
 }

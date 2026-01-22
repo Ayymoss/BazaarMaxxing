@@ -6,7 +6,7 @@ namespace BazaarCompanionWeb.Entities;
 /// Periodic snapshot of order book data for historical analysis (heatmap).
 /// Uses separate 7-day retention policy - does not affect primary OHLC/price data.
 /// </summary>
-public class EFOrderBookSnapshot
+public sealed record EFOrderBookSnapshot
 {
     [Key] public int Id { get; set; }
 
