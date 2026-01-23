@@ -10,7 +10,9 @@ public class OhlcAggregationService(
 {
     private static readonly TimeSpan AggregationInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan TickRetention = TimeSpan.FromDays(7);
-    private bool _historySeeded = false;
+    private static readonly TimeSpan VacuumInterval = TimeSpan.FromHours(24);
+    private bool _historySeeded;
+    private DateTime _lastVacuumTime = DateTime.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
     {
@@ -32,7 +34,19 @@ public class OhlcAggregationService(
                 }
 
                 await AggregateAllCandlesAsync(ohlcRepository, stoppingToken);
+                
+                // Cleanup old ticks and candles
                 await ohlcRepository.PruneOldTicksAsync(TickRetention, stoppingToken);
+                await ohlcRepository.PruneOldCandlesAsync(stoppingToken);
+                
+                // Run VACUUM once per day to reclaim disk space
+                if (DateTime.UtcNow - _lastVacuumTime > VacuumInterval)
+                {
+                    logger.LogInformation("Running database VACUUM to reclaim disk space...");
+                    await ohlcRepository.VacuumDatabaseAsync(stoppingToken);
+                    _lastVacuumTime = DateTime.UtcNow;
+                    logger.LogInformation("Database VACUUM completed");
+                }
             }
             catch (Exception ex)
             {

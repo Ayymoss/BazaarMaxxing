@@ -4,7 +4,9 @@
 
 <PageTitle>Bazaar Maxxing</PageTitle>
 
-<div class="space-y-6">
-    <MarketInsightsPanel ProductClicked="OnInsightProductClicked" />
-    <ProductList @ref="_productList"/>
+<div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <div class="space-y-6">
+        <MarketInsightsPanel ProductClicked="OnInsightProductClicked" />
+        <ProductList @ref="_productList"/>
+    </div>
 </div>

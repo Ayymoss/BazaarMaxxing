@@ -1,11 +1,6 @@
 @namespace BazaarCompanionWeb.Components.Pages.Components
-@using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Services
-@using BazaarCompanionWeb.Utilities
-@using BazaarCompanionWeb.Components.Shared
-@using Humanizer
 @inject MarketInsightsService InsightsService
-@inject TimeCache TimeCache
 @implements IDisposable
 
 <div class="mb-4">
@@ -21,8 +16,8 @@
                 <span class="px-2 py-0.5 text-xs font-semibold rounded-full 
                              bg-amber-500/20 text-amber-400 border border-amber-500/30
                              animate-pulse">
-                    @_insights.NewInsightsCount NEW
-                </span>
+                        @_insights.NewInsightsCount NEW
+                    </span>
             }
         </div>
         <div class="flex items-center gap-2 text-xs text-slate-500 px-3 py-1.5 rounded-full bg-slate-900/40 border border-slate-800/50">
@@ -33,14 +28,16 @@
 
     <!-- Insights Grid -->
     <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-        
+
         <!-- Hot Products Card -->
-        <div class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-amber-500/30 transition-all duration-300 group">
+        <div
+            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-amber-500/30 transition-all duration-300 group">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-amber-400 flex items-center gap-2">
                     <span class="group-hover:animate-bounce transition-all">🔥</span> Hot Products
                 </h3>
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">@(_insights?.HotProducts.Count ?? 0)</span>
+                <span
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">@(_insights?.HotProducts.Count ?? 0)</span>
             </div>
             <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
                 @foreach (var product in (_insights?.HotProducts ?? []).Take(5))
@@ -50,20 +47,22 @@
                         <span class="w-1.5 h-1.5 rounded-full @GetTierColor(product.Tier)"></span>
                         <span class="flex-1 truncate text-xs text-slate-300">@product.ProductName</span>
                         <span class="text-[10px] font-mono @(product.IsIncreasing ? "text-emerald-400" : "text-rose-400")">
-                            @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("F1")%
-                        </span>
+                                @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("F1")%
+                            </span>
                     </div>
                 }
             </div>
         </div>
 
         <!-- Volume Surges Card -->
-        <div class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-cyan-500/30 transition-all duration-300 group">
+        <div
+            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-cyan-500/30 transition-all duration-300 group">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2">
                     <span class="group-hover:animate-pulse transition-all">📈</span> Vol Surges
                 </h3>
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">@(_insights?.VolumeSurges.Count ?? 0)</span>
+                <span
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">@(_insights?.VolumeSurges.Count ?? 0)</span>
             </div>
             <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
                 @foreach (var surge in (_insights?.VolumeSurges ?? []).Take(5))
@@ -79,12 +78,14 @@
         </div>
 
         <!-- Spread Opportunities Card -->
-        <div class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-emerald-500/30 transition-all duration-300 group">
+        <div
+            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-emerald-500/30 transition-all duration-300 group">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-emerald-400 flex items-center gap-2">
                     <span class="group-hover:rotate-12 transition-transform">💰</span> Top Spreads
                 </h3>
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">@(_insights?.SpreadOpportunities.Count ?? 0)</span>
+                <span
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">@(_insights?.SpreadOpportunities.Count ?? 0)</span>
             </div>
             <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
                 @foreach (var opp in (_insights?.SpreadOpportunities ?? []).Take(5))
@@ -100,12 +101,14 @@
         </div>
 
         <!-- Fire Sales Card -->
-        <div class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-rose-500/30 transition-all duration-300 group">
+        <div
+            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-rose-500/30 transition-all duration-300 group">
             <div class="flex items-center justify-between mb-3">
                 <h3 class="text-sm font-semibold text-rose-400 flex items-center gap-2">
                     <span class="group-hover:scale-110 transition-transform">🧨</span> Fire Sales
                 </h3>
-                <span class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">@(_insights?.FireSales.Count ?? 0)</span>
+                <span
+                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">@(_insights?.FireSales.Count ?? 0)</span>
             </div>
             <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
                 @foreach (var alert in (_insights?.FireSales ?? []).Take(5))
@@ -120,14 +123,19 @@
         </div>
 
         <!-- Market Movers Card -->
-        <div class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-violet-500/30 transition-all duration-300 group">
+        <div
+            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-violet-500/30 transition-all duration-300 group">
             <div class="flex items-center justify-between mb-2">
                 <h3 class="text-sm font-semibold text-violet-400 flex items-center gap-2">
                     <span class="group-hover:-translate-y-0.5 transition-transform">🚀</span> Movers
                 </h3>
                 <div class="flex gap-1">
-                    <button @onclick="() => _showGainers = true" class="text-[9px] px-1 rounded @(_showGainers ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500")">G</button>
-                    <button @onclick="() => _showGainers = false" class="text-[9px] px-1 rounded @(!_showGainers ? "bg-rose-500/20 text-rose-400" : "text-slate-500")">L</button>
+                    <button @onclick="() => _showGainers = true"
+                            class="text-[9px] px-1 rounded @(_showGainers ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500")">G
+                    </button>
+                    <button @onclick="() => _showGainers = false"
+                            class="text-[9px] px-1 rounded @(!_showGainers ? "bg-rose-500/20 text-rose-400" : "text-slate-500")">L
+                    </button>
                 </div>
             </div>
             <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
@@ -137,8 +145,8 @@
                          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
                         <span class="flex-1 truncate text-xs text-slate-300">@mover.ProductName</span>
                         <span class="text-[10px] font-mono @(mover.IsGainer ? "text-emerald-400" : "text-rose-400")">
-                            @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("F1")%
-                        </span>
+                                @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("F1")%
+                            </span>
                     </div>
                 }
             </div>
@@ -146,60 +154,3 @@
 
     </div>
 </div>
-
-@code {
-    [Parameter] public EventCallback<string> ProductClicked { get; set; }
-    
-    private MarketInsights? _insights;
-    private bool _showGainers = true;
-    private Timer? _refreshTimer;
-
-    protected override async Task OnInitializedAsync()
-    {
-        await LoadInsightsAsync();
-        
-        // Auto-refresh every 30 seconds
-        _refreshTimer = new Timer(async _ =>
-        {
-            await LoadInsightsAsync();
-            await InvokeAsync(StateHasChanged);
-        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
-    }
-
-    private async Task LoadInsightsAsync()
-    {
-        try
-        {
-            _insights = await InsightsService.GetInsightsAsync();
-        }
-        catch
-        {
-            // Silently fail - insights are non-critical
-        }
-    }
-
-
-    private async Task OnProductClick(string productKey)
-    {
-        await ProductClicked.InvokeAsync(productKey);
-    }
-
-    private static string GetTierColor(string tier) => tier switch
-    {
-        "Common" => "bg-slate-400",
-        "Uncommon" => "bg-emerald-400",
-        "Rare" => "bg-blue-400",
-        "Epic" => "bg-purple-400",
-        "Legendary" => "bg-amber-400",
-        "Mythic" => "bg-rose-400",
-        "Divine" => "bg-cyan-400",
-        "Special" => "bg-pink-400",
-        "VerySpecial" => "bg-rose-500",
-        _ => "bg-slate-500"
-    };
-
-    public void Dispose()
-    {
-        _refreshTimer?.Dispose();
-    }
-}

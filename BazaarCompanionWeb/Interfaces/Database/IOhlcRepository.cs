@@ -12,4 +12,6 @@ public interface IOhlcRepository
     Task<DateTime?> GetLatestCandleTimeAsync(string productKey, CandleInterval interval, CancellationToken ct = default);
     Task<List<string>> GetAllProductKeysAsync(CancellationToken ct = default);
     Task PruneOldTicksAsync(TimeSpan retention, CancellationToken ct = default);
+    Task PruneOldCandlesAsync(CancellationToken ct = default);
+    Task VacuumDatabaseAsync(CancellationToken ct = default);
 }

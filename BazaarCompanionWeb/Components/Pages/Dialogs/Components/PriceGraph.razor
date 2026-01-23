@@ -10,10 +10,43 @@
         <ChartIntervalSelector SelectedInterval="Interval" OnIntervalChanged="OnIntervalChangedAsync" />
     </div>
     
-    <!-- Indicator Controls -->
+    @* [LIGHTWEIGHT_CHARTS] Indicator Controls - commented out for KLineChart test
     <ChartIndicators Config="@_indicatorConfig" ConfigChanged="@OnIndicatorConfigChanged" />
+    *@
+    
+    @* KLineChart Indicator Controls *@
+    <div class="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-lg border border-slate-700/50 bg-slate-800/40">
+        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Indicators:</span>
+        
+        @* Overlay indicators (on main candle pane) *@
+        @foreach (var indicator in _overlayIndicators)
+        {
+            <label class="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" 
+                       checked="@indicator.Enabled" 
+                       @onchange="@(e => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
+                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
+            </label>
+        }
+        
+        <div class="h-4 w-px bg-slate-700"></div>
+        
+        @* Sub-pane indicators *@
+        @foreach (var indicator in _subPaneIndicators)
+        {
+            <label class="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" 
+                       checked="@indicator.Enabled" 
+                       @onchange="@(e => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
+                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-1" />
+                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
+            </label>
+        }
+    </div>
     
     <div class="relative w-full flex-1 min-h-[580px] overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+        @* KLineChart container - simpler structure as it handles its own panes *@
         <div id="chart-container-@_chartId" class="absolute inset-0 w-full h-full"></div>
         
         @if (!_chartInitialized)

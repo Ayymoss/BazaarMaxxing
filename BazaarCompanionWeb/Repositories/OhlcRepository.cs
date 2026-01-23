@@ -130,4 +130,38 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .Where(t => t.Timestamp < cutoff)
             .ExecuteDeleteAsync(ct);
     }
+
+    public async Task PruneOldCandlesAsync(CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var now = DateTime.UtcNow;
+
+        // 5-minute candles: 7 days retention
+        await context.OhlcCandles
+            .Where(c => c.Interval == CandleInterval.FiveMinute && c.PeriodStart < now.AddDays(-7))
+            .ExecuteDeleteAsync(ct);
+
+        // 15-minute candles: 30 days retention
+        await context.OhlcCandles
+            .Where(c => c.Interval == CandleInterval.FifteenMinute && c.PeriodStart < now.AddDays(-30))
+            .ExecuteDeleteAsync(ct);
+
+        // 1-hour candles: 90 days retention
+        await context.OhlcCandles
+            .Where(c => c.Interval == CandleInterval.OneHour && c.PeriodStart < now.AddDays(-90))
+            .ExecuteDeleteAsync(ct);
+
+        // 4-hour candles: 1 year retention
+        await context.OhlcCandles
+            .Where(c => c.Interval == CandleInterval.FourHour && c.PeriodStart < now.AddDays(-365))
+            .ExecuteDeleteAsync(ct);
+
+        // 1-day and 1-week candles: kept forever (no cleanup)
+    }
+
+    public async Task VacuumDatabaseAsync(CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await context.Database.ExecuteSqlRawAsync("VACUUM", ct);
+    }
 }

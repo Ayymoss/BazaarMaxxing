@@ -62,7 +62,7 @@ public partial class Product(
             .WithAutomaticReconnect()
             .Build();
 
-        _hubConnection.On<ProductDataInfo>("ProductUpdated", (product) =>
+        _hubConnection.On<ProductDataInfo>("ProductUpdated", async (product) =>
         {
             if (_product is not null)
             {
@@ -76,7 +76,9 @@ public partial class Product(
             
             _product = product;
             _lastServerRefresh = timeCache.LastUpdated;
-            return Task.CompletedTask;
+            
+            // Trigger UI re-render to update TradingDesk and other components
+            await InvokeAsync(StateHasChanged);
         });
 
         _hubConnection.On<object>("TickUpdated", async (tick) =>
@@ -196,7 +198,19 @@ public partial class Product(
         
         if (_hubConnection is not null)
         {
-            await _hubConnection.SendAsync("LeaveProductGroup", ProductKey);
+            try
+            {
+                // Only send if connection is active
+                if (_hubConnection.State == HubConnectionState.Connected)
+                {
+                    await _hubConnection.SendAsync("LeaveProductGroup", ProductKey);
+                }
+            }
+            catch (Exception ex)
+            {
+                Log.Warning(ex, "Error leaving product group during dispose");
+            }
+            
             await _hubConnection.DisposeAsync();
         }
 
