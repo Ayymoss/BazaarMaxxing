@@ -8,185 +8,216 @@
 
 <PageTitle>@_pageTitle</PageTitle>
 
-<div class="flex flex-col gap-4 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
-    <!-- Compact Header / Toolbar -->
-    <div class="flex flex-col gap-3 rounded-xl border border-slate-700/50 bg-slate-900/60 px-4 py-3 shadow-lg backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
-        <div class="flex items-center gap-3">
-             <h2 class="text-lg font-bold tracking-tight text-white">
-                <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">@_titleText</span>
-            </h2>
-            <div class="h-4 w-px bg-slate-700"></div>
-            <div class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
-                <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
-                Last Updated @(_lastServerRefresh.Humanize() ?? "Loading...")
-            </div>
-        </div>
-
-        <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-             <!-- Compact Toggle Switch -->
-            <label class="group flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
-                <div class="relative inline-flex items-center">
-                    <input type="checkbox" checked="@_filter" @onchange="@((ChangeEventArgs e) => { _filter = e.Value is bool b && b; OnFilter(e); })" class="peer sr-only" />
-                    <div class="h-4 w-8 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-3 after:w-3 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-1 peer-focus:ring-blue-500/50"></div>
-                </div>
-                <span class="text-xs font-medium text-slate-300 group-hover:text-white">Smart Filter</span>
-            </label>
-
-            <!-- Advanced Filters Toggle -->
-            <button @onclick="@(() => { _showAdvancedFilters = !_showAdvancedFilters; })"
-                    class="group flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
-                <i class="ph ph-funnel text-slate-400 group-hover:text-blue-400 transition-colors text-sm"></i>
-                <span class="text-xs font-medium text-slate-300 group-hover:text-white">Filters</span>
-                @if (GetActiveFilterCount() > 0)
-                {
-                    <span class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-[10px] font-bold text-white">
-                        @GetActiveFilterCount()
-                    </span>
-                }
-            </button>
-
-            <!-- Compact Search Input -->
-            <div class="relative group w-full sm:w-auto">
-                <div class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
-                    <i class="ph ph-magnifying-glass text-slate-400 group-focus-within:text-blue-400 transition-colors text-sm"></i>
-                </div>
-                <input type="text" 
-                       value="@_searchString" 
-                       @oninput="@OnSearchInput" 
-                       placeholder="Search or 'under 1000', 'high volume', 'fire sale'..." 
-                       class="block w-full min-w-[240px] rounded-lg border border-slate-700/50 bg-slate-800/50 py-1.5 pl-8 pr-12 text-xs text-white placeholder-slate-500 shadow-sm transition-all focus:border-blue-500 focus:bg-slate-800 focus:ring-1 focus:ring-blue-500 hover:border-slate-600 hover:bg-slate-800" />
-                @if (_searchHistory.Any())
-                {
-                    <div class="absolute top-full left-0 right-0 mt-1 rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-xl shadow-xl z-50 max-h-48 overflow-auto">
-                        @foreach (var historyItem in _searchHistory.Take(5))
-                        {
-                            <button @onclick="@(() => { _searchString = historyItem; OnSearchInput(new ChangeEventArgs { Value = historyItem }); })"
-                                    class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
-                                @historyItem
-                            </button>
-                        }
-                    </div>
-                }
-            </div>
-
-            <!-- Fuzzy Search Toggle -->
-            <label class="group flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
-                <div class="relative inline-flex items-center">
-                    <input type="checkbox" checked="@_useFuzzySearch" @onchange="@((ChangeEventArgs e) => { _useFuzzySearch = e.Value is bool b && b; if (_grid is not null) _grid.RefreshDataAsync(); })" class="peer sr-only" />
-                    <div class="h-4 w-8 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-3 after:w-3 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-purple-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-1 peer-focus:ring-purple-500/50"></div>
-                </div>
-                <span class="text-xs font-medium text-slate-300 group-hover:text-white">Fuzzy</span>
-            </label>
+<!-- Compact Header / Toolbar -->
+<div
+    class="flex flex-col gap-3 rounded-xl border border-slate-700/50 bg-slate-900/60 px-4 py-3 shadow-lg backdrop-blur-xl lg:flex-row lg:items-center lg:justify-between">
+    <div class="flex items-center gap-3">
+        <h2 class="text-lg font-bold tracking-tight text-white">
+            <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">@_titleText</span>
+        </h2>
+        <div class="h-4 w-px bg-slate-700"></div>
+        <div class="flex items-center gap-1.5 text-[10px] font-medium text-slate-400">
+            <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]"></span>
+            Last Updated @(_lastServerRefresh.Humanize() ?? "Loading...")
         </div>
     </div>
 
-    <!-- Advanced Filters Panel -->
-    @if (_showAdvancedFilters)
-    {
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-            <div class="lg:col-span-3">
-                <AdvancedFilters Filters="@_advancedFilters" FiltersChanged="@OnAdvancedFiltersChanged" />
+    <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <!-- Compact Toggle Switch -->
+        <label
+            class="group flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
+            <div class="relative inline-flex items-center">
+                <input type="checkbox" checked="@_filter" @onchange="@((ChangeEventArgs e) =>
+                                                                     {
+                                                                         _filter = e.Value is bool b && b;
+                                                                         OnFilter(e);
+                                                                     })" class="peer sr-only"/>
+                <div
+                    class="h-4 w-8 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-3 after:w-3 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-blue-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-1 peer-focus:ring-blue-500/50"></div>
             </div>
-            <div class="lg:col-span-1">
-                <FilterPresetManager CurrentFilters="@_advancedFilters" PresetLoaded="@OnPresetLoaded" />
-            </div>
-        </div>
-    }
+            <span class="text-xs font-medium text-slate-300 group-hover:text-white">Smart Filter</span>
+        </label>
 
-    <!-- Data Grid -->
-    <div class="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl">
-        <div class="relative">
-            @if (_itemsProvider != null)
+        <!-- Advanced Filters Toggle -->
+        <button @onclick="@(() => { _showAdvancedFilters = !_showAdvancedFilters; })"
+                class="group flex items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
+            <i class="ph ph-funnel text-slate-400 group-hover:text-blue-400 transition-colors text-sm"></i>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-white">Filters</span>
+            @if (GetActiveFilterCount() > 0)
             {
-                <QuickGrid @ref="_grid" ItemsProvider="@_itemsProvider" Pagination="@_pagination" Theme="custom" Class="w-full text-left text-xs text-slate-300">
-                    <TemplateColumn Title="Product" Sortable="false">
-                        <div class="flex items-center gap-2 py-0.5" @onclick="@(() => RowClickEvent(context))">
-                            <!-- Tier Dot -->
-                            <div class="h-1.5 w-1.5 rounded-full shadow-sm flex-shrink-0" style="@($"background-color: {context.ItemTier.ProductTierColor()}")"></div>
-                            
-                            <!-- Fire Sale Indicator -->
-                            @if (context.IsManipulated)
-                            {
-                                <i class="ph ph-fire text-orange-500 flex-shrink-0" 
-                                   style="@($"opacity: {0.5 + context.ManipulationIntensity * 0.5}")" 
-                                   title="@($"🔥 Fire Sale! Price deviated {context.PriceDeviationPercent:F1}% from average")"></i>
-                            }
-                            
-                            <div class="flex flex-col cursor-pointer group min-w-0">
-                                <span class="font-medium text-slate-200 truncate group-hover:text-blue-400 group-hover:underline transition-colors">
-                                    @context.ItemFriendlyName
-                                </span>
-                            </div>
-                        </div>
-                    </TemplateColumn>
-                    
-                    <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.BuyOrderUnitPrice)" Sortable="true" Title="Bid" Format="C1" Class="font-mono text-slate-200" />
-                    <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaMargin)" Sortable="true" Title="Spread" Format="C1" Class="font-mono text-slate-400" />
-                    <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.SellOrderUnitPrice)" Sortable="true" Title="Ask" Format="C1" Class="font-mono text-slate-200" />
-                    
-                    <TemplateColumn Title="Profit x" SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.OrderMetaPotentialProfitMultiplier))">
-                        <div class="flex items-center justify-end gap-1 font-medium" style="@($"color: {context.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">
-                            @context.OrderMetaPotentialProfitMultiplier.ToString("N2")x
-                        </div>
-                    </TemplateColumn>
-                    
-                    <TemplateColumn Title="Rating" SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.OrderMetaFlipOpportunityScore))">
-                         <div class="flex justify-end">
-                            <div class="inline-flex items-center justify-center px-1.5 py-px rounded text-[10px] font-medium bg-slate-800 border border-slate-700 min-w-[32px]" style="@($"color: {context.OrderMetaFlipOpportunityScore.RatingColor()}; border-color: {context.OrderMetaFlipOpportunityScore.RatingColor()}40")">
-                                @context.OrderMetaFlipOpportunityScore.ToString("N1")
-                            </div>
-                        </div>
-                    </TemplateColumn>
+                <span class="flex items-center justify-center w-4 h-4 rounded-full bg-blue-600 text-[10px] font-bold text-white">
+                        @GetActiveFilterCount()
+                    </span>
+            }
+        </button>
 
-                    <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaTotalWeekVolume)" Sortable="true" Title="7d Vol." Format="N0" Class="text-right text-slate-400" />
-                    
-                    <TemplateColumn Title="Orders (A/B)" Class="hidden xl:table-cell">
-                        <div class="flex flex-col gap-px text-[10px] text-slate-500 text-right">
-                           <div class="flex justify-end gap-1.5"><span class="text-slate-600">Bid:</span> <span class="text-slate-300">@context.BuyOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
-                           <div class="flex justify-end gap-1.5"><span class="text-slate-600">Ask:</span> <span class="text-slate-300">@context.SellOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
-                        </div>
-                    </TemplateColumn>
-                </QuickGrid>
+        <!-- Compact Search Input -->
+        <div class="relative group w-full sm:w-auto">
+            <div class="absolute inset-y-0 left-0 flex items-center pl-2.5 pointer-events-none">
+                <i class="ph ph-magnifying-glass text-slate-400 group-focus-within:text-blue-400 transition-colors text-sm"></i>
+            </div>
+            <input type="text"
+                   value="@_searchString"
+                   @oninput="@OnSearchInput"
+                   placeholder="Search or 'under 1000', 'high volume', 'fire sale'..."
+                   class="block w-full min-w-[240px] rounded-lg border border-slate-700/50 bg-slate-800/50 py-1.5 pl-8 pr-12 text-xs text-white placeholder-slate-500 shadow-sm transition-all focus:border-blue-500 focus:bg-slate-800 focus:ring-1 focus:ring-blue-500 hover:border-slate-600 hover:bg-slate-800"/>
+            @if (_searchHistory.Any())
+            {
+                <div
+                    class="absolute top-full left-0 right-0 mt-1 rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-xl shadow-xl z-50 max-h-48 overflow-auto">
+                    @foreach (var historyItem in _searchHistory.Take(5))
+                    {
+                        <button @onclick="@(() =>
+                                          {
+                                              _searchString = historyItem;
+                                              OnSearchInput(new ChangeEventArgs { Value = historyItem });
+                                          })"
+                                class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors">
+                            @historyItem
+                        </button>
+                    }
+                </div>
             }
         </div>
 
-        <!-- Compact Pagination Toolbar -->
-        <div class="flex items-center justify-between border-t border-slate-700/50 bg-slate-800/30 px-4 py-2 backdrop-blur-sm">
-             <div class="text-[10px] text-slate-500">
-                <span class="hidden sm:inline">Showing </span><span class="font-medium text-slate-300">@(Math.Min(_pagination.ItemsPerPage, _totalItemCount))</span> of <span class="font-medium text-slate-300">@_totalItemCount</span> rows
+        <!-- Fuzzy Search Toggle -->
+        <label
+            class="group flex cursor-pointer items-center gap-2 rounded-lg border border-slate-700/50 bg-slate-800/50 px-3 py-1.5 transition-all hover:border-slate-600 hover:bg-slate-800">
+            <div class="relative inline-flex items-center">
+                <input type="checkbox" checked="@_useFuzzySearch" @onchange="@((ChangeEventArgs e) =>
+                                                                             {
+                                                                                 _useFuzzySearch = e.Value is bool b && b;
+                                                                                 if (_grid is not null) _grid.RefreshDataAsync();
+                                                                             })" class="peer sr-only"/>
+                <div
+                    class="h-4 w-8 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-3 after:w-3 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-purple-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-1 peer-focus:ring-purple-500/50"></div>
             </div>
+            <span class="text-xs font-medium text-slate-300 group-hover:text-white">Fuzzy</span>
+        </label>
+    </div>
+</div>
 
-            <div class="flex items-center gap-3">
-                 @{
-                    var lastPageIndex = _pagination.TotalItemCount > 0 ? (int)Math.Ceiling((double)_pagination.TotalItemCount / _pagination.ItemsPerPage) - 1 : 0;
-                }
-                
-                <div class="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
-                    <button @onclick="@(() => ChangePage(Math.Max(0, _currentPageIndex - 1)))" 
-                            disabled="@(_currentPageIndex == 0)"
-                            class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                        <i class="ph ph-caret-left"></i>
-                    </button>
-                    <div class="h-3 w-px bg-slate-700 mx-1"></div>
-                     <span class="px-2 text-[10px] font-mono text-slate-400">
+<!-- Advanced Filters Panel -->
+@if (_showAdvancedFilters)
+{
+    <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        <div class="lg:col-span-3">
+            <AdvancedFilters Filters="@_advancedFilters" FiltersChanged="@OnAdvancedFiltersChanged"/>
+        </div>
+        <div class="lg:col-span-1">
+            <FilterPresetManager CurrentFilters="@_advancedFilters" PresetLoaded="@OnPresetLoaded"/>
+        </div>
+    </div>
+}
+
+<!-- Data Grid -->
+<div class="overflow-hidden rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl">
+    <div class="relative">
+        @if (_itemsProvider != null)
+        {
+            <QuickGrid @ref="_grid" ItemsProvider="@_itemsProvider" Pagination="@_pagination" Theme="custom"
+                       Class="w-full text-left text-xs text-slate-300">
+                <TemplateColumn Title="Product" Sortable="false">
+                    <div class="flex items-center gap-2 py-0.5" @onclick="@(() => RowClickEvent(context))">
+                        <!-- Tier Dot -->
+                        <div class="h-1.5 w-1.5 rounded-full shadow-sm flex-shrink-0"
+                             style="@($"background-color: {context.ItemTier.ProductTierColor()}")"></div>
+
+                        <!-- Fire Sale Indicator -->
+                        @if (context.IsManipulated)
+                        {
+                            <i class="ph ph-fire text-orange-500 flex-shrink-0"
+                               style="@($"opacity: {0.5 + context.ManipulationIntensity * 0.5}")"
+                               title="@($"🔥 Fire Sale! Price deviated {context.PriceDeviationPercent:F1}% from average")"></i>
+                        }
+
+                        <div class="flex flex-col cursor-pointer group min-w-0">
+                                <span
+                                    class="font-medium text-slate-200 truncate group-hover:text-blue-400 group-hover:underline transition-colors">
+                                    @context.ItemFriendlyName
+                                </span>
+                        </div>
+                    </div>
+                </TemplateColumn>
+
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.BuyOrderUnitPrice)" Sortable="true"
+                                Title="Bid" Format="C1" Class="font-mono text-slate-200"/>
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaMargin)" Sortable="true"
+                                Title="Spread" Format="C1" Class="font-mono text-slate-400"/>
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.SellOrderUnitPrice)" Sortable="true"
+                                Title="Ask" Format="C1" Class="font-mono text-slate-200"/>
+
+                <TemplateColumn Title="Profit x"
+                                SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.OrderMetaPotentialProfitMultiplier))">
+                    <div class="flex items-center justify-end gap-1 font-medium"
+                         style="@($"color: {context.OrderMetaPotentialProfitMultiplier.MultiplierColor()}")">
+                        @context.OrderMetaPotentialProfitMultiplier.ToString("N2")x
+                    </div>
+                </TemplateColumn>
+
+                <TemplateColumn Title="Rating" SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.OrderMetaFlipOpportunityScore))">
+                    <div class="flex justify-end">
+                        <div
+                            class="inline-flex items-center justify-center px-1.5 py-px rounded text-[10px] font-medium bg-slate-800 border border-slate-700 min-w-[32px]"
+                            style="@($"color: {context.OrderMetaFlipOpportunityScore.RatingColor()}; border-color: {context.OrderMetaFlipOpportunityScore.RatingColor()}40")">
+                            @context.OrderMetaFlipOpportunityScore.ToString("N1")
+                        </div>
+                    </div>
+                </TemplateColumn>
+
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaTotalWeekVolume)" Sortable="true"
+                                Title="7d Vol." Format="N0" Class="text-right text-slate-400"/>
+
+                <TemplateColumn Title="Orders (A/B)" Class="hidden xl:table-cell">
+                    <div class="flex flex-col gap-px text-[10px] text-slate-500 text-right">
+                        <div class="flex justify-end gap-1.5"><span class="text-slate-600">Bid:</span> <span
+                                class="text-slate-300">@context.BuyOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
+                        <div class="flex justify-end gap-1.5"><span class="text-slate-600">Ask:</span> <span
+                                class="text-slate-300">@context.SellOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
+                    </div>
+                </TemplateColumn>
+            </QuickGrid>
+        }
+    </div>
+
+    <!-- Compact Pagination Toolbar -->
+    <div class="flex items-center justify-between border-t border-slate-700/50 bg-slate-800/30 px-4 py-2 backdrop-blur-sm">
+        <div class="text-[10px] text-slate-500">
+            <span class="hidden sm:inline">Showing </span><span
+                class="font-medium text-slate-300">@(Math.Min(_pagination.ItemsPerPage, _totalItemCount))</span> of <span
+                class="font-medium text-slate-300">@_totalItemCount</span> rows
+        </div>
+
+        <div class="flex items-center gap-3">
+            @{
+                var lastPageIndex = _pagination.TotalItemCount > 0 ? (int)Math.Ceiling((double)_pagination.TotalItemCount / _pagination.ItemsPerPage) - 1 : 0;
+            }
+
+            <div class="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
+                <button @onclick="@(() => ChangePage(Math.Max(0, _currentPageIndex - 1)))"
+                        disabled="@(_currentPageIndex == 0)"
+                        class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                    <i class="ph ph-caret-left"></i>
+                </button>
+                <div class="h-3 w-px bg-slate-700 mx-1"></div>
+                <span class="px-2 text-[10px] font-mono text-slate-400">
                         @(_currentPageIndex + 1)<span class="text-slate-600">/</span>@(lastPageIndex + 1)
                     </span>
-                    <div class="h-3 w-px bg-slate-700 mx-1"></div>
-                    <button @onclick="@(() => ChangePage(Math.Min(lastPageIndex, _currentPageIndex + 1)))"
-                            disabled="@(_currentPageIndex >= lastPageIndex)"
-                            class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                        <i class="ph ph-caret-right"></i>
-                    </button>
-                </div>
-
-                <select value="@_pagination.ItemsPerPage" 
-                        @onchange="@((ChangeEventArgs e) => ChangeItemsPerPage(int.Parse(e.Value?.ToString() ?? "25")))" 
-                        class="h-6 rounded-md border border-slate-700 bg-slate-800 px-1 text-[10px] text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
-                    <option value="25">25</option>
-                    <option value="50">50</option>
-                    <option value="100">100</option>
-                </select>
+                <div class="h-3 w-px bg-slate-700 mx-1"></div>
+                <button @onclick="@(() => ChangePage(Math.Min(lastPageIndex, _currentPageIndex + 1)))"
+                        disabled="@(_currentPageIndex >= lastPageIndex)"
+                        class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
+                    <i class="ph ph-caret-right"></i>
+                </button>
             </div>
+
+            <select value="@_pagination.ItemsPerPage"
+                    @onchange="@((ChangeEventArgs e) => ChangeItemsPerPage(int.Parse(e.Value?.ToString() ?? "25")))"
+                    class="h-6 rounded-md border border-slate-700 bg-slate-800 px-1 text-[10px] text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+                <option value="25">25</option>
+                <option value="50">50</option>
+                <option value="100">100</option>
+            </select>
         </div>
     </div>
 </div>

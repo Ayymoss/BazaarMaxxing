@@ -17,7 +17,7 @@ public partial class OrderBookDepth
     {
         if (firstRender)
         {
-            _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/tradingview-chart.js");
+            _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chartInit.js");
         }
 
         if (_chartModule is not null && DepthChart.Count > 0 && !_chartRendered)

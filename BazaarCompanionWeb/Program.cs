@@ -345,10 +345,10 @@ public class Program
         builder.Services.AddScoped<IResourceQueryHelper<ProductPagination, ProductDataInfo>, ProductsPaginationQueryHelper>();
         builder.Services.AddSingleton<MarketAnalyticsService>();
         builder.Services.AddSingleton<MarketInsightsService>();
-        builder.Services.AddScoped<TechnicalAnalysisService>();
         builder.Services.AddScoped<OrderBookAnalysisService>();
         builder.Services.AddScoped<BrowserStorage>();
         builder.Services.AddSingleton<ComparisonStateService>();
+        builder.Services.AddSingleton<AboutModalService>();
 
         builder.Services.AddHostedService<OhlcAggregationService>();
     }

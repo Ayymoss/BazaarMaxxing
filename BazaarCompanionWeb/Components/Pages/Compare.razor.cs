@@ -52,7 +52,7 @@ public partial class Compare : IAsyncDisposable
     {
         if (firstRender)
         {
-            _chartModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/tradingview-chart.js");
+            _chartModule = await JS.InvokeAsync<IJSObjectReference>("import", "./js/chartInit.js");
             if (_productKeys.Count > 0)
             {
                 await UpdateChartAsync();

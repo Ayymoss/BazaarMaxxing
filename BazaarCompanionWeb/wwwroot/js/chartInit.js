@@ -1,12 +1,5 @@
 import { disposeChart as globalsDisposeChart } from './charts/chart-globals.js';
 import {
-    createChart as pcCreateChart,
-    updateChart as pcUpdateChart,
-    updateChartWithTick as pcUpdateChartWithTick,
-    createChartWithIndicators as pcCreateChartWithIndicators,
-    disposeChartWithIndicators as pcDisposeChartWithIndicators
-} from './charts/price-chart-module.js';
-import {
     createComparisonChart as scCreateComparisonChart,
     createDepthChart as scCreateDepthChart
 } from './charts/specialized-chart-module.js';
@@ -22,17 +15,12 @@ import {
     resizeKLineChart as klResizeKLineChart
 } from './charts/kline-chart-module.js';
 
-// Re-export for Blazor and other modules - LightweightCharts
-export const createChart = pcCreateChart;
-export const updateChart = pcUpdateChart;
-export const updateChartWithTick = pcUpdateChartWithTick;
-export const createChartWithIndicators = pcCreateChartWithIndicators;
+// Re-export for Blazor - LightweightCharts (specialized charts still in use)
 export const createComparisonChart = scCreateComparisonChart;
 export const createDepthChart = scCreateDepthChart;
 export const disposeChart = globalsDisposeChart;
-export const disposeChartWithIndicators = pcDisposeChartWithIndicators;
 
-// Re-export for Blazor and other modules - KLineChart
+// Re-export for Blazor - KLineChart
 export const createKLineChart = klCreateKLineChart;
 export const updateKLineChart = klUpdateKLineChart;
 export const updateKLineChartWithTick = klUpdateKLineChartWithTick;

@@ -1,10 +1,10 @@
-﻿@using BazaarCompanionWeb.Utilities
+@using BazaarCompanionWeb.Utilities
 @inherits LayoutComponentBase
 
 <div class="flex min-h-screen flex-col bg-slate-950 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(120,119,198,0.15),rgba(255,255,255,0))]">
     <!-- Sticky Header -->
     <header class="sticky top-0 z-50 border-b border-slate-800/60 bg-slate-950/70 backdrop-blur-xl supports-[backdrop-filter]:bg-slate-950/60">
-        <TopBar @ref="_topBar"/>
+        <TopBar/>
     </header>
 
     <!-- Main Content -->
@@ -53,3 +53,5 @@
         </div>
     </div>
 </div>
+
+<AboutModal/>

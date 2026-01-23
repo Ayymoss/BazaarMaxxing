@@ -1,0 +1,89 @@
+@using BazaarCompanionWeb.Services
+@using BazaarCompanionWeb.Utilities
+@rendermode InteractiveServer
+@inject AboutModalService AboutModalService
+@implements IDisposable
+
+<Modal Show="@AboutModalService.IsVisible" ShowChanged="OnShowChanged">
+    <div class="max-w-lg mx-auto">
+        <!-- Header -->
+        <div class="text-center mb-6">
+            <div class="inline-flex items-center justify-center h-16 w-16 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 shadow-lg shadow-blue-500/20 mb-4">
+                <i class="ph ph-trend-up text-3xl text-white"></i>
+            </div>
+            <h2 class="text-2xl font-bold text-white mb-1">Bazaar Maxxing</h2>
+            <p class="text-sm text-slate-400">Version @HelperMethods.GetVersion()</p>
+        </div>
+        
+        <!-- Description -->
+        <div class="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700/50">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-2">About This Project</h3>
+            <p class="text-slate-300 text-sm leading-relaxed">
+                Bazaar Maxxing is a market analytics tool for Hypixel Skyblock's Bazaar. 
+                Track real-time prices, analyze market trends with OHLC charts, compare products side-by-side, 
+                and discover profitable trading opportunities. Built for traders who want to maximize their profits 
+                with data-driven insights.
+            </p>
+        </div>
+        
+        <!-- Credits -->
+        <div class="bg-slate-800/50 rounded-xl p-4 mb-6 border border-slate-700/50">
+            <h3 class="text-sm font-semibold text-blue-400 uppercase tracking-wide mb-3">Credits</h3>
+            <div class="flex items-center gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-full bg-gradient-to-br from-purple-500 to-pink-500">
+                    <i class="ph ph-user text-lg text-white"></i>
+                </div>
+                <div>
+                    <p class="text-white font-medium">Ayymoss</p>
+                    <p class="text-slate-400 text-sm">Developer</p>
+                </div>
+            </div>
+        </div>
+        
+        <!-- Links -->
+        <div class="flex flex-col gap-3">
+            <a href="https://github.com/Ayymoss" target="_blank" 
+               class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-300 hover:bg-slate-700/50 hover:text-white transition-all">
+                <i class="ph ph-github-logo text-xl"></i>
+                <span class="font-medium">GitHub</span>
+                <i class="ph ph-arrow-square-out text-sm ml-auto text-slate-500"></i>
+            </a>
+            <div class="flex items-center gap-3 p-3 rounded-xl bg-slate-800/50 border border-slate-700/50 text-slate-300">
+                <i class="ph ph-discord-logo text-xl"></i>
+                <span class="font-medium">Discord: ayymoss</span>
+            </div>
+        </div>
+        
+        <!-- Footer -->
+        <div class="mt-6 pt-4 border-t border-slate-700/50 text-center">
+            <p class="text-xs text-slate-500">
+                Made with <i class="ph-fill ph-heart text-red-400"></i> for the Hypixel Skyblock community
+            </p>
+        </div>
+    </div>
+</Modal>
+
+@code {
+    protected override void OnInitialized()
+    {
+        AboutModalService.OnChange += OnServiceChange;
+    }
+
+    private void OnServiceChange()
+    {
+        InvokeAsync(StateHasChanged);
+    }
+
+    private void OnShowChanged(bool value)
+    {
+        if (!value)
+        {
+            AboutModalService.Hide();
+        }
+    }
+
+    public void Dispose()
+    {
+        AboutModalService.OnChange -= OnServiceChange;
+    }
+}
