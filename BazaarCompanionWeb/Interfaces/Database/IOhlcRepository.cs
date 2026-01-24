@@ -7,6 +7,12 @@ public interface IOhlcRepository
 {
     Task RecordTicksAsync(IEnumerable<(string ProductKey, double BuyPrice, double SellPrice, long BuyVolume, long SellVolume)> ticks, CancellationToken ct = default);
     Task<List<OhlcDataPoint>> GetCandlesAsync(string productKey, CandleInterval interval, int limit = 100, CancellationToken ct = default);
+    
+    /// <summary>
+    /// Get candles before a specific timestamp (for backward pagination/lazy loading)
+    /// </summary>
+    Task<List<OhlcDataPoint>> GetCandlesBeforeAsync(string productKey, CandleInterval interval, DateTime before, int limit = 100, CancellationToken ct = default);
+    
     Task<List<EFPriceTick>> GetTicksForAggregationAsync(string productKey, DateTime since, CancellationToken ct = default);
     Task SaveCandlesAsync(IEnumerable<EFOhlcCandle> candles, CancellationToken ct = default);
     Task<DateTime?> GetLatestCandleTimeAsync(string productKey, CandleInterval interval, CancellationToken ct = default);

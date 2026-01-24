@@ -224,7 +224,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
 
         try
         {
-            var ohlcData = await OhlcRepository.GetCandlesAsync(Product.ItemId, Interval);
+            // Load initial 200 candles (more data loads lazily when user pans left)
+            var ohlcData = await OhlcRepository.GetCandlesAsync(Product.ItemId, Interval, limit: 200);
             
             if (ohlcData.Count == 0)
             {
@@ -274,11 +275,16 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 volume = c.Volume
             }).ToList();
 
-            // Create the KLineChart (VOL and MACD are added via layout)
+            // Create the KLineChart with lazy loading support
+            // Pass productKey and interval for API-based historical data loading
             await _chartModule.InvokeVoidAsync("createKLineChart", 
                 $"chart-container-{_chartId}", 
                 ohlcDataForKLine,
-                new { productName = Product.ItemFriendlyName });
+                new { 
+                    productName = Product.ItemFriendlyName,
+                    productKey = Product.ItemId,
+                    interval = (int)Interval
+                });
             
             // Mark as initialized - do NOT call StateHasChanged here to avoid render loop
             if (!_chartInitialized)

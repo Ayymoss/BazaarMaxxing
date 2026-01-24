@@ -3,6 +3,7 @@ using System.Text.Json;
 using BazaarCompanionWeb.Components;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
+using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Interfaces.Api;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -127,6 +128,45 @@ public class Program
             .AddInteractiveServerRenderMode();
 
         app.MapHub<ProductHub>("/hubs/products");
+
+        // Chart data API for lazy loading historical candles
+        app.MapGet("/api/chart/{productKey}/{interval:int}", async (
+            string productKey,
+            int interval,
+            long? before,
+            int? limit,
+            IOhlcRepository ohlcRepository,
+            CancellationToken ct) =>
+        {
+            var candleInterval = (CandleInterval)interval;
+            var dataLimit = Math.Min(limit ?? 200, 500); // Cap at 500 per request
+            
+            List<OhlcDataPoint> candles;
+            if (before.HasValue)
+            {
+                // Load historical data before the specified timestamp
+                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
+                candles = await ohlcRepository.GetCandlesBeforeAsync(productKey, candleInterval, beforeTime, dataLimit, ct);
+            }
+            else
+            {
+                // Initial load - get most recent candles
+                candles = await ohlcRepository.GetCandlesAsync(productKey, candleInterval, dataLimit, ct);
+            }
+            
+            // Return in KLineChart format (timestamp in milliseconds)
+            var result = candles.Select(c => new
+            {
+                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
+                open = c.Open,
+                high = c.High,
+                low = c.Low,
+                close = c.Close,
+                volume = c.Volume
+            }).ToList();
+            
+            return Results.Ok(result);
+        });
 
         app.Run();
         Log.CloseAndFlush();

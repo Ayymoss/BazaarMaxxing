@@ -52,6 +52,28 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
         return candles;
     }
 
+    public async Task<List<OhlcDataPoint>> GetCandlesBeforeAsync(
+        string productKey,
+        CandleInterval interval,
+        DateTime before,
+        int limit = 100,
+        CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        // Get candles BEFORE the specified timestamp, ordered chronologically
+        var candles = await context.OhlcCandles
+            .AsNoTracking()
+            .Where(c => c.ProductKey == productKey && c.Interval == interval && c.PeriodStart < before)
+            .OrderByDescending(c => c.PeriodStart)
+            .Take(limit)
+            .OrderBy(c => c.PeriodStart)
+            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread))
+            .ToListAsync(ct);
+
+        return candles;
+    }
+
     public async Task<List<EFPriceTick>> GetTicksForAggregationAsync(
         string productKey,
         DateTime since,
