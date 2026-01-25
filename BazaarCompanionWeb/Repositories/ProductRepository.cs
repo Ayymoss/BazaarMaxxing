@@ -32,7 +32,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 Meta = new EFProductMeta
                 {
                     ProfitMultiplier = x.Meta.ProfitMultiplier,
-                    Margin = x.Meta.Margin,
+                    Spread = x.Meta.Spread,
                     TotalWeekVolume = x.Meta.TotalWeekVolume,
                     FlipOpportunityScore = x.Meta.FlipOpportunityScore,
                     IsManipulated = x.Meta.IsManipulated,
@@ -44,28 +44,28 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 [
                     new EFPriceSnapshot
                     {
-                        BuyUnitPrice = x.Buy.UnitPrice,
-                        SellUnitPrice = x.Sell.UnitPrice,
+                        BidUnitPrice = x.Bid.UnitPrice,
+                        AskUnitPrice = x.Ask.UnitPrice,
                         Taken = DateOnly.FromDateTime(timeNow),
                         ProductKey = x.ProductKey
                     }
                 ],
-                Buy = new EFBuyMarketData
+                Bid = new EFBidMarketData
                 {
-                    UnitPrice = x.Buy.UnitPrice,
-                    OrderVolumeWeek = x.Buy.OrderVolumeWeek,
-                    OrderVolume = x.Buy.OrderVolume,
-                    OrderCount = x.Buy.OrderCount,
-                    BookValue = x.Buy.BookValue,
+                    UnitPrice = x.Bid.UnitPrice,
+                    OrderVolumeWeek = x.Bid.OrderVolumeWeek,
+                    OrderVolume = x.Bid.OrderVolume,
+                    OrderCount = x.Bid.OrderCount,
+                    BookValue = x.Bid.BookValue,
                     ProductKey = x.ProductKey
                 },
-                Sell = new EFSellMarketData
+                Ask = new EFAskMarketData
                 {
-                    UnitPrice = x.Sell.UnitPrice,
-                    OrderVolumeWeek = x.Sell.OrderVolumeWeek,
-                    OrderVolume = x.Sell.OrderVolume,
-                    OrderCount = x.Sell.OrderCount,
-                    BookValue = x.Sell.BookValue,
+                    UnitPrice = x.Ask.UnitPrice,
+                    OrderVolumeWeek = x.Ask.OrderVolumeWeek,
+                    OrderVolume = x.Ask.OrderVolume,
+                    OrderCount = x.Ask.OrderCount,
+                    BookValue = x.Ask.BookValue,
                     ProductKey = x.ProductKey
                 },
             });
@@ -75,8 +75,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         var existingProducts = await context.Products
             .Include(x => x.Snapshots)
             .Include(x => x.Meta)
-            .Include(x => x.Buy)
-            .Include(x => x.Sell)
+            .Include(x => x.Bid)
+            .Include(x => x.Ask)
             .Where(x => test.Contains(x.ProductKey))
             // Get 2 days of EMA
             .Where(x => x.Snapshots.Any(y => y.Taken >= DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date)))
@@ -111,23 +111,23 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
 
                 // Map Meta properties
                 product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
-                product.Meta.Margin = incomingProduct.Meta.Margin;
+                product.Meta.Spread = incomingProduct.Meta.Spread;
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
                 product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
 
-                // Map Buy properties
-                product.Buy.UnitPrice = incomingProduct.Buy.UnitPrice;
-                product.Buy.OrderVolumeWeek = incomingProduct.Buy.OrderVolumeWeek;
-                product.Buy.OrderVolume = incomingProduct.Buy.OrderVolume;
-                product.Buy.OrderCount = incomingProduct.Buy.OrderCount;
-                product.Buy.BookValue = incomingProduct.Buy.BookValue;
+                // Map Bid properties
+                product.Bid.UnitPrice = incomingProduct.Bid.UnitPrice;
+                product.Bid.OrderVolumeWeek = incomingProduct.Bid.OrderVolumeWeek;
+                product.Bid.OrderVolume = incomingProduct.Bid.OrderVolume;
+                product.Bid.OrderCount = incomingProduct.Bid.OrderCount;
+                product.Bid.BookValue = incomingProduct.Bid.BookValue;
 
-                // Map Sell properties
-                product.Sell.UnitPrice = incomingProduct.Sell.UnitPrice;
-                product.Sell.OrderVolumeWeek = incomingProduct.Sell.OrderVolumeWeek;
-                product.Sell.OrderVolume = incomingProduct.Sell.OrderVolume;
-                product.Sell.OrderCount = incomingProduct.Sell.OrderCount;
-                product.Sell.BookValue = incomingProduct.Sell.BookValue;
+                // Map Ask properties
+                product.Ask.UnitPrice = incomingProduct.Ask.UnitPrice;
+                product.Ask.OrderVolumeWeek = incomingProduct.Ask.OrderVolumeWeek;
+                product.Ask.OrderVolume = incomingProduct.Ask.OrderVolume;
+                product.Ask.OrderCount = incomingProduct.Ask.OrderCount;
+                product.Ask.BookValue = incomingProduct.Ask.BookValue;
 
                 // Snapshots are intentionally NOT mapped (preserved from existing product)
 
@@ -135,8 +135,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 {
                     product.Snapshots.Add(new EFPriceSnapshot
                     {
-                        BuyUnitPrice = incomingProduct.Buy.UnitPrice,
-                        SellUnitPrice = incomingProduct.Sell.UnitPrice,
+                        BidUnitPrice = incomingProduct.Bid.UnitPrice,
+                        AskUnitPrice = incomingProduct.Ask.UnitPrice,
                         Taken = todayDate,
                         ProductKey = product.ProductKey,
                     });
@@ -147,8 +147,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
 
                     product.Snapshots.Add(new EFPriceSnapshot
                     {
-                        BuyUnitPrice = (incomingProduct.Buy.UnitPrice - yesterday.BuyUnitPrice) * alpha + yesterday.BuyUnitPrice,
-                        SellUnitPrice = (incomingProduct.Sell.UnitPrice - yesterday.SellUnitPrice) * alpha + yesterday.SellUnitPrice,
+                        BidUnitPrice = (incomingProduct.Bid.UnitPrice - yesterday.BidUnitPrice) * alpha + yesterday.BidUnitPrice,
+                        AskUnitPrice = (incomingProduct.Ask.UnitPrice - yesterday.AskUnitPrice) * alpha + yesterday.AskUnitPrice,
                         Taken = todayDate,
                         ProductKey = product.ProductKey,
                     });
@@ -157,8 +157,8 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 {
                     var today = product.Snapshots.First(x => x.Taken == todayDate);
 
-                    today.BuyUnitPrice = (incomingProduct.Buy.UnitPrice - today.BuyUnitPrice) * alpha + today.BuyUnitPrice;
-                    today.SellUnitPrice = (incomingProduct.Sell.UnitPrice - today.SellUnitPrice) * alpha + today.SellUnitPrice;
+                    today.BidUnitPrice = (incomingProduct.Bid.UnitPrice - today.BidUnitPrice) * alpha + today.BidUnitPrice;
+                    today.AskUnitPrice = (incomingProduct.Ask.UnitPrice - today.AskUnitPrice) * alpha + today.AskUnitPrice;
                 }
             }
 
@@ -199,22 +199,22 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         var product = await context.Products.Where(x => x.ProductKey == productKey)
             .Select(x => new ProductDataInfo
             {
-                BuyMarketDataId = x.Buy.Id,
-                SellMarketDataId = x.Sell.Id,
+                BidMarketDataId = x.Bid.Id,
+                AskMarketDataId = x.Ask.Id,
                 ItemId = x.ProductKey,
                 ItemFriendlyName = x.FriendlyName,
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
-                BuyOrderUnitPrice = x.Buy.UnitPrice,
-                BuyOrderWeekVolume = x.Buy.OrderVolumeWeek,
-                BuyOrderCurrentOrders = x.Buy.OrderCount,
-                BuyOrderCurrentVolume = x.Buy.OrderVolume,
-                SellOrderUnitPrice = x.Sell.UnitPrice,
-                SellOrderWeekVolume = x.Sell.OrderVolumeWeek,
-                SellOrderCurrentOrders = x.Sell.OrderCount,
-                SellOrderCurrentVolume = x.Sell.OrderVolume,
+                BidUnitPrice = x.Bid.UnitPrice,
+                BidWeekVolume = x.Bid.OrderVolumeWeek,
+                BidCurrentOrders = x.Bid.OrderCount,
+                BidCurrentVolume = x.Bid.OrderVolume,
+                AskUnitPrice = x.Ask.UnitPrice,
+                AskWeekVolume = x.Ask.OrderVolumeWeek,
+                AskCurrentOrders = x.Ask.OrderCount,
+                AskCurrentVolume = x.Ask.OrderVolume,
                 OrderMetaPotentialProfitMultiplier = x.Meta.ProfitMultiplier,
-                OrderMetaMargin = x.Meta.Margin,
+                OrderMetaSpread = x.Meta.Spread,
                 OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
                 OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
                 IsManipulated = x.Meta.IsManipulated,
@@ -224,12 +224,12 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
 
         product.PriceHistory = await GetPriceHistoryAsync(product.ItemId, cancellationToken);
 
-        product.BuyBook = (await GetOrderBookAsync(product.BuyMarketDataId, cancellationToken))
-            .OrderBy(y => y.UnitPrice)
+        product.BidBook = (await GetOrderBookAsync(product.BidMarketDataId, cancellationToken))
+            .OrderByDescending(y => y.UnitPrice) // Bids: Highest first
             .ToList();
 
-        product.SellBook = (await GetOrderBookAsync(product.SellMarketDataId, cancellationToken))
-            .OrderByDescending(y => y.UnitPrice)
+        product.AskBook = (await GetOrderBookAsync(product.AskMarketDataId, cancellationToken))
+            .OrderBy(y => y.UnitPrice) // Asks: Lowest first
             .ToList();
 
         return product;
@@ -242,7 +242,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             .Where(x => x.ProductKey == productKey)
             .Where(x => DateOnly.FromDateTime(DateTime.Now.AddDays(-64)) < x.Taken)
             .GroupBy(x => x.Taken)
-            .Select(x => new PriceHistorySnapshot(x.Key, x.Max(y => y.BuyUnitPrice), x.Max(y => y.SellUnitPrice)))
+            .Select(x => new PriceHistorySnapshot(x.Key, x.Max(y => y.BidUnitPrice), x.Max(y => y.AskUnitPrice)))
             .ToListAsync(cancellationToken);
         return snapshots;
     }
@@ -253,14 +253,14 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             .AsNoTracking()
             .Select(x => new ProductDataInfo
             {
-                BuyMarketDataId = x.Buy.Id,
-                SellMarketDataId = x.Sell.Id,
+                BidMarketDataId = x.Bid.Id,
+                AskMarketDataId = x.Ask.Id,
                 ItemId = x.ProductKey,
                 ItemFriendlyName = x.FriendlyName,
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
-                BuyOrderUnitPrice = x.Buy.UnitPrice,
-                SellOrderUnitPrice = x.Sell.UnitPrice,
+                BidUnitPrice = x.Bid.UnitPrice,
+                AskUnitPrice = x.Ask.UnitPrice,
             }).ToListAsync(cancellationToken);
     }
 

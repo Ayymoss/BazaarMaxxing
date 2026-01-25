@@ -34,7 +34,7 @@
         <!-- Value Display -->
         <div class="text-center">
             <span class="text-2xl font-bold" style="color: @GetGaugeColor()">
-                @((Imbalance.ImbalanceRatio * 100).ToString("F1"))%
+                @((Imbalance.ImbalanceRatio).ToString("P2"))
             </span>
             <div class="text-[10px] text-slate-500 mt-1">
                 @GetTrendLabel()
@@ -44,19 +44,19 @@
         <!-- Buy/Sell Comparison -->
         <div class="flex items-center gap-4 mt-2 text-xs">
             <div class="flex flex-col items-center">
-                <span class="text-green-400 font-mono">@Imbalance.BuyPressurePercent.ToString("F1")%</span>
-                <span class="text-slate-500 text-[10px]">Buy</span>
+                <span class="text-emerald-400 font-mono">@Imbalance.BidPressurePercent.ToString("P2")</span>
+                <span class="text-slate-500 text-[10px]">Bid</span>
             </div>
             <div class="flex flex-col items-center">
-                <span class="text-red-400 font-mono">@Imbalance.SellPressurePercent.ToString("F1")%</span>
-                <span class="text-slate-500 text-[10px]">Sell</span>
+                <span class="text-rose-400 font-mono">@Imbalance.AskPressurePercent.ToString("P2")</span>
+                <span class="text-slate-500 text-[10px]">Ask</span>
             </div>
         </div>
 
         <!-- Volume Totals -->
         <div class="flex items-center gap-4 mt-1 text-[10px] text-slate-500">
-            <span>Buy Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalBuyVolume.ToString("N0")</span></span>
-            <span>Sell Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalSellVolume.ToString("N0")</span></span>
+            <span>Bid Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalBidVolume.ToString("N0")</span></span>
+            <span>Ask Vol: <span class="text-slate-400 font-mono">@Imbalance.TotalAskVolume.ToString("N0")</span></span>
         </div>
     }
     else

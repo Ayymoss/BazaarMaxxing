@@ -2,7 +2,7 @@
 
 namespace BazaarCompanionWeb.Models.Api.Bazaar;
 
-public class OrderSummary
+public class OrderBookEntry
 {
     [JsonPropertyName("amount")]
     public int Amount { get; set; }
@@ -11,5 +11,5 @@ public class OrderSummary
     public double PricePerUnit { get; set; }
 
     [JsonPropertyName("orders")]
-    public int Orders { get; set; }
+    public int OrderCount { get; set; }
 }

@@ -70,8 +70,8 @@ public partial class Product(
                 product.PriceHistory = _product.PriceHistory;
                 
                 // Only update books if the incoming data has them
-                product.BuyBook ??= _product.BuyBook;
-                product.SellBook ??= _product.SellBook;
+                product.BidBook ??= _product.BidBook;
+                product.AskBook ??= _product.AskBook;
             }
             
             _product = product;
@@ -133,7 +133,7 @@ public partial class Product(
             _lastServerRefresh = timeCache.LastUpdated;
 
             // Load order book analysis if we have order book data
-            if (_product?.BuyBook is not null && _product.SellBook is not null)
+            if (_product?.BidBook is not null && _product.AskBook is not null)
             {
                 _orderBookAnalysis = await orderBookAnalysisService.AnalyzeAsync(ProductKey, ct);
             }
@@ -152,18 +152,18 @@ public partial class Product(
         }
     }
 
-    private (double Buy, double Sell) GetLastPriceHistoryAverage()
+    private (double Bid, double Ask) GetLastPriceHistoryAverage()
     {
-        var buy = 0d;
-        var sell = 0d;
+        var bid = 0d;
+        var ask = 0d;
 
         if (_product?.PriceHistory is not null)
         {
-            buy = _product.PriceHistory.OrderByDescending(x => x.Date).First().Buy;
-            sell = _product.PriceHistory.OrderByDescending(x => x.Date).First().Sell;
+            bid = _product.PriceHistory.OrderByDescending(x => x.Date).First().Bid;
+            ask = _product.PriceHistory.OrderByDescending(x => x.Date).First().Ask;
         }
 
-        return (buy, sell);
+        return (bid, ask);
     }
 
     private void ToggleOrderBookAnalysis()

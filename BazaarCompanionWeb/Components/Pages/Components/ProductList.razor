@@ -140,12 +140,12 @@
                     </div>
                 </TemplateColumn>
 
-                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.BuyOrderUnitPrice)" Sortable="true"
-                                Title="Bid" Format="C1" Class="font-mono text-slate-200"/>
-                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaMargin)" Sortable="true"
-                                Title="Spread" Format="C1" Class="font-mono text-slate-400"/>
-                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.SellOrderUnitPrice)" Sortable="true"
-                                Title="Ask" Format="C1" Class="font-mono text-slate-200"/>
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.BidUnitPrice)" Sortable="true"
+                                Title="Bid" Format="C2" Class="font-mono text-emerald-400"/>
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaSpread)" Sortable="true"
+                                Title="Spread" Format="C2" Class="font-mono text-slate-400"/>
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.AskUnitPrice)" Sortable="true"
+                                Title="Ask" Format="C2" Class="font-mono text-rose-400"/>
 
                 <TemplateColumn Title="Profit x"
                                 SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.OrderMetaPotentialProfitMultiplier))">
@@ -170,10 +170,10 @@
 
                 <TemplateColumn Title="Orders (A/B)" Class="hidden xl:table-cell">
                     <div class="flex flex-col gap-px text-[10px] text-slate-500 text-right">
-                        <div class="flex justify-end gap-1.5"><span class="text-slate-600">Bid:</span> <span
-                                class="text-slate-300">@context.BuyOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
-                        <div class="flex justify-end gap-1.5"><span class="text-slate-600">Ask:</span> <span
-                                class="text-slate-300">@context.SellOrderCurrentOrders.ToMetric(decimals: 1)</span></div>
+                        <div class="flex justify-end gap-1.5"><span class="text-rose-500/80">Ask:</span> <span
+                                class="text-rose-400">@context.AskCurrentOrders.ToMetric(decimals: 1)</span></div>
+                        <div class="flex justify-end gap-1.5"><span class="text-emerald-500/80">Bid:</span> <span
+                                class="text-emerald-400">@context.BidCurrentOrders.ToMetric(decimals: 1)</span></div>
                     </div>
                 </TemplateColumn>
             </QuickGrid>

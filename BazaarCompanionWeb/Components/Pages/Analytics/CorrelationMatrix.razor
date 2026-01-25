@@ -93,7 +93,7 @@
                              style="background-color: @bgColor; min-height: 24px;"
                              title="@($"{rowName} ↔ {colKey}: {correlation:F3}")">
                             <div class="absolute inset-0 flex items-center justify-center text-[8px] font-mono text-white/80 opacity-0 group-hover:opacity-100 transition-opacity">
-                                @correlation.ToString("F2")
+                                @correlation.ToString("P2")
                             </div>
                         </div>
                     }

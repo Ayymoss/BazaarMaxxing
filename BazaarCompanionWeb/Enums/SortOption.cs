@@ -6,9 +6,9 @@ public enum SortOption
     Margin,
     TotalMovingVolume,
     SellMovingWeek,
-    BuyMovingWeek,
-    BuyPrice,
+    BidMovingWeek,
+    BidPrice,
     SellPrice,
     PotentialProfitMultiplier,
-    BuyOrderPower
+    BidOrderPower
 }

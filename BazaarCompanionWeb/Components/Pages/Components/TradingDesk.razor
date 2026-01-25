@@ -1,30 +1,36 @@
-@using BazaarCompanionWeb.Dtos
-
 @{
-    // Buy Calculations
-    double buyPrice = Product.BuyOrderUnitPrice ?? 0;
-    double buyDiff = BuyAverage > 0 ? ((buyPrice - BuyAverage) / BuyAverage) * 100 : 0;
-    string buySign = buyDiff > 0 ? "+" : "";
-    string buyColor = buyDiff >= 0 ? "text-emerald-400" : "text-rose-400";
+    // Bid Calculations (was Buy)
+    var bidPrice = Product.BidUnitPrice ?? 0;
+    var bidDiff = BidAverage > 0 ? (bidPrice - BidAverage) / BidAverage : 0;
+    var bidSign = bidDiff > 0 ? "+" : "";
+    var bidColor = bidDiff >= 0 ? "text-emerald-400" : "text-rose-400";
 
-    // Sell Calculations
-    double sellPrice = Product.SellOrderUnitPrice ?? 0;
-    double sellDiff = SellAverage > 0 ? ((sellPrice - SellAverage) / SellAverage) * 100 : 0;
-    string sellSign = sellDiff > 0 ? "+" : "";
-    string sellColor = sellDiff >= 0 ? "text-emerald-400" : "text-rose-400";
+    // Ask Calculations (was Sell)
+    var askPrice = Product.AskUnitPrice ?? 0;
+    var askDiff = AskAverage > 0 ? (askPrice - AskAverage) / AskAverage : 0;
+    var askSign = askDiff > 0 ? "+" : "";
+    var askColor = askDiff >= 0 ? "text-emerald-400" : "text-rose-400";
 
-    var spreadPercent = (Product.OrderMetaMargin / Product.BuyOrderUnitPrice) * 100;
+    var bestAskSize = Product.AskBook?.FirstOrDefault()?.Amount ?? 0;
+    var bestBidSize = Product.BidBook?.FirstOrDefault()?.Amount ?? 0;
+    var spreadPercent = Product.OrderMetaSpread / bidPrice;
 }
+
 <div class="grid grid-cols-1 md:grid-cols-12 gap-4">
 
-    <!-- 1. BUY CARD (Bid) -->
+    <!-- 1. BID CARD (Left) -->
     <div
         class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-emerald-500/30 bg-gradient-to-br from-emerald-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-emerald-500/50">
         <div class="flex justify-between items-start">
             <div>
-                <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price (Buy)</p>
-                <div class="text-3xl font-black tracking-tight text-emerald-400">
-                    @((Product.BuyOrderUnitPrice ?? 0).ToString("N2"))
+                <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price</p>
+                <div class="flex items-baseline gap-2">
+                    <div class="text-3xl font-black tracking-tight text-emerald-400">
+                        @((Product.BidUnitPrice ?? 0).ToString("N2"))
+                    </div>
+                    <div class="text-sm font-mono text-emerald-500/60">
+                        × @bestBidSize.ToString("N0")
+                    </div>
                 </div>
             </div>
             <!-- Icon/indicator -->
@@ -36,9 +42,9 @@
         </div>
         <!-- Historical Context -->
         <div class="mt-4 flex items-center justify-between text-xs font-medium">
-            <span class="text-emerald-600/80">Avg: @BuyAverage.ToString("N2")</span>
-            <span class="@buyColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
-                @buySign@buyDiff.ToString("F2")%
+            <span class="text-emerald-600/80">Avg: @BidAverage.ToString("N2")</span>
+            <span class="@bidColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
+                @bidSign@bidDiff.ToString("P2")
             </span>
         </div>
     </div>
@@ -48,22 +54,27 @@
         class="md:col-span-2 flex flex-col justify-center items-center rounded-2xl border border-slate-700 bg-slate-800/60 p-4 shadow-inner text-center">
         <p class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Spread</p>
         <div class="text-xl font-bold text-white my-1">
-            @Product.OrderMetaMargin.ToString("N2")
+            @Product.OrderMetaSpread.ToString("N2")
         </div>
         <!-- Margin Badge -->
         <span class="inline-flex items-center rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-300">
-            @(spreadPercent?.ToString("F2"))%
+            @(spreadPercent.ToString("P2"))
         </span>
     </div>
 
-    <!-- 3. SELL CARD (Ask) -->
+    <!-- 3. ASK CARD (Right) -->
     <div
         class="md:col-span-5 relative group overflow-hidden rounded-2xl border border-rose-500/30 bg-gradient-to-br from-rose-900/20 to-slate-900/50 p-5 shadow-lg backdrop-blur-sm transition-all hover:border-rose-500/50">
         <div class="flex justify-between items-start">
             <div>
-                <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price (Sell)</p>
-                <div class="text-3xl font-black tracking-tight text-rose-400">
-                    @((Product.SellOrderUnitPrice ?? 0).ToString("N2"))
+                <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price</p>
+                <div class="flex items-baseline gap-2">
+                    <div class="text-3xl font-black tracking-tight text-rose-400">
+                        @((Product.AskUnitPrice ?? 0).ToString("N2"))
+                    </div>
+                    <div class="text-sm font-mono text-rose-500/60">
+                        × @bestAskSize.ToString("N0")
+                    </div>
                 </div>
             </div>
             <div class="p-2 rounded-lg bg-rose-500/10 text-rose-400">
@@ -73,9 +84,9 @@
             </div>
         </div>
         <div class="mt-4 flex items-center justify-between text-xs font-medium">
-            <span class="text-rose-600/80">Avg: @SellAverage.ToString("N2")</span>
-            <span class="@sellColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
-                @sellSign@sellDiff.ToString("F2")%
+            <span class="text-rose-600/80">Avg: @AskAverage.ToString("N2")</span>
+            <span class="@askColor bg-slate-950/30 px-2 py-0.5 rounded-md border border-slate-700/50">
+                @askSign@askDiff.ToString("P2")
             </span>
         </div>
     </div>

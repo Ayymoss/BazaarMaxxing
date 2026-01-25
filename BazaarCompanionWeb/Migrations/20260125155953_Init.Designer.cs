@@ -11,7 +11,7 @@ using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 namespace BazaarCompanionWeb.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20260122133353_Init")]
+    [Migration("20260125155953_Init")]
     partial class Init
     {
         /// <inheritdoc />
@@ -87,6 +87,8 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("Interval", "PeriodStart");
+
                     b.HasIndex("ProductKey", "Interval", "PeriodStart");
 
                     b.ToTable("EFOhlcCandles", (string)null);
@@ -98,10 +100,16 @@ namespace BazaarCompanionWeb.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("BuyOrderCount")
+                    b.Property<int>("AskOrderCount")
                         .HasColumnType("INTEGER");
 
-                    b.Property<int>("BuyVolume")
+                    b.Property<int>("AskVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BidOrderCount")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<int>("BidVolume")
                         .HasColumnType("INTEGER");
 
                     b.Property<double>("PriceLevel")
@@ -111,12 +119,6 @@ namespace BazaarCompanionWeb.Migrations
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
-
-                    b.Property<int>("SellOrderCount")
-                        .HasColumnType("INTEGER");
-
-                    b.Property<int>("SellVolume")
-                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("TEXT");
@@ -136,16 +138,16 @@ namespace BazaarCompanionWeb.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("BuyUnitPrice")
+                    b.Property<double>("AskUnitPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("BidUnitPrice")
                         .HasColumnType("REAL");
 
                     b.Property<string>("ProductKey")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
-
-                    b.Property<double>("SellUnitPrice")
-                        .HasColumnType("REAL");
 
                     b.Property<DateOnly>("Taken")
                         .HasColumnType("TEXT");
@@ -163,22 +165,22 @@ namespace BazaarCompanionWeb.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
-                    b.Property<double>("BuyPrice")
+                    b.Property<double>("AskPrice")
                         .HasColumnType("REAL");
 
-                    b.Property<long>("BuyVolume")
+                    b.Property<long>("AskVolume")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<double>("BidPrice")
+                        .HasColumnType("REAL");
+
+                    b.Property<long>("BidVolume")
                         .HasColumnType("INTEGER");
 
                     b.Property<string>("ProductKey")
                         .IsRequired()
                         .HasMaxLength(64)
                         .HasColumnType("TEXT");
-
-                    b.Property<double>("SellPrice")
-                        .HasColumnType("REAL");
-
-                    b.Property<long>("SellVolume")
-                        .HasColumnType("INTEGER");
 
                     b.Property<DateTime>("Timestamp")
                         .HasColumnType("TEXT");
@@ -227,9 +229,6 @@ namespace BazaarCompanionWeb.Migrations
                     b.Property<double>("ManipulationIntensity")
                         .HasColumnType("REAL");
 
-                    b.Property<double>("Margin")
-                        .HasColumnType("REAL");
-
                     b.Property<double>("PriceDeviationPercent")
                         .HasColumnType("REAL");
 
@@ -239,6 +238,9 @@ namespace BazaarCompanionWeb.Migrations
                         .HasColumnType("TEXT");
 
                     b.Property<double>("ProfitMultiplier")
+                        .HasColumnType("REAL");
+
+                    b.Property<double>("Spread")
                         .HasColumnType("REAL");
 
                     b.Property<double>("TotalWeekVolume")
@@ -252,7 +254,7 @@ namespace BazaarCompanionWeb.Migrations
                     b.ToTable("EFProductMetas", (string)null);
                 });
 
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFBuyMarketData", b =>
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFAskMarketData", b =>
                 {
                     b.HasBaseType("BazaarCompanionWeb.Entities.EFMarketData");
 
@@ -264,10 +266,10 @@ namespace BazaarCompanionWeb.Migrations
                     b.HasIndex("ProductKey")
                         .IsUnique();
 
-                    b.ToTable("EFBuyMarketData", (string)null);
+                    b.ToTable("EFAskMarketData", (string)null);
                 });
 
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFSellMarketData", b =>
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFBidMarketData", b =>
                 {
                     b.HasBaseType("BazaarCompanionWeb.Entities.EFMarketData");
 
@@ -279,7 +281,7 @@ namespace BazaarCompanionWeb.Migrations
                     b.HasIndex("ProductKey")
                         .IsUnique();
 
-                    b.ToTable("EFSellMarketData", (string)null);
+                    b.ToTable("EFBidMarketData", (string)null);
                 });
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFOhlcCandle", b =>
@@ -326,34 +328,34 @@ namespace BazaarCompanionWeb.Migrations
                     b.Navigation("Product");
                 });
 
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFBuyMarketData", b =>
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFAskMarketData", b =>
                 {
                     b.HasOne("BazaarCompanionWeb.Entities.EFMarketData", null)
                         .WithOne()
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBuyMarketData", "Id")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFAskMarketData", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
-                        .WithOne("Buy")
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBuyMarketData", "ProductKey")
+                        .WithOne("Ask")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFAskMarketData", "ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Product");
                 });
 
-            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFSellMarketData", b =>
+            modelBuilder.Entity("BazaarCompanionWeb.Entities.EFBidMarketData", b =>
                 {
                     b.HasOne("BazaarCompanionWeb.Entities.EFMarketData", null)
                         .WithOne()
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFSellMarketData", "Id")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBidMarketData", "Id")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.HasOne("BazaarCompanionWeb.Entities.EFProduct", "Product")
-                        .WithOne("Sell")
-                        .HasForeignKey("BazaarCompanionWeb.Entities.EFSellMarketData", "ProductKey")
+                        .WithOne("Bid")
+                        .HasForeignKey("BazaarCompanionWeb.Entities.EFBidMarketData", "ProductKey")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
@@ -362,13 +364,13 @@ namespace BazaarCompanionWeb.Migrations
 
             modelBuilder.Entity("BazaarCompanionWeb.Entities.EFProduct", b =>
                 {
-                    b.Navigation("Buy")
+                    b.Navigation("Ask")
+                        .IsRequired();
+
+                    b.Navigation("Bid")
                         .IsRequired();
 
                     b.Navigation("Meta")
-                        .IsRequired();
-
-                    b.Navigation("Sell")
                         .IsRequired();
 
                     b.Navigation("Snapshots");

@@ -9,7 +9,7 @@ namespace BazaarCompanionWeb.Repositories;
 public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOhlcRepository
 {
     public async Task RecordTicksAsync(
-        IEnumerable<(string ProductKey, double BuyPrice, double SellPrice, long BuyVolume, long SellVolume)> ticks,
+        IEnumerable<(string ProductKey, double BidPrice, double AskPrice, long BidVolume, long AskVolume)> ticks,
         CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);
@@ -20,11 +20,11 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             ..ticks.Select(t => new EFPriceTick
             {
                 ProductKey = t.ProductKey,
-                BuyPrice = t.BuyPrice,
-                SellPrice = t.SellPrice,
+                BidPrice = t.BidPrice,
+                AskPrice = t.AskPrice,
                 Timestamp = timestamp,
-                BuyVolume = t.BuyVolume,
-                SellVolume = t.SellVolume
+                BidVolume = t.BidVolume,
+                AskVolume = t.AskVolume
             })
         ];
 

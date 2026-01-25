@@ -4,11 +4,11 @@ namespace BazaarCompanionWeb.Dtos;
 /// Order book imbalance analysis results.
 /// </summary>
 public sealed record OrderBookImbalance(
-    double ImbalanceRatio,          // Range: -1 to +1 (sell pressure to buy pressure)
-    double TotalBuyVolume,
-    double TotalSellVolume,
-    double BuyPressurePercent,
-    double SellPressurePercent,
+    double ImbalanceRatio,          // Range: -1 to +1 (Ask pressure to Bid pressure)
+    double TotalBidVolume,
+    double TotalAskVolume,
+    double BidPressurePercent,
+    double AskPressurePercent,
     ImbalanceTrend Trend            // Improving, Worsening, Stable
 );
 
@@ -22,7 +22,7 @@ public sealed record WhaleOrder(
     int Amount,
     int Orders,
     double ZScore,                  // Standard deviations from mean
-    bool IsBuyOrder,
+    bool IsBidOrder,
     TimeSpan? Age                   // If timestamp data available
 );
 
@@ -42,7 +42,7 @@ public sealed record OrderBookDepthMetrics(
 public sealed record PriceWall(
     double Price,
     int Volume,
-    bool IsBuyWall,
+    bool IsBidWall,
     double PercentFromCurrent       // Distance from current price
 );
 
@@ -71,12 +71,12 @@ public sealed record OrderBookLevel(
 /// Order book statistics summary.
 /// </summary>
 public sealed record OrderBookStats(
-    int TotalBuyOrders,
-    int TotalSellOrders,
-    double AvgBuyOrderSize,
-    double AvgSellOrderSize,
-    double LargestBuyOrder,
-    double LargestSellOrder,
+    int TotalBidOrders,
+    int TotalAskOrders,
+    double AvgBidOrderSize,
+    double AvgAskOrderSize,
+    double LargestBidOrder,
+    double LargestAskOrder,
     double BestBid,
     double BestAsk,
     double Spread,

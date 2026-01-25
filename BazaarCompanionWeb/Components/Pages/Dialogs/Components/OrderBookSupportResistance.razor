@@ -8,20 +8,20 @@
     <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <!-- Resistance Levels -->
         <div class="flex flex-col gap-1">
-            <span class="text-[10px] text-red-400 uppercase tracking-wider font-semibold">Resistance</span>
+            <span class="text-[10px] text-rose-400 uppercase tracking-wider font-semibold">Resistance</span>
             @if (ResistanceLevels.Count > 0)
             {
                 @foreach (var level in ResistanceLevels.OrderByDescending(l => l.Price))
                 {
-                    <div class="flex items-center gap-2 p-2 rounded-lg bg-red-500/10 border border-red-900/20">
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-rose-500/10 border border-rose-900/20">
                         <div class="flex-1">
                             <span class="font-mono text-xs text-slate-300">@level.Price.ToString("N1")</span>
-                            <span class="text-[10px] text-slate-500 ml-2">(@level.PercentFromCurrent.ToString("+0.0;-0.0")%)</span>
+                            <span class="text-[10px] text-slate-500 ml-1">(@level.PercentFromCurrent.ToString("P2"))</span>
                         </div>
                         <div class="flex items-center gap-1">
                             <!-- Strength bar -->
                             <div class="w-12 h-1.5 rounded-full bg-slate-700 overflow-hidden">
-                                <div class="h-full bg-red-500 transition-all" style="width: @(level.Strength * 100)%"></div>
+                                <div class="h-full bg-rose-500 transition-all" style="width: @(level.Strength * 100)%"></div>
                             </div>
                             <span class="text-[10px] text-slate-500">@level.TotalVolume.ToString("N0")</span>
                         </div>
@@ -36,19 +36,19 @@
 
         <!-- Support Levels -->
         <div class="flex flex-col gap-1">
-            <span class="text-[10px] text-green-400 uppercase tracking-wider font-semibold">Support</span>
+            <span class="text-[10px] text-emerald-400 uppercase tracking-wider font-semibold">Support</span>
             @if (SupportLevels.Count > 0)
             {
                 @foreach (var level in SupportLevels.OrderByDescending(l => l.Price))
                 {
-                    <div class="flex items-center gap-2 p-2 rounded-lg bg-green-500/10 border border-green-900/20">
+                    <div class="flex items-center gap-2 p-2 rounded-lg bg-emerald-500/10 border border-emerald-900/20">
                         <div class="flex-1">
                             <span class="font-mono text-xs text-slate-300">@level.Price.ToString("N1")</span>
-                            <span class="text-[10px] text-slate-500 ml-2">(@level.PercentFromCurrent.ToString("+0.0;-0.0")%)</span>
+                            <span class="text-[10px] text-slate-500 ml-2">(@level.PercentFromCurrent.ToString("P2"))</span>
                         </div>
                         <div class="flex items-center gap-1">
                             <div class="w-12 h-1.5 rounded-full bg-slate-700 overflow-hidden">
-                                <div class="h-full bg-green-500 transition-all" style="width: @(level.Strength * 100)%"></div>
+                                <div class="h-full bg-emerald-500 transition-all" style="width: @(level.Strength * 100)%"></div>
                             </div>
                             <span class="text-[10px] text-slate-500">@level.TotalVolume.ToString("N0")</span>
                         </div>

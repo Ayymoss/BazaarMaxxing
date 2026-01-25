@@ -8,7 +8,7 @@ public sealed record EFProductMeta
     [Key] public int Id { get; set; }
 
     public required double ProfitMultiplier { get; set; }
-    public required double Margin { get; set; }
+    public required double Spread { get; set; }
     public required double TotalWeekVolume { get; set; }
     public required double FlipOpportunityScore { get; set; }
     public required bool IsManipulated { get; set; }

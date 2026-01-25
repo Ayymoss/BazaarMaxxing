@@ -17,11 +17,11 @@ public sealed record EFOrderBookSnapshot
 
     public required double PriceLevel { get; set; }
 
-    public required int BuyVolume { get; set; }
+    public required int BidVolume { get; set; }
 
-    public required int SellVolume { get; set; }
+    public required int AskVolume { get; set; }
 
-    public required int BuyOrderCount { get; set; }
+    public required int BidOrderCount { get; set; }
 
-    public required int SellOrderCount { get; set; }
+    public required int AskOrderCount { get; set; }
 }

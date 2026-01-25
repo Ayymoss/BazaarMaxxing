@@ -33,11 +33,11 @@ public class HyPixelService(
 
         // Record granular price ticks for OHLC chart with volume
         var ticks = products.Select(p => (
-            p.ItemId, 
-            p.Buy.OrderPrice, 
-            p.Sell.OrderPrice,
-            (long)p.Buy.CurrentVolume,
-            (long)p.Sell.CurrentVolume
+            p.ItemId,
+            p.Bid.OrderPrice,
+            p.Ask.OrderPrice,
+            (long)p.Bid.CurrentVolume,
+            (long)p.Ask.CurrentVolume
         ));
         await ohlcRepository.RecordTicksAsync(ticks, cancellationToken);
 
@@ -56,16 +56,16 @@ public class HyPixelService(
                 ItemFriendlyName = efProduct.FriendlyName,
                 ItemTier = efProduct.Tier,
                 ItemUnstackable = efProduct.Unstackable,
-                BuyOrderUnitPrice = efProduct.Buy.UnitPrice,
-                BuyOrderWeekVolume = efProduct.Buy.OrderVolumeWeek,
-                BuyOrderCurrentOrders = efProduct.Buy.OrderCount,
-                BuyOrderCurrentVolume = efProduct.Buy.OrderVolume,
-                SellOrderUnitPrice = efProduct.Sell.UnitPrice,
-                SellOrderWeekVolume = efProduct.Sell.OrderVolumeWeek,
-                SellOrderCurrentOrders = efProduct.Sell.OrderCount,
-                SellOrderCurrentVolume = efProduct.Sell.OrderVolume,
+                BidUnitPrice = efProduct.Bid.UnitPrice,
+                BidWeekVolume = efProduct.Bid.OrderVolumeWeek,
+                BidCurrentOrders = efProduct.Bid.OrderCount,
+                BidCurrentVolume = efProduct.Bid.OrderVolume,
+                AskUnitPrice = efProduct.Ask.UnitPrice,
+                AskWeekVolume = efProduct.Ask.OrderVolumeWeek,
+                AskCurrentOrders = efProduct.Ask.OrderCount,
+                AskCurrentVolume = efProduct.Ask.OrderVolume,
                 OrderMetaPotentialProfitMultiplier = efProduct.Meta.ProfitMultiplier,
-                OrderMetaMargin = efProduct.Meta.Margin,
+                OrderMetaSpread = efProduct.Meta.Spread,
                 OrderMetaTotalWeekVolume = efProduct.Meta.TotalWeekVolume,
                 OrderMetaFlipOpportunityScore = efProduct.Meta.FlipOpportunityScore,
                 IsManipulated = efProduct.Meta.IsManipulated,
@@ -73,63 +73,64 @@ public class HyPixelService(
                 PriceDeviationPercent = efProduct.Meta.PriceDeviationPercent,
                 // These are expensive to fetch and not strictly needed for the quick update, 
                 // but we should at least clear them or preserve if needed.
-                BuyMarketDataId = efProduct.Buy.Id,
-                SellMarketDataId = efProduct.Sell.Id,
-                BuyBook = product.Buy.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
-                SellBook = product.Sell.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
+                BidMarketDataId = efProduct.Bid.Id,
+                AskMarketDataId = efProduct.Ask.Id,
+                BidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
+                AskBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
             };
 
             await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("ProductUpdated", updateInfo, cancellationToken);
-            
+
             // Broadcast a tick for the chart with proper OHLC aggregation
             var liveTick = liveCandleTracker.UpdateAndGetTick(
                 efProduct.ProductKey,
-                efProduct.Buy.UnitPrice,
-                (double)(efProduct.Buy.OrderVolume + efProduct.Sell.OrderVolume));
-            
+                efProduct.Bid.UnitPrice,
+                efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
+
             await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, cancellationToken);
         }
     }
 
-    private async Task<IEnumerable<ProductData>> BuildProductDataAsync(BazaarResponse bazaarResponse, ItemResponse itemResponse, CancellationToken cancellationToken)
+    private async Task<IEnumerable<ProductData>> BuildProductDataAsync(BazaarResponse bazaarResponse, ItemResponse itemResponse,
+        CancellationToken cancellationToken)
     {
         var itemMap = itemResponse.Items.ToDictionary(x => x.Id, x => x);
 
         var productList = new List<ProductData>();
-        
-        foreach (var bazaar in bazaarResponse.Products.Values.Where(x => x.BuySummary.Count is not 0))
+
+        foreach (var bazaar in bazaarResponse.Products.Values.Where(x => x.Bids.Count is not 0))
         {
             var item = itemMap.GetValueOrDefault(bazaar.ProductId);
 
-            var buy = bazaar.BuySummary.FirstOrDefault();
-            var sell = bazaar.SellSummary.FirstOrDefault();
+            var ask = bazaar.Asks.FirstOrDefault();
+            var bid = bazaar.Bids.FirstOrDefault();
 
-            var buyOrderPrice = buy?.PricePerUnit ?? double.MaxValue;
-            var sellOrderPrice = Math.Round(sell?.PricePerUnit ?? 0.1f, 1, MidpointRounding.ToZero);
-            var buyMovingWeek = bazaar.QuickStatus.BuyMovingWeek;
-            var sellMovingWeek = bazaar.QuickStatus.SellMovingWeek;
+            var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
+            var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
+            var movingWeekSells = bazaar.Ticker.MovingWeekSells;
+            var movingWeekBuys = bazaar.Ticker.MovingWeekBuys;
 
-            var margin = buyOrderPrice - sellOrderPrice;
-            var totalWeekVolume = buyMovingWeek + sellMovingWeek;
-            var potentialProfitMultiplier = buyOrderPrice / sellOrderPrice;
-            var buyingPower = (float)buyMovingWeek / sellMovingWeek;
+            var spread = askOrderPrice - bidOrderPrice;
+            var totalWeekVolume = movingWeekSells + movingWeekBuys;
+            var potentialProfitMultiplier = askOrderPrice / bidOrderPrice;
+            var buyingPower = (float)movingWeekSells / movingWeekBuys;
 
             var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
 
             // Calculate opportunity score using the new service
             var flipOpportunityScore = await opportunityScoringService.CalculateOpportunityScoreAsync(
                 bazaar.ProductId,
-                buyOrderPrice,
-                sellOrderPrice,
-                buyMovingWeek,
-                sellMovingWeek,
+                askOrderPrice,
+                bidOrderPrice,
+                movingWeekSells,
+                movingWeekBuys,
                 cancellationToken);
 
             // Calculate manipulation score to detect fire sale opportunities
             var manipulationScore = await opportunityScoringService.CalculateManipulationScoreAsync(
                 bazaar.ProductId,
-                buyOrderPrice,
-                sellOrderPrice,
+                askOrderPrice,
+                bidOrderPrice,
                 cancellationToken);
 
             productList.Add(new ProductData
@@ -141,40 +142,40 @@ public class HyPixelService(
                     Tier = item?.Tier ?? ItemTier.Common,
                     Unstackable = item?.Unstackable ?? false
                 },
-                Buy = new OrderInfo
+                Bid = new OrderInfo
                 {
-                    Last = bazaar.QuickStatus.BuyPrice,
-                    OrderPrice = buyOrderPrice,
-                    WeekVolume = buyMovingWeek,
-                    CurrentOrders = bazaar.QuickStatus.BuyOrders,
-                    CurrentVolume = bazaar.QuickStatus.BuyVolume,
-                    OrderBook = bazaar.BuySummary.Select(x => new OrderBook
+                    Last = bazaar.Ticker.BestBidPrice,
+                    OrderPrice = bidOrderPrice,
+                    WeekVolume = movingWeekSells,
+                    CurrentOrders = bazaar.Ticker.ActiveBidOrders,
+                    CurrentVolume = bazaar.Ticker.TotalBidVolume,
+                    OrderBook = bazaar.Bids.Select(x => new OrderBook
                     {
                         UnitPrice = x.PricePerUnit,
-                        Orders = x.Orders,
+                        Orders = x.OrderCount,
                         Amount = x.Amount
                     })
                 },
-                Sell = new OrderInfo
+                Ask = new OrderInfo
                 {
-                    Last = bazaar.QuickStatus.SellPrice,
-                    OrderPrice = sellOrderPrice,
-                    WeekVolume = sellMovingWeek,
-                    CurrentOrders = bazaar.QuickStatus.SellOrders,
-                    CurrentVolume = bazaar.QuickStatus.SellVolume,
-                    OrderBook = bazaar.SellSummary.Select(x => new OrderBook
+                    Last = bazaar.Ticker.BestAskPrice,
+                    OrderPrice = askOrderPrice,
+                    WeekVolume = movingWeekBuys,
+                    CurrentOrders = bazaar.Ticker.ActiveAskOrders,
+                    CurrentVolume = bazaar.Ticker.TotalAskVolume,
+                    OrderBook = bazaar.Asks.Select(x => new OrderBook
                     {
                         UnitPrice = x.PricePerUnit,
-                        Orders = x.Orders,
+                        Orders = x.OrderCount,
                         Amount = x.Amount
                     })
                 },
                 OrderMeta = new OrderMeta
                 {
                     PotentialProfitMultiplier = potentialProfitMultiplier,
-                    Margin = margin,
+                    Spread = spread,
                     TotalWeekVolume = totalWeekVolume,
-                    BuyOrderPower = buyingPower,
+                    BidOrderPower = buyingPower,
                     FlipOpportunityScore = flipOpportunityScore,
                     IsManipulated = manipulationScore.IsManipulated,
                     ManipulationIntensity = manipulationScore.ManipulationIntensity,
@@ -182,7 +183,7 @@ public class HyPixelService(
                 }
             });
         }
-        
+
         return productList;
     }
 
@@ -195,5 +196,4 @@ public class HyPixelService(
         var baseName = string.Join(" ", nameParts).Humanize().Titleize();
         return $"{baseName} {level.ToRoman()}";
     }
-
 }

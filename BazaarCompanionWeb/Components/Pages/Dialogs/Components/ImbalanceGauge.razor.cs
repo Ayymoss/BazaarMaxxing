@@ -31,20 +31,20 @@ public partial class ImbalanceGauge
         var ratio = Imbalance?.ImbalanceRatio ?? 0;
         var normalized = (ratio + 1) / 2; // Convert -1..1 to 0..1
         var offset = ArcLength * (1 - normalized);
-        return offset.ToString("F2");
+        return offset.ToString("P2");
     }
 
     private string GetNeedleX()
     {
         var ratio = Imbalance?.ImbalanceRatio ?? 0;
         var angle = Math.PI * (1 - (ratio + 1) / 2); // Map to 0..π
-        return (50 + 35 * Math.Cos(angle)).ToString("F2");
+        return (50 + 35 * Math.Cos(angle)).ToString("P2");
     }
 
     private string GetNeedleY()
     {
         var ratio = Imbalance?.ImbalanceRatio ?? 0;
         var angle = Math.PI * (1 - (ratio + 1) / 2);
-        return (50 - 35 * Math.Sin(angle)).ToString("F2");
+        return (50 - 35 * Math.Sin(angle)).ToString("P2");
     }
 }

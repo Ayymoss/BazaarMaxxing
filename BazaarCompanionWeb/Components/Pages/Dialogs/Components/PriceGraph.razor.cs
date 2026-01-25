@@ -25,6 +25,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
     private bool _chartInitialized;
     private bool _indicatorsApplied; // Track if initial indicators have been applied
     private bool _indicatorsLoaded; // Track if we've loaded from localStorage
+    private bool _disposed; // Track disposal to prevent JS calls after component is disposed
+    private readonly CancellationTokenSource _disposalCts = new();
     
     // KLineChart indicator configuration
     // Overlay indicators appear on the main candle pane
@@ -181,7 +183,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
 
     public async Task UpdateTickAsync(object tick)
     {
-        if (_chartModule is null || !_chartInitialized) return;
+        // Bail early if component is disposed or chart not ready
+        if (_disposed || _chartModule is null || !_chartInitialized) return;
         
         try
         {
@@ -206,8 +209,16 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 volume = liveTick.Volume
             };
 
-            // Use KLineChart tick update
-            await _chartModule.InvokeVoidAsync("updateKLineChartWithTick", $"chart-container-{_chartId}", processedTick);
+            // Use KLineChart tick update - pass cancellation token to handle disposal
+            await _chartModule.InvokeVoidAsync("updateKLineChartWithTick", _disposalCts.Token, $"chart-container-{_chartId}", processedTick);
+        }
+        catch (TaskCanceledException)
+        {
+            // Expected during component disposal - silently ignore
+        }
+        catch (JSDisconnectedException)
+        {
+            // Expected when navigating away - silently ignore
         }
         catch (Exception ex)
         {
@@ -233,11 +244,11 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
             }
 
             // APPEND current price as the absolute latest tick
-            if (Product.BuyOrderUnitPrice.HasValue)
+            if (Product.BidUnitPrice.HasValue)
             {
                 var bucketedTime = DateTime.UtcNow.GetPeriodStart(Interval);
                 var lastCandle = ohlcData.LastOrDefault();
-                var price = Product.BuyOrderUnitPrice.Value;
+                var price = Product.BidUnitPrice.Value;
                 
                 if (lastCandle != null && lastCandle.Time == bucketedTime)
                 {
@@ -403,6 +414,13 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
 
     public async ValueTask DisposeAsync()
     {
+        // Mark as disposed first to stop any pending tick updates
+        _disposed = true;
+        
+        // Cancel any pending JS interop calls
+        await _disposalCts.CancelAsync();
+        _disposalCts.Dispose();
+        
         if (_chartModule is not null)
         {
             try
@@ -414,6 +432,10 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
             catch (JSDisconnectedException)
             {
                 // Ignore if JS is disconnected
+            }
+            catch (TaskCanceledException)
+            {
+                // Expected during disposal
             }
         }
     }

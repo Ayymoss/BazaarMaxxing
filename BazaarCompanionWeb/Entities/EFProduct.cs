@@ -10,8 +10,8 @@ public class EFProduct
     public required ItemTier Tier { get; set; }
     public required bool Unstackable { get; set; }
 
-    public required EFBuyMarketData Buy { get; set; }
-    public required EFSellMarketData Sell { get; set; }
+    public required EFBidMarketData Bid { get; set; }
+    public required EFAskMarketData Ask { get; set; }
     public required EFProductMeta Meta { get; set; }
     public required ICollection<EFPriceSnapshot> Snapshots { get; set; }
 }

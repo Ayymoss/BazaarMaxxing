@@ -47,7 +47,7 @@
                         <span class="w-1.5 h-1.5 rounded-full @GetTierColor(product.Tier)"></span>
                         <span class="flex-1 truncate text-xs text-slate-300">@product.ProductName</span>
                         <span class="text-[10px] font-mono @(product.IsIncreasing ? "text-emerald-400" : "text-rose-400")">
-                                @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("F1")%
+                                @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("P2")
                             </span>
                     </div>
                 }
@@ -71,7 +71,7 @@
                          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
                         <span class="w-1.5 h-1.5 rounded-full @GetTierColor(surge.Tier)"></span>
                         <span class="flex-1 truncate text-xs text-slate-300">@surge.ProductName</span>
-                        <span class="text-[10px] font-mono text-cyan-400">@surge.SurgeRatio.ToString("F1")x</span>
+                        <span class="text-[10px] font-mono text-cyan-400">@surge.SurgeRatio.ToString("F2")x</span>
                     </div>
                 }
             </div>
@@ -116,7 +116,7 @@
                     <div @onclick="() => OnProductClick(alert.ProductKey)"
                          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
                         <span class="flex-1 truncate text-xs text-slate-300">@alert.ProductName</span>
-                        <span class="text-[10px] font-mono text-rose-400">@alert.PriceDeviationPercent.ToString("F0")%↓</span>
+                        <span class="text-[10px] font-mono text-rose-400">@alert.PriceDeviationPercent.ToString("P0")↓</span>
                     </div>
                 }
             </div>
@@ -145,7 +145,7 @@
                          class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
                         <span class="flex-1 truncate text-xs text-slate-300">@mover.ProductName</span>
                         <span class="text-[10px] font-mono @(mover.IsGainer ? "text-emerald-400" : "text-rose-400")">
-                                @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("F1")%
+                                @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("P2")
                             </span>
                     </div>
                 }

@@ -44,19 +44,19 @@
                             <div class="text-right">
                                 <p class="text-slate-400">6h</p>
                                 <p class="font-mono" style="color: @(trend.PriceChange6h >= 0 ? "#78F86A" : "#EF4444")">
-                                    @(trend.PriceChange6h >= 0 ? "+" : "")@trend.PriceChange6h.ToString("F2")%
+                                    @(trend.PriceChange6h >= 0 ? "+" : "")@trend.PriceChange6h.ToString("P2")
                                 </p>
                             </div>
                             <div class="text-right">
                                 <p class="text-slate-400">24h</p>
                                 <p class="font-mono" style="color: @(trend.PriceChange24h >= 0 ? "#78F86A" : "#EF4444")">
-                                    @(trend.PriceChange24h >= 0 ? "+" : "")@trend.PriceChange24h.ToString("F2")%
+                                    @(trend.PriceChange24h >= 0 ? "+" : "")@trend.PriceChange24h.ToString("P2")
                                 </p>
                             </div>
                             <div class="text-right">
                                 <p class="text-slate-400">7d</p>
                                 <p class="font-mono" style="color: @(trend.PriceChange7d >= 0 ? "#78F86A" : "#EF4444")">
-                                    @(trend.PriceChange7d >= 0 ? "+" : "")@trend.PriceChange7d.ToString("F2")%
+                                    @(trend.PriceChange7d >= 0 ? "+" : "")@trend.PriceChange7d.ToString("P2")
                                 </p>
                             </div>
                         </div>
@@ -86,7 +86,7 @@
                     
                     <div class="absolute rounded-sm group cursor-pointer hover:ring-2 hover:ring-blue-500/50 transition-all"
                          style="left: @(point.X * 100)%; bottom: @(point.Y * 100)%; width: 8px; height: 8px; background-color: @color;"
-                         title="@($"{point.ProductName}: Vol={point.Volatility:F2}, Vol={point.Volume:N0}, Score={point.OpportunityScore:F2}")">
+                         title="@($"{point.ProductName}: Vol={point.Volatility:P2}, Vol={point.Volume:N0}, Score={point.OpportunityScore:P2}")">
                         <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-slate-800 text-xs text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
                             @point.ProductName
                         </div>

@@ -25,8 +25,8 @@ public class ProductsPaginationQueryHelper(
     {
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
         var query = context.Products
-            .Include(x => x.Buy)
-            .Include(x => x.Sell)
+            .Include(x => x.Bid)
+            .Include(x => x.Ask)
             .Include(x => x.Meta)
             .AsNoTracking()
             .AsQueryable();
@@ -62,11 +62,11 @@ public class ProductsPaginationQueryHelper(
 
     private IQueryable<EFProduct> ApplyFilterQuery(IQueryable<EFProduct> query)
     {
-        return query.Where(x => x.Meta.Margin > _configuration.MinimumMargin)
+        return query.Where(x => x.Meta.Spread > _configuration.MinimumMargin)
             .Where(x => x.Meta.ProfitMultiplier > _configuration.MinimumPotentialProfitMultiplier)
-            .Where(x => x.Buy.OrderVolumeWeek / x.Sell.OrderVolumeWeek > _configuration.MinimumBuyOrderPower)
-            .Where(x => x.Buy.OrderVolumeWeek > _configuration.MinimumWeekVolume)
-            .Where(x => x.Sell.OrderVolumeWeek > _configuration.MinimumWeekVolume);
+            .Where(x => x.Bid.OrderVolumeWeek / x.Ask.OrderVolumeWeek > _configuration.MinimumBuyOrderPower)
+            .Where(x => x.Bid.OrderVolumeWeek > _configuration.MinimumWeekVolume)
+            .Where(x => x.Ask.OrderVolumeWeek > _configuration.MinimumWeekVolume);
     }
 
     private static IQueryable<EFProduct> ApplySearchQuery(IQueryable<EFProduct> query, string search)
@@ -115,21 +115,21 @@ public class ProductsPaginationQueryHelper(
         // Price range
         if (filters.MinPrice.HasValue)
         {
-            query = query.Where(p => p.Buy.UnitPrice >= filters.MinPrice.Value);
+            query = query.Where(p => p.Bid.UnitPrice >= filters.MinPrice.Value);
         }
         if (filters.MaxPrice.HasValue)
         {
-            query = query.Where(p => p.Buy.UnitPrice <= filters.MaxPrice.Value);
+            query = query.Where(p => p.Bid.UnitPrice <= filters.MaxPrice.Value);
         }
 
         // Spread range
         if (filters.MinSpread.HasValue)
         {
-            query = query.Where(p => p.Meta.Margin >= filters.MinSpread.Value);
+            query = query.Where(p => p.Meta.Spread >= filters.MinSpread.Value);
         }
         if (filters.MaxSpread.HasValue)
         {
-            query = query.Where(p => p.Meta.Margin <= filters.MaxSpread.Value);
+            query = query.Where(p => p.Meta.Spread <= filters.MaxSpread.Value);
         }
 
         // Volume range
@@ -177,11 +177,11 @@ public class ProductsPaginationQueryHelper(
         // Order count range
         if (filters.MinOrderCount.HasValue)
         {
-            query = query.Where(p => p.Buy.OrderCount >= filters.MinOrderCount.Value || p.Sell.OrderCount >= filters.MinOrderCount.Value);
+            query = query.Where(p => p.Bid.OrderCount >= filters.MinOrderCount.Value || p.Ask.OrderCount >= filters.MinOrderCount.Value);
         }
         if (filters.MaxOrderCount.HasValue)
         {
-            query = query.Where(p => p.Buy.OrderCount <= filters.MaxOrderCount.Value && p.Sell.OrderCount <= filters.MaxOrderCount.Value);
+            query = query.Where(p => p.Bid.OrderCount <= filters.MaxOrderCount.Value && p.Ask.OrderCount <= filters.MaxOrderCount.Value);
         }
 
         // Note: Volatility, trend direction, and correlation filters would require
@@ -200,16 +200,16 @@ public class ProductsPaginationQueryHelper(
         query = sortDescriptors.Aggregate(query, (current, sort) => sort.Property switch
         {
             nameof(ProductDataInfo.ItemFriendlyName) => current.ApplySortForName(sort, p => p.FriendlyName, p => p.Tier),
-            nameof(ProductDataInfo.BuyOrderUnitPrice) => current.ApplySort(sort, p => p.Buy.UnitPrice),
-            nameof(ProductDataInfo.SellOrderUnitPrice) => current.ApplySort(sort, p => p.Sell.UnitPrice),
-            nameof(ProductDataInfo.OrderMetaMargin) => current.ApplySort(sort, p => p.Meta.Margin),
+            nameof(ProductDataInfo.BidUnitPrice) => current.ApplySort(sort, p => p.Bid.UnitPrice),
+            nameof(ProductDataInfo.AskUnitPrice) => current.ApplySort(sort, p => p.Ask.UnitPrice),
+            nameof(ProductDataInfo.OrderMetaSpread) => current.ApplySort(sort, p => p.Meta.Spread),
             nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier) => current.ApplySort(sort, p => p.Meta.ProfitMultiplier),
             nameof(ProductDataInfo.OrderMetaTotalWeekVolume) => current.ApplySort(sort, p => p.Meta.TotalWeekVolume),
-            nameof(ProductDataInfo.BuyOrderWeekVolume) => current.ApplySort(sort, p => p.Buy.OrderVolumeWeek),
-            nameof(ProductDataInfo.SellOrderWeekVolume) => current.ApplySort(sort, p => p.Sell.OrderVolumeWeek),
+            nameof(ProductDataInfo.BidWeekVolume) => current.ApplySort(sort, p => p.Bid.OrderVolumeWeek),
+            nameof(ProductDataInfo.AskWeekVolume) => current.ApplySort(sort, p => p.Ask.OrderVolumeWeek),
             nameof(ProductDataInfo.OrderMetaFlipOpportunityScore) => current.ApplySort(sort, p => p.Meta.FlipOpportunityScore),
-            nameof(ProductDataInfo.BuyOrderCurrentOrders) => current.ApplySort(sort, p => p.Buy.OrderCount),
-            nameof(ProductDataInfo.SellOrderCurrentOrders) => current.ApplySort(sort, p => p.Sell.OrderCount),
+            nameof(ProductDataInfo.BidCurrentOrders) => current.ApplySort(sort, p => p.Bid.OrderCount),
+            nameof(ProductDataInfo.AskCurrentOrders) => current.ApplySort(sort, p => p.Ask.OrderCount),
             _ => current
         });
         return query;
@@ -237,22 +237,22 @@ public class ProductsPaginationQueryHelper(
     {
         return new ProductDataInfo
         {
-            BuyMarketDataId = product.Buy.Id,
-            SellMarketDataId = product.Sell.Id,
+            BidMarketDataId = product.Bid.Id,
+            AskMarketDataId = product.Ask.Id,
             ItemId = product.ProductKey,
             ItemFriendlyName = product.FriendlyName,
             ItemTier = product.Tier,
             ItemUnstackable = product.Unstackable,
-            BuyOrderUnitPrice = product.Buy.UnitPrice,
-            BuyOrderWeekVolume = product.Buy.OrderVolumeWeek,
-            BuyOrderCurrentOrders = product.Buy.OrderCount,
-            BuyOrderCurrentVolume = product.Buy.OrderVolume,
-            SellOrderUnitPrice = product.Sell.UnitPrice,
-            SellOrderWeekVolume = product.Sell.OrderVolumeWeek,
-            SellOrderCurrentOrders = product.Sell.OrderCount,
-            SellOrderCurrentVolume = product.Sell.OrderVolume,
+            BidUnitPrice = product.Bid.UnitPrice,
+            BidWeekVolume = product.Bid.OrderVolumeWeek,
+            BidCurrentOrders = product.Bid.OrderCount,
+            BidCurrentVolume = product.Bid.OrderVolume,
+            AskUnitPrice = product.Ask.UnitPrice,
+            AskWeekVolume = product.Ask.OrderVolumeWeek,
+            AskCurrentOrders = product.Ask.OrderCount,
+            AskCurrentVolume = product.Ask.OrderVolume,
             OrderMetaPotentialProfitMultiplier = product.Meta.ProfitMultiplier,
-            OrderMetaMargin = product.Meta.Margin,
+            OrderMetaSpread = product.Meta.Spread,
             OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume,
             OrderMetaFlipOpportunityScore = product.Meta.FlipOpportunityScore,
             IsManipulated = product.Meta.IsManipulated,

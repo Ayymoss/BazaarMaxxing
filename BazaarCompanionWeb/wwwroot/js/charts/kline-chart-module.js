@@ -483,29 +483,48 @@ export function updateKLineChartWithTick(containerId, tick) {
         ? (tick.time < 10000000000 ? tick.time * 1000 : tick.time)
         : new Date(tick.time).getTime();
 
-    const formattedTick = {
-        timestamp: timestamp,
-        open: tick.open,
-        high: tick.high,
-        low: tick.low,
-        close: tick.close,
-        volume: tick.volume || 0
-    };
+    // Check if we have an existing candle for this timestamp in the cache
+    // If so, we need to MERGE the values, not replace them
+    let mergedTick;
+    const cache = chartDataCache[containerId];
+    const existingIndex = cache ? cache.findIndex(d => d.timestamp === timestamp) : -1;
 
-    // Call the subscription callback with the new tick data
-    callback(formattedTick);
-
-    // Also update the cache with this new data point
-    if (chartDataCache[containerId]) {
-        const existingIndex = chartDataCache[containerId].findIndex(d => d.timestamp === timestamp);
-        if (existingIndex >= 0) {
-            // Update existing candle
-            chartDataCache[containerId][existingIndex] = formattedTick;
-        } else {
-            // Add new candle
-            chartDataCache[containerId].push(formattedTick);
+    if (existingIndex >= 0) {
+        // MERGE with existing candle:
+        // - Open: PRESERVE the original open (first price of the interval)
+        // - High: MAX of existing high and new close
+        // - Low: MIN of existing low and new close
+        // - Close: new close (latest price)
+        // - Volume: use the latest volume snapshot (or accumulate if preferred)
+        const existing = cache[existingIndex];
+        mergedTick = {
+            timestamp: timestamp,
+            open: existing.open,  // Preserve original open
+            high: Math.max(existing.high, tick.close),  // Max of existing high and new price
+            low: Math.min(existing.low, tick.close),    // Min of existing low and new price
+            close: tick.close,    // Latest price
+            volume: tick.volume || existing.volume || 0 // Use latest volume
+        };
+        // Update the cache with merged values
+        cache[existingIndex] = mergedTick;
+    } else {
+        // New candle - use the tick's values directly
+        mergedTick = {
+            timestamp: timestamp,
+            open: tick.open,
+            high: tick.high,
+            low: tick.low,
+            close: tick.close,
+            volume: tick.volume || 0
+        };
+        // Add new candle to cache
+        if (cache) {
+            cache.push(mergedTick);
         }
     }
+
+    // Call the subscription callback with the properly merged tick data
+    callback(mergedTick);
 }
 
 /**

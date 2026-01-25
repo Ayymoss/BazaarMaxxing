@@ -3,7 +3,7 @@ using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BazaarCompanionWeb.Entities;
 
-public sealed record EFSellMarketData : EFMarketData
+public sealed record EFAskMarketData : EFMarketData
 {
     [MaxLength(64)] public required string ProductKey { get; set; }
     [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;

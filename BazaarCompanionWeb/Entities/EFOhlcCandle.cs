@@ -20,7 +20,7 @@ public sealed record EFOhlcCandle
     public required double Volume { get; set; }
 
     /// <summary>
-    /// Average bid-ask spread during this candle period (Buy - Sell price).
+    /// Average bid-ask spread during this candle period (Bid - Ask price).
     /// </summary>
     public required double Spread { get; set; }
 

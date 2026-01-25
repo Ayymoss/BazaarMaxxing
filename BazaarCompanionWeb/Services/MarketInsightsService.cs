@@ -18,9 +18,9 @@ public sealed partial class MarketInsightsService(
     ILogger<MarketInsightsService> logger)
 {
     // Configuration thresholds
-    private const double HotProductThreshold = 5.0;         // 5% change in 15 min
-    private const double VolumeSurgeThreshold = 2.0;        // 2x average volume
-    private const double SpreadWideningThreshold = 20.0;    // 20% spread increase
+    private const double HotProductThreshold = 5.0; // 5% change in 15 min
+    private const double VolumeSurgeThreshold = 2.0; // 2x average volume
+    private const double SpreadWideningThreshold = 20.0; // 20% spread increase
     private const int MaxInsightsPerCategory = 10;
 
     // Cache infrastructure
@@ -55,7 +55,7 @@ public sealed partial class MarketInsightsService(
         {
             await using var scope = scopeFactory.CreateAsyncScope();
             var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
-            
+
             await using var context = await contextFactory.CreateDbContextAsync(ct);
             var now = DateTime.UtcNow;
 
@@ -111,9 +111,9 @@ public sealed partial class MarketInsightsService(
         List<HotProductInsight> results = [];
 
         var products = await context.Products
-            .Include(p => p.Buy)
+            .Include(p => p.Bid)
             .AsNoTracking()
-            .Where(p => p.Buy.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek > 0)
             .ToListAsync(ct);
 
         foreach (var product in products)
@@ -132,7 +132,7 @@ public sealed partial class MarketInsightsService(
 
             if (price15MinAgo <= 0) continue;
 
-            var changePercent = ((currentPrice - price15MinAgo) / price15MinAgo) * 100;
+            var changePercent = (currentPrice - price15MinAgo) / price15MinAgo;
             var absChange = Math.Abs(changePercent);
 
             if (absChange < HotProductThreshold) continue;
@@ -169,10 +169,10 @@ public sealed partial class MarketInsightsService(
         List<VolumeSurgeInsight> results = [];
 
         var products = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .AsNoTracking()
-            .Where(p => p.Buy.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek > 0)
             .ToListAsync(ct);
 
         var oneHourAgo = now.AddHours(-1);
@@ -242,16 +242,16 @@ public sealed partial class MarketInsightsService(
         List<SpreadOpportunityInsight> results = [];
 
         var products = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .Include(p => p.Meta)
             .AsNoTracking()
-            .Where(p => p.Buy.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek > 0)
             .ToListAsync(ct);
 
         foreach (var product in products)
         {
-            var currentSpread = product.Buy.UnitPrice - product.Sell.UnitPrice;
+            var currentSpread = product.Ask.UnitPrice - product.Bid.UnitPrice;
             if (currentSpread <= 0) continue;
 
             // Get 7-day candle history for spread calculation
@@ -306,8 +306,8 @@ public sealed partial class MarketInsightsService(
         CancellationToken ct)
     {
         var manipulatedProducts = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .Include(p => p.Meta)
             .AsNoTracking()
             .Where(p => p.Meta.IsManipulated && p.Meta.ManipulationIntensity > 0)
@@ -317,10 +317,10 @@ public sealed partial class MarketInsightsService(
 
         return manipulatedProducts.Select(p =>
         {
-            var currentPrice = p.Sell.UnitPrice;
+            var currentPrice = p.Ask.UnitPrice;
             var deviationPercent = p.Meta.PriceDeviationPercent;
             var estimatedFairPrice = deviationPercent != 0
-                ? currentPrice / (1 + (deviationPercent / 100))
+                ? currentPrice / (1 + deviationPercent / 100)
                 : currentPrice;
 
             return new FireSaleInsight(
@@ -348,10 +348,10 @@ public sealed partial class MarketInsightsService(
         List<MarketMoverInsight> allMovers = [];
 
         var products = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .AsNoTracking()
-            .Where(p => p.Buy.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek > 0)
             .ToListAsync(ct);
 
         foreach (var product in products)
@@ -370,7 +370,7 @@ public sealed partial class MarketInsightsService(
 
             if (price24hAgo <= 0) continue;
 
-            var changePercent = ((currentPrice - price24hAgo) / price24hAgo) * 100;
+            var changePercent = (currentPrice - price24hAgo) / price24hAgo;
             var volume24h = (long)ordered.Sum(c => c.Volume);
 
             allMovers.Add(new MarketMoverInsight(
@@ -410,7 +410,9 @@ public sealed partial class MarketInsightsService(
     [LoggerMessage(Level = LogLevel.Debug, Message = "Insights refresh skipped - calculation already in progress")]
     private partial void LogRefreshSkipped();
 
-    [LoggerMessage(Level = LogLevel.Information, Message = "Market insights refreshed: {HotCount} hot, {SurgeCount} surges, {SpreadCount} spreads, {FireCount} fire sales, {MoverCount} movers")]
+    [LoggerMessage(Level = LogLevel.Information,
+        Message =
+            "Market insights refreshed: {HotCount} hot, {SurgeCount} surges, {SpreadCount} spreads, {FireCount} fire sales, {MoverCount} movers")]
     private partial void LogInsightsRefreshed(int hotCount, int surgeCount, int spreadCount, int fireCount, int moverCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Error refreshing market insights")]

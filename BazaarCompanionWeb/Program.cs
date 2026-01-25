@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using BazaarCompanionWeb.Components;
@@ -26,6 +27,12 @@ public class Program
 {
     public static void Main(string[] args)
     {
+        // Set default culture to en-US for consistent currency formatting ($ instead of ¤)
+        // This is required for Docker containers that may not have full ICU globalization data
+        var culture = new CultureInfo("en-US");
+        CultureInfo.DefaultThreadCurrentCulture = culture;
+        CultureInfo.DefaultThreadCurrentUICulture = culture;
+
         var builder = WebApplication.CreateBuilder(args);
 
         // Configure Kestrel based on environment

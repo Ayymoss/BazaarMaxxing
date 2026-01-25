@@ -52,12 +52,12 @@
                             @product.ItemFriendlyName
                         </h3>
                         <div class="flex items-center justify-between mt-3 text-xs">
-                            <span class="text-slate-500">Bid</span>
-                            <span class="font-mono text-slate-300">@((product.BuyOrderUnitPrice ?? 0).ToString("N1"))</span>
+                            <span class="text-slate-500">Ask</span>
+                            <span class="font-mono text-slate-300">@((product.AskUnitPrice ?? 0).ToString("N1"))</span>
                         </div>
                         <div class="flex items-center justify-between mt-1 text-xs">
-                            <span class="text-slate-500">Ask</span>
-                            <span class="font-mono text-slate-300">@((product.SellOrderUnitPrice ?? 0).ToString("N1"))</span>
+                            <span class="text-slate-500">Bid</span>
+                            <span class="font-mono text-slate-300">@((product.BidUnitPrice ?? 0).ToString("N1"))</span>
                         </div>
                     </a>
                 }

@@ -19,14 +19,14 @@ public class OpportunityScoringService(
 
     public async Task<double> CalculateOpportunityScoreAsync(
         string productKey,
-        double buyPrice,
-        double sellPrice,
-        long buyMovingWeek,
-        long sellMovingWeek,
+        double bidPrice,
+        double askPrice,
+        long bidMovingWeek,
+        long askMovingWeek,
         CancellationToken ct = default)
     {
         // Edge case: zero volume or invalid prices
-        if (buyMovingWeek == 0 || sellMovingWeek == 0 || buyPrice <= sellPrice || sellPrice <= 0)
+        if (bidMovingWeek == 0 || askMovingWeek == 0 || bidPrice <= askPrice || askPrice <= 0)
         {
             return 0;
         }
@@ -44,10 +44,10 @@ public class OpportunityScoringService(
             if (candles.Count >= MinCandlesForAnalysis)
             {
                 return CalculateAdvancedScore(
-                    buyPrice,
-                    sellPrice,
-                    buyMovingWeek,
-                    sellMovingWeek,
+                    bidPrice,
+                    askPrice,
+                    bidMovingWeek,
+                    askMovingWeek,
                     candles);
             }
 
@@ -56,28 +56,28 @@ public class OpportunityScoringService(
                 "Insufficient OHLC data for {ProductKey} ({Count} candles), using simplified scoring",
                 productKey,
                 candles.Count);
-            return CalculateSimplifiedScore(buyPrice, sellPrice, buyMovingWeek, sellMovingWeek);
+            return CalculateSimplifiedScore(bidPrice, askPrice, bidMovingWeek, askMovingWeek);
         }
         catch (Exception ex)
         {
             logger.LogWarning(ex, "Error calculating opportunity score for {ProductKey}, using simplified scoring", productKey);
-            return CalculateSimplifiedScore(buyPrice, sellPrice, buyMovingWeek, sellMovingWeek);
+            return CalculateSimplifiedScore(bidPrice, askPrice, bidMovingWeek, askMovingWeek);
         }
     }
 
     private double CalculateAdvancedScore(
-        double buyPrice,
-        double sellPrice,
-        long buyMovingWeek,
-        long sellMovingWeek,
+        double bidPrice,
+        double askPrice,
+        long bidMovingWeek,
+        long askMovingWeek,
         List<OhlcDataPoint> candles)
     {
         // Calculate individual metrics
         var volatility = CalculateVolatility(candles);
         var spreadStability = CalculateSpreadStability(candles);
-        var volumeScore = CalculateVolumeScore(buyMovingWeek, sellMovingWeek);
+        var volumeScore = CalculateVolumeScore(bidMovingWeek, askMovingWeek);
         var trendFactor = CalculateTrendFactor(candles);
-        var expectedReturn = CalculateExpectedReturn(buyPrice, sellPrice, spreadStability);
+        var expectedReturn = CalculateExpectedReturn(bidPrice, askPrice, spreadStability);
 
         // Risk buffer: minimum volatility to prevent division by zero
         var meanPrice = candles.Average(c => c.Close);
@@ -140,8 +140,8 @@ public class OpportunityScoringService(
 
     private double CalculateSpreadStability(List<OhlcDataPoint> candles)
     {
-        // For spread stability, we need buy and sell prices over time
-        // Since candles only have buy prices (Close), we'll use the high-low range as a proxy
+        // For spread stability, we need bid and ask prices over time
+        // Since candles only have bid prices (Close), we'll use the high-low range as a proxy
         // In a real implementation, we might want to track spreads separately
 
         if (candles.Count < 2)
@@ -173,9 +173,9 @@ public class OpportunityScoringService(
         return Math.Max(MinSpreadStability, Math.Min(1.0, stabilityFactor));
     }
 
-    private double CalculateVolumeScore(long buyMovingWeek, long sellMovingWeek)
+    private double CalculateVolumeScore(long bidMovingWeek, long askMovingWeek)
     {
-        var totalVolume = buyMovingWeek + sellMovingWeek;
+        var totalVolume = bidMovingWeek + askMovingWeek;
 
         if (totalVolume <= 0)
         {
@@ -193,7 +193,7 @@ public class OpportunityScoringService(
         var normalizedVolume = logVolume / logMax;
 
         // Also consider volume balance: balanced markets are better
-        var volumeRatio = buyMovingWeek / (double)sellMovingWeek;
+        var volumeRatio = bidMovingWeek / (double)askMovingWeek;
         var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio); // Closer to 1.0 is better
 
         // Combine normalized volume with balance factor
@@ -223,9 +223,9 @@ public class OpportunityScoringService(
         return Math.Max(0.9, Math.Min(1.1, trendMultiplier));
     }
 
-    private double CalculateExpectedReturn(double buyPrice, double sellPrice, double spreadStability)
+    private double CalculateExpectedReturn(double bidPrice, double askPrice, double spreadStability)
     {
-        var margin = buyPrice - sellPrice;
+        var margin = bidPrice - askPrice;
         if (margin <= 0)
         {
             return 0;
@@ -236,24 +236,24 @@ public class OpportunityScoringService(
         return margin * spreadStability;
     }
 
-    private double CalculateSimplifiedScore(double buyPrice, double sellPrice, long buyMovingWeek, long sellMovingWeek)
+    private double CalculateSimplifiedScore(double bidPrice, double askPrice, long bidMovingWeek, long askMovingWeek)
     {
         // Simplified version for products without sufficient OHLC history
         // Uses similar logic to original but with better constants
 
-        if (buyMovingWeek == 0 || sellMovingWeek == 0)
+        if (bidMovingWeek == 0 || askMovingWeek == 0)
         {
             return 0;
         }
 
-        var margin = buyPrice - sellPrice;
+        var margin = bidPrice - askPrice;
         if (margin <= 0)
         {
             return 0;
         }
 
-        var totalVolume = buyMovingWeek + sellMovingWeek;
-        var volumeRatio = buyMovingWeek / (double)sellMovingWeek;
+        var totalVolume = bidMovingWeek + askMovingWeek;
+        var volumeRatio = bidMovingWeek / (double)askMovingWeek;
         var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio);
 
         // Hourly volume estimate
@@ -263,7 +263,7 @@ public class OpportunityScoringService(
         var profitPerItem = margin;
 
         // Simplified risk adjustment: higher price = higher risk
-        var priceRisk = 1.0 / (1.0 + sellPrice * 0.0001);
+        var priceRisk = 1.0 / (1.0 + askPrice * 0.0001);
 
         // Calculate base score
         var baseScore = hourlyVolume * profitPerItem * balanceFactor * priceRisk;
@@ -277,12 +277,12 @@ public class OpportunityScoringService(
 
     public async Task<ManipulationScore> CalculateManipulationScoreAsync(
         string productKey,
-        double currentBuyPrice,
-        double currentSellPrice,
+        double currentBidPrice,
+        double currentAskPrice,
         CancellationToken ct = default)
     {
         // Edge cases: invalid prices
-        if (currentBuyPrice <= 0 || currentSellPrice <= 0)
+        if (currentBidPrice <= 0 || currentAskPrice <= 0)
         {
             return new ManipulationScore(false, 0, 0, 0);
         }
@@ -323,9 +323,9 @@ public class OpportunityScoringService(
             // Use percentage deviation as fallback
             if (stdDev < mean * 0.001) // Less than 0.1% of mean
             {
-                var buyDeviationPercent = ((currentBuyPrice - mean) / mean) * 100;
-                var sellDeviationPercent = ((currentSellPrice - mean) / mean) * 100;
-                var maxDeviationPercent = Math.Max(Math.Abs(buyDeviationPercent), Math.Abs(sellDeviationPercent));
+                var bidDeviationPercent = ((currentBidPrice - mean) / mean) * 100;
+                var askDeviationPercent = ((currentAskPrice - mean) / mean) * 100;
+                var maxDeviationPercent = Math.Max(Math.Abs(bidDeviationPercent), Math.Abs(askDeviationPercent));
 
                 // Use percentage threshold: >15% deviation indicates manipulation
                 var manipulated = maxDeviationPercent > 15.0;
@@ -338,13 +338,13 @@ public class OpportunityScoringService(
                     manipulationIntensity);
             }
 
-            // Calculate Z-score for current buy and sell prices
-            var buyZScore = (currentBuyPrice - mean) / stdDev;
-            var sellZScore = (currentSellPrice - mean) / stdDev;
+            // Calculate Z-score for current bid and ask prices
+            var bidZScore = (currentBidPrice - mean) / stdDev;
+            var askZScore = (currentAskPrice - mean) / stdDev;
 
             // Use the more extreme Z-score (further from zero)
-            var extremeZScore = Math.Abs(buyZScore) > Math.Abs(sellZScore) ? buyZScore : sellZScore;
-            var currentPrice = Math.Abs(buyZScore) > Math.Abs(sellZScore) ? currentBuyPrice : currentSellPrice;
+            var extremeZScore = Math.Abs(bidZScore) > Math.Abs(askZScore) ? bidZScore : askZScore;
+            var currentPrice = Math.Abs(bidZScore) > Math.Abs(askZScore) ? currentBidPrice : currentAskPrice;
 
             // Determine if manipulated: Z-score exceeds threshold
             var isManipulated = Math.Abs(extremeZScore) > ManipulationZScoreThreshold;

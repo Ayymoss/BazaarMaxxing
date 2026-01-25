@@ -70,10 +70,10 @@ public class OhlcAggregationService(
             ProductKey = s.ProductKey,
             Interval = CandleInterval.OneDay,
             PeriodStart = s.Taken.ToDateTime(TimeOnly.MinValue),
-            Open = s.BuyUnitPrice,
-            High = s.BuyUnitPrice,
-            Low = s.BuyUnitPrice,
-            Close = s.BuyUnitPrice,
+            Open = s.BidUnitPrice,
+            High = s.BidUnitPrice,
+            Low = s.BidUnitPrice,
+            Close = s.BidUnitPrice,
             Volume = 0, // Historical snapshots don't have volume
             Spread = 0 // Historical snapshots don't have spread data
         }).ToList();
@@ -121,12 +121,13 @@ public class OhlcAggregationService(
             {
                 var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
                 var totalVolume = orderedTicks
-                    .Sum(t => t.BuyVolume + t.SellVolume);
+                    .Sum(t => t.BidVolume + t.AskVolume);
 
-                // Calculate average spread (BuyPrice - SellPrice) for the period
+                // Calculate average spread (AskPrice - BidPrice) for the period
+                // Ask (Seller's Price) is typically higher than Bid (Buyer's Price)
                 var spreads = orderedTicks
-                    .Where(t => t.BuyPrice > 0 && t.SellPrice > 0)
-                    .Select(t => t.BuyPrice - t.SellPrice)
+                    .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
+                    .Select(t => t.AskPrice - t.BidPrice)
                     .Where(s => s > 0)
                     .ToList();
                 var avgSpread = spreads.Count > 0 ? spreads.Average() : (double?)null;
@@ -136,10 +137,10 @@ public class OhlcAggregationService(
                     ProductKey = productKey,
                     Interval = interval,
                     PeriodStart = g.Key,
-                    Open = orderedTicks.First().BuyPrice,
-                    High = orderedTicks.Max(t => t.BuyPrice),
-                    Low = orderedTicks.Min(t => t.BuyPrice),
-                    Close = orderedTicks.Last().BuyPrice,
+                    Open = orderedTicks.First().BidPrice,
+                    High = orderedTicks.Max(t => t.BidPrice),
+                    Low = orderedTicks.Min(t => t.BidPrice),
+                    Close = orderedTicks.Last().BidPrice,
                     Volume = totalVolume,
                     Spread = avgSpread ?? 0
                 };

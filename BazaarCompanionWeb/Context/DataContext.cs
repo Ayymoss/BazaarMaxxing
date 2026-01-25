@@ -25,8 +25,8 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
             x.ToTable("EFMarketData");
             x.UseTptMappingStrategy();
         });
-        modelBuilder.Entity<EFBuyMarketData>().ToTable("EFBuyMarketData");
-        modelBuilder.Entity<EFSellMarketData>().ToTable("EFSellMarketData");
+        modelBuilder.Entity<EFBidMarketData>().ToTable("EFBidMarketData");
+        modelBuilder.Entity<EFAskMarketData>().ToTable("EFAskMarketData");
 
         modelBuilder.Entity<EFOrderBookSnapshot>(x =>
         {

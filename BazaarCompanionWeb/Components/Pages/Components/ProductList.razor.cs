@@ -314,9 +314,9 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
         return title switch
         {
             "Product" => nameof(ProductDataInfo.ItemFriendlyName),
-            "Bid" => nameof(ProductDataInfo.BuyOrderUnitPrice),
-            "Spread" => nameof(ProductDataInfo.OrderMetaMargin),
-            "Ask" => nameof(ProductDataInfo.SellOrderUnitPrice),
+            "Bid" => nameof(ProductDataInfo.BidUnitPrice),
+            "Spread" => nameof(ProductDataInfo.OrderMetaSpread),
+            "Ask" => nameof(ProductDataInfo.AskUnitPrice),
             "Profit x" => nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier),
             "Rating" => nameof(ProductDataInfo.OrderMetaFlipOpportunityScore),
             "7d Vol." => nameof(ProductDataInfo.OrderMetaTotalWeekVolume),

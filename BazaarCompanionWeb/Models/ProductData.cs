@@ -1,4 +1,5 @@
 using System.Text.Json;
+using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 
 namespace BazaarCompanionWeb.Models;
@@ -8,8 +9,8 @@ public class ProductData
     public required string ItemId { get; set; }
 
     public required Item Item { get; set; }
-    public required OrderInfo Buy { get; set; }
-    public required OrderInfo Sell { get; set; }
+    public required OrderInfo Bid { get; set; }
+    public required OrderInfo Ask { get; set; }
     public required OrderMeta OrderMeta { get; set; }
 
     public EFProduct Map()
@@ -22,9 +23,9 @@ public class ProductData
             Unstackable = Item.Unstackable,
             Meta = new EFProductMeta
             {
-                ProfitMultiplier = Buy.OrderPrice / Sell.OrderPrice,
-                Margin = Buy.OrderPrice - Sell.OrderPrice,
-                TotalWeekVolume = Buy.WeekVolume + Sell.WeekVolume,
+                ProfitMultiplier = OrderMeta.PotentialProfitMultiplier,
+                Spread = OrderMeta.Spread,
+                TotalWeekVolume = Bid.WeekVolume + Ask.WeekVolume,
                 FlipOpportunityScore = OrderMeta.FlipOpportunityScore,
                 IsManipulated = OrderMeta.IsManipulated,
                 ManipulationIntensity = OrderMeta.ManipulationIntensity,
@@ -35,19 +36,19 @@ public class ProductData
             [
                 new EFPriceSnapshot
                 {
-                    BuyUnitPrice = Buy.Last,
-                    SellUnitPrice = Sell.Last,
+                    BidUnitPrice = Bid.Last,
+                    AskUnitPrice = Ask.Last,
                     Taken = DateOnly.FromDateTime(TimeProvider.System.GetUtcNow().DateTime),
                     ProductKey = ItemId
                 }
             ],
-            Buy = new EFBuyMarketData
+            Bid = new EFBidMarketData
             {
-                UnitPrice = Buy.OrderPrice,
-                OrderVolumeWeek = Buy.WeekVolume,
-                OrderVolume = Buy.CurrentVolume,
-                OrderCount = Buy.CurrentOrders,
-                BookValue = JsonSerializer.Serialize(Buy.OrderBook.Select(x => new OrderBook
+                UnitPrice = Bid.OrderPrice,
+                OrderVolumeWeek = Bid.WeekVolume,
+                OrderVolume = Bid.CurrentVolume,
+                OrderCount = Bid.CurrentOrders,
+                BookValue = JsonSerializer.Serialize(Bid.OrderBook.Select(x => new OrderBook
                 {
                     Amount = x.Amount,
                     Orders = x.Orders,
@@ -55,13 +56,13 @@ public class ProductData
                 })),
                 ProductKey = ItemId
             },
-            Sell = new EFSellMarketData
+            Ask = new EFAskMarketData
             {
-                UnitPrice = Sell.OrderPrice,
-                OrderVolumeWeek = Sell.WeekVolume,
-                OrderVolume = Sell.CurrentVolume,
-                OrderCount = Sell.CurrentOrders,
-                BookValue = JsonSerializer.Serialize(Sell.OrderBook.Select(x => new OrderBook
+                UnitPrice = Ask.OrderPrice,
+                OrderVolumeWeek = Ask.WeekVolume,
+                OrderVolume = Ask.CurrentVolume,
+                OrderCount = Ask.CurrentOrders,
+                BookValue = JsonSerializer.Serialize(Ask.OrderBook.Select(x => new OrderBook
                 {
                     Amount = x.Amount,
                     Orders = x.Orders,

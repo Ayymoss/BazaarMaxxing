@@ -30,23 +30,23 @@ public class MarketAnalyticsService(
         await using var context = await contextFactory.CreateDbContextAsync(ct);
 
         var products = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .Include(p => p.Meta)
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var activeProducts = products.Where(p => p.Buy.OrderVolumeWeek > 0 || p.Sell.OrderVolumeWeek > 0).ToList();
+        var activeProducts = products.Where(p => p.Bid.OrderVolumeWeek > 0 || p.Ask.OrderVolumeWeek > 0).ToList();
 
         // Total Market Capitalization: Sum of (current buy price × total available volume)
         var totalMarketCap = activeProducts
-            .Where(p => p.Buy.UnitPrice > 0 && p.Buy.OrderVolume > 0)
-            .Sum(p => p.Buy.UnitPrice * p.Buy.OrderVolume);
+            .Where(p => p.Bid.UnitPrice > 0 && p.Bid.OrderVolume > 0)
+            .Sum(p => p.Bid.UnitPrice * p.Bid.OrderVolume);
 
         // Average Spread: Mean spread percentage across all products
         var spreads = activeProducts
-            .Where(p => p.Buy.UnitPrice > 0 && p.Sell.UnitPrice > 0)
-            .Select(p => ((p.Buy.UnitPrice - p.Sell.UnitPrice) / p.Sell.UnitPrice) * 100)
+            .Where(p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0)
+            .Select(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) / p.Bid.UnitPrice * 100)
             .ToList();
         var averageSpread = spreads.Any() ? spreads.Average() : 0;
 
@@ -215,10 +215,10 @@ public class MarketAnalyticsService(
         await using var context = await contextFactory.CreateDbContextAsync(ct);
 
         var products = await context.Products
-            .Include(p => p.Buy)
+            .Include(p => p.Bid)
             .Include(p => p.Meta)
             .AsNoTracking()
-            .Where(p => p.Buy.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek > 0)
             .ToListAsync(ct);
 
         var trends = new List<ProductTrend>();
@@ -341,13 +341,13 @@ public class MarketAnalyticsService(
     {
         var now = DateTime.UtcNow;
         var products = await context.Products
-            .Include(p => p.Buy)
-            .Include(p => p.Sell)
+            .Include(p => p.Bid)
+            .Include(p => p.Ask)
             .AsNoTracking()
             .ToListAsync(ct);
 
-        var totalVolume24h = products.Sum(p => (p.Buy.OrderVolumeWeek + p.Sell.OrderVolumeWeek) / 7.0);
-        var totalVolume7d = products.Sum(p => p.Buy.OrderVolumeWeek + p.Sell.OrderVolumeWeek);
+        var totalVolume24h = products.Sum(p => (p.Bid.OrderVolumeWeek + p.Ask.OrderVolumeWeek) / 7.0);
+        var totalVolume7d = products.Sum(p => p.Bid.OrderVolumeWeek + p.Ask.OrderVolumeWeek);
         var totalVolume30d = totalVolume7d * 30.0 / 7.0; // Estimate
 
         // For time series, we'd need historical volume data

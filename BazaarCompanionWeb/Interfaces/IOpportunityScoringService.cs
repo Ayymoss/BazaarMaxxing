@@ -17,10 +17,10 @@ public interface IOpportunityScoringService
     /// <returns>A normalized opportunity score (typically 0-10+ range)</returns>
     Task<double> CalculateOpportunityScoreAsync(
         string productKey,
-        double buyPrice,
-        double sellPrice,
-        long buyMovingWeek,
-        long sellMovingWeek,
+        double bidPrice,
+        double askPrice,
+        long bidMovingWeek,
+        long askMovingWeek,
         CancellationToken ct = default);
 
     /// <summary>
@@ -34,7 +34,7 @@ public interface IOpportunityScoringService
     /// <returns>Manipulation score indicating if and how much the product is manipulated</returns>
     Task<ManipulationScore> CalculateManipulationScoreAsync(
         string productKey,
-        double currentBuyPrice,
-        double currentSellPrice,
+        double currentBidPrice,
+        double currentAskPrice,
         CancellationToken ct = default);
 }
