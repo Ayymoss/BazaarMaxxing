@@ -7,4 +7,5 @@ public record OhlcDataPoint(
     double Low, 
     double Close, 
     double Volume,
-    double Spread);
+    double Spread,
+    double AskClose);

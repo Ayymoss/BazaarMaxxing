@@ -6,4 +6,5 @@ public record LiveTick(
     double High, 
     double Low, 
     double Close, 
-    double Volume);
+    double Volume,
+    double AskClose);

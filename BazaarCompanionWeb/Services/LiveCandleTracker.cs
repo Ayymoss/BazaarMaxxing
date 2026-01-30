@@ -15,10 +15,11 @@ public class LiveCandleTracker
     /// Updates the candle state for a product and returns the current OHLC values.
     /// </summary>
     /// <param name="productKey">The product identifier</param>
-    /// <param name="price">Current buy price</param>
+    /// <param name="bidPrice">Current bid price (used for OHLC candles)</param>
+    /// <param name="askPrice">Current ask price (used for line overlay)</param>
     /// <param name="volume">Current volume</param>
     /// <returns>A LiveTick with proper OHLC aggregation</returns>
-    public LiveTick UpdateAndGetTick(string productKey, double price, double volume)
+    public LiveTick UpdateAndGetTick(string productKey, double bidPrice, double askPrice, double volume)
     {
         var now = DateTime.UtcNow;
         var periodStart = GetMinutePeriodStart(now);
@@ -29,10 +30,11 @@ public class LiveCandleTracker
             _ => new CandleState
             {
                 PeriodStart = periodStart,
-                Open = price,
-                High = price,
-                Low = price,
-                Close = price,
+                Open = bidPrice,
+                High = bidPrice,
+                Low = bidPrice,
+                Close = bidPrice,
+                AskClose = askPrice,
                 Volume = volume
             },
             // Update existing state
@@ -44,18 +46,20 @@ public class LiveCandleTracker
                     return new CandleState
                     {
                         PeriodStart = periodStart,
-                        Open = price,
-                        High = price,
-                        Low = price,
-                        Close = price,
+                        Open = bidPrice,
+                        High = bidPrice,
+                        Low = bidPrice,
+                        Close = bidPrice,
+                        AskClose = askPrice,
                         Volume = volume
                     };
                 }
                 
                 // Same period - update high/low/close
-                existing.High = Math.Max(existing.High, price);
-                existing.Low = Math.Min(existing.Low, price);
-                existing.Close = price;
+                existing.High = Math.Max(existing.High, bidPrice);
+                existing.Low = Math.Min(existing.Low, bidPrice);
+                existing.Close = bidPrice;
+                existing.AskClose = askPrice; // Always use latest ASK for line
                 existing.Volume = volume; // Use latest volume snapshot
                 return existing;
             });
@@ -66,7 +70,8 @@ public class LiveCandleTracker
             state.High,
             state.Low,
             state.Close,
-            state.Volume);
+            state.Volume,
+            state.AskClose);
     }
     
     /// <summary>
@@ -102,6 +107,7 @@ public class LiveCandleTracker
         public double High { get; set; }
         public double Low { get; set; }
         public double Close { get; set; }
+        public double AskClose { get; set; }
         public double Volume { get; set; }
     }
 }

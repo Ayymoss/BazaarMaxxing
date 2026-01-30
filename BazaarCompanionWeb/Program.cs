@@ -169,7 +169,8 @@ public class Program
                 high = c.High,
                 low = c.Low,
                 close = c.Close,
-                volume = c.Volume
+                volume = c.Volume,
+                askClose = c.AskClose
             }).ToList();
             
             return Results.Ok(result);

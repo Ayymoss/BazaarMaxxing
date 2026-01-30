@@ -16,6 +16,9 @@ public class OpportunityScoringService(
     private const int ManipulationLookbackDays = 7;
     private const int ManipulationMinCandles = 24; // 24 hours minimum
     private const double ManipulationZScoreThreshold = 2.0;
+    
+    // Minimum weekly volume for reliable flip execution (below this, execution risk is high)
+    private const long MinWeeklyVolumeForFlipping = 100_000;
 
     public async Task<double> CalculateOpportunityScoreAsync(
         string productKey,
@@ -182,22 +185,38 @@ public class OpportunityScoringService(
             return 0;
         }
 
-        // Use logarithmic scaling to normalize volume
-        // This prevents extremely high volumes from dominating
-        // log(1 + volume) / log(1 + max_reasonable_volume)
-        // For a game economy, reasonable max might be 1 billion per week
-        const double maxReasonableVolume = 1_000_000_000;
-        var logVolume = Math.Log(1 + totalVolume);
-        var logMax = Math.Log(1 + maxReasonableVolume);
+        // EXECUTION PROBABILITY: Penalize low-volume items heavily
+        // Below MinWeeklyVolumeForFlipping, apply a steep penalty curve
+        // This prevents high-margin/low-volume items from dominating
+        double executionProbability;
+        if (totalVolume >= MinWeeklyVolumeForFlipping)
+        {
+            executionProbability = 1.0; // Full execution probability
+        }
+        else
+        {
+            // Steep penalty: (volume / min)^2 -- quadratic penalty for low volume
+            // At 50k volume (half of 100k), this gives 0.25 penalty
+            // At 10k volume (1/10 of 100k), this gives 0.01 penalty
+            var ratio = (double)totalVolume / MinWeeklyVolumeForFlipping;
+            executionProbability = ratio * ratio;
+        }
 
-        var normalizedVolume = logVolume / logMax;
+        // HOURLY THROUGHPUT: How many items can actually be traded per hour
+        // Use linear scaling (not log) - more volume IS better for flipping
+        var hourlyVolume = totalVolume / (7.0 * 24.0);
+        
+        // Normalize to a reasonable scale (0-1 for typical volumes)
+        // Assume 10,000/hour is "excellent" throughput
+        var throughputScore = Math.Min(1.0, hourlyVolume / 10_000.0);
 
-        // Also consider volume balance: balanced markets are better
+        // VOLUME BALANCE: Balanced markets are better for flipping (easier to fill both sides)
         var volumeRatio = bidMovingWeek / (double)askMovingWeek;
         var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio); // Closer to 1.0 is better
 
-        // Combine normalized volume with balance factor
-        return normalizedVolume * (0.7 + 0.3 * balanceFactor);
+        // Final volume score: throughput * execution_probability * balance
+        // The execution probability is the key multiplier that kills low-volume items
+        return throughputScore * executionProbability * (0.7 + 0.3 * balanceFactor);
     }
 
     private double CalculateTrendFactor(List<OhlcDataPoint> candles)
@@ -239,7 +258,6 @@ public class OpportunityScoringService(
     private double CalculateSimplifiedScore(double bidPrice, double askPrice, long bidMovingWeek, long askMovingWeek)
     {
         // Simplified version for products without sufficient OHLC history
-        // Uses similar logic to original but with better constants
 
         if (bidMovingWeek == 0 || askMovingWeek == 0)
         {
@@ -253,6 +271,19 @@ public class OpportunityScoringService(
         }
 
         var totalVolume = bidMovingWeek + askMovingWeek;
+        
+        // EXECUTION PROBABILITY: Penalize low-volume items (same as advanced scoring)
+        double executionProbability;
+        if (totalVolume >= MinWeeklyVolumeForFlipping)
+        {
+            executionProbability = 1.0;
+        }
+        else
+        {
+            var ratio = (double)totalVolume / MinWeeklyVolumeForFlipping;
+            executionProbability = ratio * ratio; // Quadratic penalty
+        }
+        
         var volumeRatio = bidMovingWeek / (double)askMovingWeek;
         var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio);
 
@@ -265,8 +296,8 @@ public class OpportunityScoringService(
         // Simplified risk adjustment: higher price = higher risk
         var priceRisk = 1.0 / (1.0 + askPrice * 0.0001);
 
-        // Calculate base score
-        var baseScore = hourlyVolume * profitPerItem * balanceFactor * priceRisk;
+        // Calculate base score with execution probability penalty
+        var baseScore = hourlyVolume * profitPerItem * balanceFactor * priceRisk * executionProbability;
 
         // Normalize using logarithmic scaling
         // Target: scores in 0-10 range for typical opportunities

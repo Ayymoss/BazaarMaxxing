@@ -141,6 +141,7 @@ public class OhlcAggregationService(
                     High = orderedTicks.Max(t => t.BidPrice),
                     Low = orderedTicks.Min(t => t.BidPrice),
                     Close = orderedTicks.Last().BidPrice,
+                    AskClose = orderedTicks.Last().AskPrice,
                     Volume = totalVolume,
                     Spread = avgSpread ?? 0
                 };

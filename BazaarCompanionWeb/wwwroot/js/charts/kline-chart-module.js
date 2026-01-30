@@ -22,6 +22,46 @@ const loadingState = {};
 // Font family used throughout the app
 const fontFamily = 'Inter, system-ui, -apple-system, sans-serif';
 
+// Track if custom indicators have been registered
+let askLineIndicatorRegistered = false;
+
+/**
+ * Register the custom ASK line indicator globally
+ * Per KLineChart docs: custom indicators must use registerIndicator before createIndicator
+ * @param {object} klinecharts - The klinecharts object from waitForKLineCharts
+ */
+function registerAskLineIndicator(klinecharts) {
+    if (askLineIndicatorRegistered) return;
+
+    klinecharts.registerIndicator({
+        name: 'ASK_LINE',
+        shortName: 'ASK',
+        series: 'price', // Share y-axis with candles
+        figures: [
+            { key: 'askClose', title: 'ASK: ', type: 'line' }
+        ],
+        calc: (kLineDataList) => {
+            console.log('[KLineChart DEBUG] ASK_LINE calc() called with', kLineDataList.length, 'data points');
+            return kLineDataList.map(kLineData => ({
+                // Return null when askClose is missing/zero - this creates gaps in the line for old data
+                askClose: (kLineData.askClose && kLineData.askClose !== 0) ? kLineData.askClose : null
+            }));
+        },
+        styles: {
+            lines: [
+                {
+                    color: '#ef4444', // Red ASK line
+                    size: 1.5,
+                    style: 'solid'
+                }
+            ]
+        }
+    });
+
+    askLineIndicatorRegistered = true;
+    console.log('[KLineChart DEBUG] ASK_LINE indicator registered globally');
+}
+
 // Dark theme styles matching your existing theme
 const darkThemeStyles = {
     grid: {
@@ -286,7 +326,8 @@ export async function createKLineChart(containerId, data, options = {}) {
                 high: item.high,
                 low: item.low,
                 close: item.close,
-                volume: item.volume || 0
+                volume: item.volume || 0,
+                askClose: item.askClose // No fallback - null/0 means no ASK data
             }));
 
             // Cache the data before setting data loader
@@ -407,6 +448,33 @@ export async function createKLineChart(containerId, data, options = {}) {
             console.warn(`[KLineChart] No initial data provided for ${containerId}`);
         }
 
+        // Add the ASK_LINE indicator to the candle pane as an overlay
+        // Per KLineChart docs: custom indicators must use registerIndicator first, then createIndicator by name
+        try {
+            // Debug: Check if askClose data exists in the cache
+            const cachedData = chartDataCache[containerId];
+            if (cachedData && cachedData.length > 0) {
+                console.log('[KLineChart DEBUG] Sample data point:', cachedData[cachedData.length - 1]);
+                console.log('[KLineChart DEBUG] askClose values present:', cachedData.filter(d => d.askClose && d.askClose !== d.close).length, 'of', cachedData.length);
+            }
+
+            // Register the custom indicator globally first (only once)
+            registerAskLineIndicator(klinecharts);
+
+            // Now create it on the chart by name
+            const askIndicatorId = chart.createIndicator('ASK_LINE', true, { id: 'candle_pane' });
+            console.log('[KLineChart DEBUG] createIndicator returned:', askIndicatorId);
+
+            if (askIndicatorId) {
+                indicatorPanes[containerId]['ASK_LINE'] = {
+                    indicatorId: askIndicatorId,
+                    paneId: 'candle_pane'
+                };
+            }
+        } catch (e) {
+            console.error('[KLineChart DEBUG] Error adding ASK_LINE indicator:', e);
+        }
+
         return chart;
     } catch (error) {
         console.error('[KLineChart] Error in createKLineChart:', error);
@@ -496,6 +564,7 @@ export function updateKLineChartWithTick(containerId, tick) {
         // - Low: MIN of existing low and new close
         // - Close: new close (latest price)
         // - Volume: use the latest volume snapshot (or accumulate if preferred)
+        // - AskClose: always use latest ASK price
         const existing = cache[existingIndex];
         mergedTick = {
             timestamp: timestamp,
@@ -503,7 +572,8 @@ export function updateKLineChartWithTick(containerId, tick) {
             high: Math.max(existing.high, tick.close),  // Max of existing high and new price
             low: Math.min(existing.low, tick.close),    // Min of existing low and new price
             close: tick.close,    // Latest price
-            volume: tick.volume || existing.volume || 0 // Use latest volume
+            volume: tick.volume || existing.volume || 0, // Use latest volume
+            askClose: tick.askClose || existing.askClose // No fallback to close
         };
         // Update the cache with merged values
         cache[existingIndex] = mergedTick;
@@ -515,7 +585,8 @@ export function updateKLineChartWithTick(containerId, tick) {
             high: tick.high,
             low: tick.low,
             close: tick.close,
-            volume: tick.volume || 0
+            volume: tick.volume || 0,
+            askClose: tick.askClose // No fallback to close
         };
         // Add new candle to cache
         if (cache) {

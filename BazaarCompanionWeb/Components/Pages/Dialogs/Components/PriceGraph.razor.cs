@@ -206,7 +206,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 high = liveTick.High,
                 low = liveTick.Low,
                 close = liveTick.Close,
-                volume = liveTick.Volume
+                volume = liveTick.Volume,
+                askClose = liveTick.AskClose
             };
 
             // Use KLineChart tick update - pass cancellation token to handle disposal
@@ -253,16 +254,19 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 if (lastCandle != null && lastCandle.Time == bucketedTime)
                 {
                     // Replace the last candle with updated values (records are immutable)
+                    var askPrice = Product.AskUnitPrice ?? price;
                     ohlcData[^1] = lastCandle with
                     {
                         High = Math.Max(lastCandle.High, price),
                         Low = Math.Min(lastCandle.Low, price),
-                        Close = price
+                        Close = price,
+                        AskClose = askPrice // Update ASK price as well
                     };
                 }
                 else
                 {
                     // Add a new partial candle
+                    var askPrice = Product.AskUnitPrice ?? price;
                     ohlcData.Add(new OhlcDataPoint(
                         Time: bucketedTime,
                         Open: price,
@@ -270,7 +274,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                         Low: price,
                         Close: price,
                         Volume: 0d,
-                        Spread: 0d
+                        Spread: 0d,
+                        AskClose: askPrice
                     ));
                 }
             }
@@ -283,7 +288,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 high = c.High,
                 low = c.Low,
                 close = c.Close,
-                volume = c.Volume
+                volume = c.Volume,
+                askClose = c.AskClose
             }).ToList();
 
             // Create the KLineChart with lazy loading support

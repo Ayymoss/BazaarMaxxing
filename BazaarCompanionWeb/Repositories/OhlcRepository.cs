@@ -46,7 +46,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .OrderByDescending(c => c.PeriodStart)
             .Take(limit)
             .OrderBy(c => c.PeriodStart)
-            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread))
+            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose))
             .ToListAsync(ct);
 
         return candles;
@@ -68,7 +68,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .OrderByDescending(c => c.PeriodStart)
             .Take(limit)
             .OrderBy(c => c.PeriodStart)
-            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread))
+            .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose))
             .ToListAsync(ct);
 
         return candles;
@@ -108,6 +108,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
                 existing.Close = candle.Close;
                 existing.Volume = candle.Volume;
                 existing.Spread = candle.Spread;
+                existing.AskClose = candle.AskClose;
             }
             else
             {

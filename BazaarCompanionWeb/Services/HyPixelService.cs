@@ -85,6 +85,7 @@ public class HyPixelService(
             var liveTick = liveCandleTracker.UpdateAndGetTick(
                 efProduct.ProductKey,
                 efProduct.Bid.UnitPrice,
+                efProduct.Ask.UnitPrice,
                 efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
 
             await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, cancellationToken);

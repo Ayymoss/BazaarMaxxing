@@ -23,6 +23,11 @@ public sealed record EFOhlcCandle
     /// Average bid-ask spread during this candle period (Bid - Ask price).
     /// </summary>
     public required double Spread { get; set; }
+    
+    /// <summary>
+    /// ASK price at candle close. Used for rendering the ASK line overlay on charts.
+    /// </summary>
+    public double AskClose { get; set; }
 
     [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }
