@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using BazaarCompanionWeb.Models.Api.Items;
 
 namespace BazaarCompanionWeb.Entities;
@@ -9,6 +9,7 @@ public class EFProduct
     [MaxLength(64)] public required string FriendlyName { get; set; }
     public required ItemTier Tier { get; set; }
     public required bool Unstackable { get; set; }
+    public string? SkinUrl { get; set; }
 
     public required EFBidMarketData Bid { get; set; }
     public required EFAskMarketData Ask { get; set; }

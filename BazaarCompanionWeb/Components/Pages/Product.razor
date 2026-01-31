@@ -16,7 +16,7 @@
             @if (ProductData is not null)
             {
                 var history = GetLastPriceHistoryAverage();
-                var currentMid = ((ProductData.BidUnitPrice ?? 0) + (ProductData.AskUnitPrice ?? 0)) / 2;
+                var currentMid = (ProductData.BidUnitPrice + ProductData.AskUnitPrice) / 2;
                 var refMid = (history.Bid + history.Ask) / 2;
                 var change = currentMid - refMid;
                 var percentChange = refMid > 0 ? change / refMid : 0;

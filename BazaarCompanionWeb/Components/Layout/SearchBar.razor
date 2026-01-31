@@ -1,0 +1,104 @@
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Interfaces
+@using BazaarCompanionWeb.Models.Pagination
+@using BazaarCompanionWeb.Models.Pagination.MetaPaginations
+@using BazaarCompanionWeb.Services
+@using BazaarCompanionWeb.Utilities
+@using Humanizer
+@inject IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery
+@inject NavigationManager NavigationManager
+
+<div class="relative w-full max-w-md group">
+    <div class="relative">
+        <div class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3">
+            <i class="ph ph-magnifying-glass text-slate-400 group-focus-within:text-blue-400 transition-colors"></i>
+        </div>
+        <input @bind="_searchString" @oninput="OnSearchInput" @onfocus="OnFocus" @onblur="OnBlur"
+               type="text"
+               class="block w-full rounded-xl border-0 bg-slate-900/50 py-2 pl-10 pr-10 text-sm text-white ring-1 ring-inset ring-slate-800 placeholder:text-slate-500 focus:bg-slate-900 focus:ring-2 focus:ring-inset focus:ring-blue-600 transition-all"
+               placeholder="Quick Search (e.g. 'hyperion' or 'under 1m')">
+        
+        <div class="absolute inset-y-0 right-0 flex items-center pr-3">
+            @if (_isLoading)
+            {
+                <div class="h-4 w-4 animate-spin rounded-full border-2 border-blue-600 border-t-transparent"></div>
+            }
+            else if (!string.IsNullOrEmpty(_searchString))
+            {
+                <button @onclick="ClearSearch" class="text-slate-500 hover:text-white transition-colors">
+                    <i class="ph ph-x-circle"></i>
+                </button>
+            }
+            else
+            {
+                <span class="hidden sm:block text-[10px] font-bold text-slate-600 border border-slate-700 px-1.5 py-0.5 rounded uppercase">/</span>
+            }
+        </div>
+    </div>
+
+    @if (_showResults && _results.Any())
+    {
+        <div class="absolute mt-2 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/90 shadow-2xl backdrop-blur-xl z-[100] animate-in fade-in slide-in-from-top-2 duration-200">
+            <div class="max-h-[480px] overflow-y-auto scrollbar-thin scrollbar-track-transparent scrollbar-thumb-slate-700">
+                <div class="px-3 py-2 text-[10px] font-bold text-slate-500 uppercase tracking-widest border-b border-slate-800/50">
+                    Search Results (@_results.Count)
+                </div>
+                @foreach (var product in _results)
+                {
+                    <div @onmousedown="() => NavigateToProduct(product.ItemId)" 
+                         class="group flex cursor-pointer items-center justify-between border-b border-slate-800/30 p-3 hover:bg-blue-600/10 transition-all last:border-0">
+                        <div class="flex items-center gap-3">
+                            <div class="h-8 w-8 rounded-lg bg-slate-900 flex items-center justify-center border border-slate-800 group-hover:border-blue-500/50 transition-colors">
+                                <div class="h-2 w-2 rounded-full" style="background-color: @product.ItemTier.ProductTierColor()"></div>
+                            </div>
+                            <div class="flex flex-col">
+                                <span class="text-sm font-bold text-white group-hover:text-blue-400 transition-colors">@product.ItemFriendlyName</span>
+                                <span class="text-[10px] text-slate-500 font-medium">@product.ItemTier.Humanize()</span>
+                            </div>
+                        </div>
+                        <div class="flex flex-col items-end gap-1">
+                            <div class="flex items-center gap-2">
+                                <div class="flex flex-col items-end">
+                                    <span class="text-[8px] text-slate-500 uppercase leading-none">Bid</span>
+                                    <span class="text-xs font-mono font-bold text-emerald-400">@product.BidUnitPrice.ToString("N0")</span>
+                                </div>
+                                <div class="h-4 w-px bg-slate-800"></div>
+                                <div class="flex flex-col items-end">
+                                    <span class="text-[8px] text-slate-500 uppercase leading-none">Ask</span>
+                                    <span class="text-xs font-mono font-bold text-rose-400">@product.AskUnitPrice.ToString("N0")</span>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-2 mt-0.5">
+                                <div class="flex items-center gap-1">
+                                    <span class="text-[9px] text-slate-500 uppercase">Rating</span>
+                                    <span class="text-[10px] font-black" style="color: @product.OrderMetaFlipOpportunityScore.RatingColor()">
+                                        @product.OrderMetaFlipOpportunityScore.ToString("N1")
+                                    </span>
+                                </div>
+                                <div class="h-2 w-px bg-slate-800"></div>
+                                <div class="flex items-center gap-1">
+                                    <span class="text-[9px] text-slate-500 uppercase">Profit</span>
+                                    <span class="text-[10px] font-black text-blue-400">
+                                        @product.OrderMetaPotentialProfitMultiplier.ToString("N2")x
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                }
+                <div class="p-2 bg-slate-900/50">
+                    <button @onmousedown="SeeAllResults" class="w-full py-2 text-[11px] font-bold text-slate-400 hover:text-white hover:bg-slate-800 rounded-lg transition-all uppercase tracking-wider">
+                        See All Results
+                    </button>
+                </div>
+            </div>
+        </div>
+    }
+    else if (_showResults && !string.IsNullOrWhiteSpace(_searchString) && !_isLoading)
+    {
+        <div class="absolute mt-2 w-full overflow-hidden rounded-xl border border-slate-800 bg-slate-950/90 p-8 shadow-2xl backdrop-blur-xl z-[100] text-center">
+            <i class="ph ph-magnifying-glass text-3xl text-slate-700 mb-2"></i>
+            <p class="text-sm text-slate-400">No products found for "@_searchString"</p>
+        </div>
+    }
+</div>

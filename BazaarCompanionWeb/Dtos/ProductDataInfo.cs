@@ -10,11 +10,12 @@ public class ProductDataInfo
     public string ItemFriendlyName { get; set; }
     public ItemTier ItemTier { get; set; }
     public bool ItemUnstackable { get; set; }
-    public double? BidUnitPrice { get; set; }
+    public string? SkinUrl { get; set; }
+    public double BidUnitPrice { get; set; }
     public double BidWeekVolume { get; set; }
     public int BidCurrentOrders { get; set; }
     public int BidCurrentVolume { get; set; }
-    public double? AskUnitPrice { get; set; }
+    public double AskUnitPrice { get; set; }
     public double AskWeekVolume { get; set; }
     public int AskCurrentOrders { get; set; }
     public int AskCurrentVolume { get; set; }

@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 using System.Text.Json;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Enums;
@@ -20,6 +20,22 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
 
     private CultureInfo _usProvider = CultureInfo.CreateSpecificCulture("en-US");
+
+    [SupplyParameterFromQuery(Name = "search")]
+    public string? QuerySearch { get; set; }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        var targetSearch = QuerySearch ?? string.Empty;
+        if (_searchString != targetSearch)
+        {
+            _searchString = targetSearch;
+            if (_grid is not null)
+            {
+                await _grid.RefreshDataAsync();
+            }
+        }
+    }
 
     private string _searchString = string.Empty;
     private string _titleText = "Bazaar Flips";

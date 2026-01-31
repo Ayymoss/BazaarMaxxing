@@ -1,4 +1,4 @@
-﻿using System.Text.Json.Serialization;
+using System.Text.Json.Serialization;
 using BazaarCompanionWeb.Utilities;
 
 namespace BazaarCompanionWeb.Models.Api.Items;
@@ -12,6 +12,13 @@ public class Item
 
     [JsonPropertyName("tier"), JsonConverter(typeof(TierConverter))]
     public ItemTier Tier { get; set; }
+
+    [JsonPropertyName("skin")] public SkinInfo? Skin { get; set; }
+}
+
+public class SkinInfo
+{
+    [JsonPropertyName("value")] public string Value { get; set; }
 }
 
 public enum ItemTier

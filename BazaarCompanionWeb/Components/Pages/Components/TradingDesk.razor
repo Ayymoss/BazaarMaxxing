@@ -1,12 +1,12 @@
 @{
     // Bid Calculations (was Buy)
-    var bidPrice = Product.BidUnitPrice ?? 0;
+    var bidPrice = Product.BidUnitPrice;
     var bidDiff = BidAverage > 0 ? (bidPrice - BidAverage) / BidAverage : 0;
     var bidSign = bidDiff > 0 ? "+" : "";
     var bidColor = bidDiff >= 0 ? "text-emerald-400" : "text-rose-400";
 
     // Ask Calculations (was Sell)
-    var askPrice = Product.AskUnitPrice ?? 0;
+    var askPrice = Product.AskUnitPrice;
     var askDiff = AskAverage > 0 ? (askPrice - AskAverage) / AskAverage : 0;
     var askSign = askDiff > 0 ? "+" : "";
     var askColor = askDiff >= 0 ? "text-emerald-400" : "text-rose-400";
@@ -26,7 +26,7 @@
                 <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price</p>
                 <div class="flex items-baseline gap-2">
                     <div class="text-3xl font-black tracking-tight text-emerald-400">
-                        @((Product.BidUnitPrice ?? 0).ToString("N2"))
+                        @Product.BidUnitPrice.ToString("N2")
                     </div>
                     <div class="text-sm font-mono text-emerald-500/60">
                         × @bestBidSize.ToString("N0")
@@ -70,7 +70,7 @@
                 <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price</p>
                 <div class="flex items-baseline gap-2">
                     <div class="text-3xl font-black tracking-tight text-rose-400">
-                        @((Product.AskUnitPrice ?? 0).ToString("N2"))
+                        @Product.AskUnitPrice.ToString("N2")
                     </div>
                     <div class="text-sm font-mono text-rose-500/60">
                         × @bestAskSize.ToString("N0")

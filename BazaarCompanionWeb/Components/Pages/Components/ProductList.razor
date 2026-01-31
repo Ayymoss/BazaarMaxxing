@@ -29,7 +29,7 @@
             <div class="relative inline-flex items-center">
                 <input type="checkbox" checked="@_filter" @onchange="@((ChangeEventArgs e) =>
                                                                      {
-                                                                         _filter = e.Value is bool b && b;
+                                                                         _filter = e.Value is true;
                                                                          OnFilter(e);
                                                                      })" class="peer sr-only"/>
                 <div
@@ -86,8 +86,8 @@
             <div class="relative inline-flex items-center">
                 <input type="checkbox" checked="@_useFuzzySearch" @onchange="@((ChangeEventArgs e) =>
                                                                              {
-                                                                                 _useFuzzySearch = e.Value is bool b && b;
-                                                                                 if (_grid is not null) _grid.RefreshDataAsync();
+                                                                                 _useFuzzySearch = e.Value is true;
+                                                                                 _grid?.RefreshDataAsync();
                                                                              })" class="peer sr-only"/>
                 <div
                     class="h-4 w-8 rounded-full bg-slate-700 after:absolute after:left-[2px] after:top-[2px] after:h-3 after:w-3 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-purple-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-1 peer-focus:ring-purple-500/50"></div>
@@ -140,11 +140,11 @@
                     </div>
                 </TemplateColumn>
 
-                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.BidUnitPrice)" Sortable="true"
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.BidUnitPrice)" Sortable="true"
                                 Title="Bid" Format="C2" Class="font-mono text-emerald-400"/>
                 <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaSpread)" Sortable="true"
                                 Title="Spread" Format="C2" Class="font-mono text-slate-400"/>
-                <PropertyColumn TGridItem="ProductDataInfo" TProp="double?" Property="@(p => p.AskUnitPrice)" Sortable="true"
+                <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.AskUnitPrice)" Sortable="true"
                                 Title="Ask" Format="C2" Class="font-mono text-rose-400"/>
 
                 <TemplateColumn Title="Profit x"
