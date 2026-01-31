@@ -57,6 +57,7 @@ public class HyPixelService(
                 ItemFriendlyName = efProduct.FriendlyName,
                 ItemTier = efProduct.Tier,
                 ItemUnstackable = efProduct.Unstackable,
+                SkinUrl = efProduct.SkinUrl,
                 BidUnitPrice = efProduct.Bid.UnitPrice,
                 BidWeekVolume = efProduct.Bid.OrderVolumeWeek,
                 BidCurrentOrders = efProduct.Bid.OrderCount,
@@ -142,6 +143,26 @@ public class HyPixelService(
                 bidOrderPrice,
                 cancellationToken);
 
+            string? skinUrl = null;
+            if (item?.Skin?.Value is not null)
+            {
+                try
+                {
+                    var json = System.Text.Encoding.UTF8.GetString(Convert.FromBase64String(item.Skin.Value));
+                    using var doc = System.Text.Json.JsonDocument.Parse(json);
+                    if (doc.RootElement.TryGetProperty("textures", out var textures) &&
+                        textures.TryGetProperty("SKIN", out var skin) &&
+                        skin.TryGetProperty("url", out var url))
+                    {
+                        skinUrl = url.GetString();
+                    }
+                }
+                catch
+                {
+                    // Ignore skin parse errors
+                }
+            }
+
             productList.Add(new ProductData
             {
                 ItemId = bazaar.ProductId,
@@ -149,7 +170,8 @@ public class HyPixelService(
                 {
                     FriendlyName = friendlyName,
                     Tier = item?.Tier ?? ItemTier.Common,
-                    Unstackable = item?.Unstackable ?? false
+                    Unstackable = item?.Unstackable ?? false,
+                    SkinUrl = skinUrl
                 },
                 Bid = new OrderInfo
                 {

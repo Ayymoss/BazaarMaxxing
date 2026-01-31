@@ -21,6 +21,7 @@ public class ProductData
             FriendlyName = Item.FriendlyName,
             Tier = Item.Tier,
             Unstackable = Item.Unstackable,
+            SkinUrl = Item.SkinUrl,
             Meta = new EFProductMeta
             {
                 ProfitMultiplier = OrderMeta.PotentialProfitMultiplier,

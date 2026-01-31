@@ -243,6 +243,7 @@ public class ProductsPaginationQueryHelper(
             ItemFriendlyName = product.FriendlyName,
             ItemTier = product.Tier,
             ItemUnstackable = product.Unstackable,
+            SkinUrl = product.SkinUrl,
             BidUnitPrice = product.Bid.UnitPrice,
             BidWeekVolume = product.Bid.OrderVolumeWeek,
             BidCurrentOrders = product.Bid.OrderCount,

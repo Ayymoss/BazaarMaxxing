@@ -1,9 +1,6 @@
-@using System.Text
 @using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Utilities
-@using Humanizer
 @using Microsoft.AspNetCore.Components.QuickGrid
-@using Microsoft.AspNetCore.Components.Web.Virtualization
 @rendermode InteractiveServer
 
 <PageTitle>@_pageTitle</PageTitle>
@@ -119,9 +116,8 @@
                        Class="w-full text-left text-xs text-slate-300">
                 <TemplateColumn Title="Product" Sortable="false">
                     <div class="flex items-center gap-2 py-0.5" @onclick="@(() => RowClickEvent(context))">
-                        <!-- Tier Dot -->
-                        <div class="h-1.5 w-1.5 rounded-full shadow-sm flex-shrink-0"
-                             style="@($"background-color: {context.ItemTier.ProductTierColor()}")"></div>
+                        <!-- Head -->
+                         <MinecraftHead SkinUrl="@context.SkinUrl" Tier="@context.ItemTier" Size="24" Border="1" Class="rounded-md shadow-md" />
 
                         <!-- Fire Sale Indicator -->
                         @if (context.IsManipulated)

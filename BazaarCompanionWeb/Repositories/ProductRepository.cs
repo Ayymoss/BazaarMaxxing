@@ -28,6 +28,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 FriendlyName = x.FriendlyName,
                 Tier = x.Tier,
                 Unstackable = x.Unstackable,
+                SkinUrl = x.SkinUrl,
 
                 Meta = new EFProductMeta
                 {
@@ -108,6 +109,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 product.FriendlyName = incomingProduct.FriendlyName;
                 product.Tier = incomingProduct.Tier;
                 product.Unstackable = incomingProduct.Unstackable;
+                product.SkinUrl = incomingProduct.SkinUrl;
 
                 // Map Meta properties
                 product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
@@ -205,6 +207,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 ItemFriendlyName = x.FriendlyName,
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
+                SkinUrl = x.SkinUrl,
                 BidUnitPrice = x.Bid.UnitPrice,
                 BidWeekVolume = x.Bid.OrderVolumeWeek,
                 BidCurrentOrders = x.Bid.OrderCount,
@@ -259,6 +262,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 ItemFriendlyName = x.FriendlyName,
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
+                SkinUrl = x.SkinUrl,
                 BidUnitPrice = x.Bid.UnitPrice,
                 AskUnitPrice = x.Ask.UnitPrice,
             }).ToListAsync(cancellationToken);

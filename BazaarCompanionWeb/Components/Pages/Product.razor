@@ -24,7 +24,8 @@
                 var changeSign = change > 0 ? "+" : "";
 
                 <div class="flex flex-col">
-                    <div class="flex items-baseline gap-2">
+                    <div class="flex items-center gap-4">
+                        <MinecraftHead SkinUrl="@ProductData.SkinUrl" Tier="@ProductData.ItemTier" Size="48" Class="rounded-xl shadow-lg" />
                         <h1 class="text-2xl font-black tracking-tight text-white uppercase leading-none">
                             @ProductData.ItemFriendlyName
                         </h1>
