@@ -43,10 +43,10 @@ public class MarketAnalyticsService(
             .Where(p => p.Bid.UnitPrice > 0 && p.Bid.OrderVolume > 0)
             .Sum(p => p.Bid.UnitPrice * p.Bid.OrderVolume);
 
-        // Average Spread: Mean spread percentage across all products
+        // Average Spread: Mean spread ratio across all products (stored as decimal, P2 will format)
         var spreads = activeProducts
             .Where(p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0)
-            .Select(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) / p.Bid.UnitPrice * 100)
+            .Select(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) / p.Bid.UnitPrice) // Decimal ratio (e.g., 0.05 for 5%)
             .ToList();
         var averageSpread = spreads.Any() ? spreads.Average() : 0;
 
@@ -118,11 +118,16 @@ public class MarketAnalyticsService(
                 .Select(c => c.Close)
                 .ToList();
 
-            if (prices.Count >= 24) // Need at least 24 hours of data
+            if (prices.Count >= 6) // Need at least 6 hours of data (lowered from 24)
             {
                 productPriceData[productKey] = prices;
             }
         }
+
+        logger.LogDebug(
+            "Correlation matrix: {TopProductCount} top products, {ValidProductCount} with enough candle data",
+            topProducts.Count,
+            productPriceData.Count);
 
         // Calculate correlation matrix
         var matrix = new Dictionary<string, Dictionary<string, double>>();
@@ -404,14 +409,20 @@ public class MarketAnalyticsService(
 
     private double CalculatePearsonCorrelation(List<double> x, List<double> y)
     {
-        if (x.Count != y.Count || x.Count < 2) return 0;
+        // Handle different array lengths by taking the minimum common length (most recent data)
+        var minCount = Math.Min(x.Count, y.Count);
+        if (minCount < 2) return 0;
 
-        var n = x.Count;
-        var sumX = x.Sum();
-        var sumY = y.Sum();
-        var sumXY = x.Zip(y, (a, b) => a * b).Sum();
-        var sumX2 = x.Sum(v => v * v);
-        var sumY2 = y.Sum(v => v * v);
+        // Take the most recent data points (from the end)
+        var xAligned = x.TakeLast(minCount).ToList();
+        var yAligned = y.TakeLast(minCount).ToList();
+
+        var n = minCount;
+        var sumX = xAligned.Sum();
+        var sumY = yAligned.Sum();
+        var sumXY = xAligned.Zip(yAligned, (a, b) => a * b).Sum();
+        var sumX2 = xAligned.Sum(v => v * v);
+        var sumY2 = yAligned.Sum(v => v * v);
 
         var numerator = (n * sumXY) - (sumX * sumY);
         var denominator = Math.Sqrt(((n * sumX2) - (sumX * sumX)) * ((n * sumY2) - (sumY * sumY)));

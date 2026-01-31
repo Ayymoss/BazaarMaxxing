@@ -1,0 +1,58 @@
+@using BazaarCompanionWeb.Components.Pages.Components
+@rendermode InteractiveServer
+
+<div class="flex flex-col gap-1.5 rounded-xl border border-slate-700/50 bg-slate-900/40 p-1 shadow-inner backdrop-blur-md h-full">
+    <div class="flex items-center justify-between px-2 pt-1 pb-1 pb-0.5">
+        <h4 class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
+            <i class="ph ph-chart-line-up text-blue-500/80"></i> Index History
+        </h4>
+        <ChartIntervalSelector SelectedInterval="Interval" OnIntervalChanged="OnIntervalChangedAsync" />
+    </div>
+    
+    @* KLineChart Indicator Controls *@
+    <div class="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-lg border border-slate-700/50 bg-slate-800/40">
+        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Indicators:</span>
+        
+        @* Overlay indicators (on main candle pane) *@
+        @foreach (var indicator in _overlayIndicators)
+        {
+            <label class="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" 
+                       checked="@indicator.Enabled" 
+                       @onchange="@((ChangeEventArgs e) => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
+                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
+                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
+            </label>
+        }
+        
+        <div class="h-4 w-px bg-slate-700"></div>
+        
+        @* Sub-pane indicators *@
+        @foreach (var indicator in _subPaneIndicators)
+        {
+            <label class="flex items-center gap-1.5 cursor-pointer group">
+                <input type="checkbox" 
+                       checked="@indicator.Enabled" 
+                       @onchange="@((ChangeEventArgs e) => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
+                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-1" />
+                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
+            </label>
+        }
+    </div>
+    
+    <div class="relative w-full flex-1 min-h-[580px] overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+        @* KLineChart container *@
+        <div id="chart-container-@_chartId" class="absolute inset-0 w-full h-full"></div>
+        
+        @if (!_chartInitialized)
+        {
+            <div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-[2px]">
+                <div class="p-4 rounded-full bg-slate-800/50 mb-3">
+                    <i class="ph ph-chart-line text-2xl text-slate-500"></i>
+                </div>
+                <p class="text-xs text-slate-400 font-medium tracking-wide">Loading index data...</p>
+                <p class="text-[10px] text-slate-500 mt-1">Aggregating candles from underlying products</p>
+            </div>
+        }
+    </div>
+</div>

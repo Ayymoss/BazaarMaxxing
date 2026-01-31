@@ -1,0 +1,156 @@
+@page "/indices"
+@using BazaarCompanionWeb.Configurations
+@using Microsoft.Extensions.Options
+@rendermode InteractiveServer
+@inject IOptions<List<IndexConfiguration>> IndexOptions
+
+<PageTitle>Indices | Bazaar Maxxing</PageTitle>
+<div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
+    <!-- Page Header -->
+    <div class="flex items-center justify-between border-b border-slate-800/60 pb-4">
+        <div class="flex items-center gap-4">
+            <a href="/" class="group flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
+                <i class="ph ph-arrow-left text-lg group-hover:-translate-x-1 transition-transform"></i>
+                <span class="text-sm font-medium">Back</span>
+            </a>
+            <div class="h-6 w-px bg-slate-700"></div>
+            <div class="flex items-center gap-3">
+                <div class="p-2 rounded-xl bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30">
+                    <i class="ph ph-chart-pie-slice text-2xl text-blue-400"></i>
+                </div>
+                <div>
+                    <h1 class="text-2xl font-black tracking-tight text-white uppercase leading-none">
+                        Market Indices
+                    </h1>
+                    <p class="text-xs text-slate-500 mt-0.5">
+                        ETF-Style Aggregate Tracking
+                    </p>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Stats Header Section -->
+    <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-2">
+        <div class="relative overflow-hidden group rounded-2xl border border-blue-500/20 bg-slate-900/40 p-5 backdrop-blur-md transition-all hover:bg-slate-900/60">
+            <div class="absolute -right-4 -top-4 opacity-10 transition-transform group-hover:scale-110 group-hover:rotate-12 duration-500">
+                <i class="ph ph-chart-pie-slice text-8xl text-blue-400"></i>
+            </div>
+            <div class="relative z-10">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-blue-400/80">Tracked Indices</span>
+                <div class="mt-1 flex items-baseline gap-2">
+                    <span class="text-3xl font-black text-white">@_indices.Count</span>
+                    <span class="text-xs text-slate-500">Active baskets</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="relative overflow-hidden group rounded-2xl border border-purple-500/20 bg-slate-900/40 p-5 backdrop-blur-md transition-all hover:bg-slate-900/60">
+            <div class="absolute -right-4 -top-4 opacity-10 transition-transform group-hover:scale-110 group-hover:rotate-12 duration-500">
+                <i class="ph ph-cube text-8xl text-purple-400"></i>
+            </div>
+            <div class="relative z-10">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-purple-400/80">Total Constituents</span>
+                <div class="mt-1 flex items-baseline gap-2">
+                    <span class="text-3xl font-black text-white">@_indices.Sum(i => i.ProductKeys.Count)</span>
+                    <span class="text-xs text-slate-500">Products tracking</span>
+                </div>
+            </div>
+        </div>
+
+        <div class="relative overflow-hidden group rounded-2xl border border-emerald-500/20 bg-slate-900/40 p-5 backdrop-blur-md transition-all hover:bg-slate-900/60">
+            <div class="absolute -right-4 -top-4 opacity-10 transition-transform group-hover:scale-110 group-hover:rotate-12 duration-500">
+                <i class="ph ph-lightning text-8xl text-emerald-400"></i>
+            </div>
+            <div class="relative z-10">
+                <span class="text-[10px] font-bold uppercase tracking-widest text-emerald-400/80">Market Coverage</span>
+                <div class="mt-1 flex items-baseline gap-2">
+                    <span class="text-3xl font-black text-white">100%</span>
+                    <span class="text-xs text-slate-500">Equal-weighted</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    @if (_indices.Count == 0)
+    {
+        <div class="flex flex-col items-center justify-center py-32 rounded-3xl border border-dashed border-slate-800 bg-slate-900/20">
+            <div class="mb-6 rounded-full bg-slate-800/50 p-6">
+                <i class="ph ph-chart-pie-slice text-6xl text-slate-700 animate-pulse"></i>
+            </div>
+            <h2 class="text-xl font-bold text-slate-300">No indices found</h2>
+            <p class="mt-2 max-w-xs text-center text-sm text-slate-500">
+                Get started by adding index definitions to your <code class="rounded bg-slate-800 px-1 text-slate-300">appsettings.json</code> file.
+            </p>
+        </div>
+    }
+    else
+    {
+        <div class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-6">
+            @foreach (var index in _indices)
+            {
+                <a href="/index/@index.Slug"
+                   class="group relative flex flex-col overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-900/40 p-6 backdrop-blur-md transition-all duration-300 hover:-translate-y-1 hover:border-blue-500/50 hover:bg-slate-900/60 hover:shadow-2xl hover:shadow-blue-500/10 active:scale-[0.98]">
+                    
+                    <!-- Hover Accent Glow -->
+                    <div class="absolute -inset-[100%] z-0 pointer-events-none opacity-0 group-hover:opacity-100 transition-opacity duration-700 bg-[radial-gradient(circle_at_50%_50%,rgba(59,130,246,0.05)_0%,transparent_50%)]"></div>
+
+                    <div class="relative z-10">
+                        <div class="flex items-start justify-between">
+                            <div class="p-3 rounded-2xl bg-gradient-to-br from-blue-600/20 to-purple-600/20 border border-blue-500/30 group-hover:border-blue-400/50 transition-colors shadow-inner">
+                                <i class="ph ph-stack-simple text-2xl text-blue-400"></i>
+                            </div>
+                            <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-slate-400 group-hover:text-blue-300 group-hover:border-blue-500/30 transition-all">
+                                <i class="ph ph-rows text-xs"></i>
+                                @index.ProductKeys.Count Components
+                            </div>
+                        </div>
+
+                        <div class="mt-5">
+                            <h3 class="text-xl font-black tracking-tight text-white group-hover:text-blue-200 transition-colors uppercase italic">
+                                @index.Name
+                            </h3>
+                            <p class="mt-1 text-xs text-slate-500 line-clamp-2">
+                                Tracking movement across @index.ProductKeys.Count normalized Hypixel Bazaar products.
+                            </p>
+                        </div>
+
+                        <div class="mt-6 flex flex-wrap gap-1.5">
+                            @foreach (var productKey in index.ProductKeys.Take(5))
+                            {
+                                <span class="px-2.5 py-1 rounded-lg bg-slate-950/40 text-[10px] font-medium text-slate-500 border border-slate-800/50 group-hover:border-slate-700 transition-colors">
+                                    @productKey.Replace("_", " ").ToLower()
+                                </span>
+                            }
+                            @if (index.ProductKeys.Count > 5)
+                            {
+                                <span class="px-2.5 py-1 rounded-lg bg-blue-500/10 text-[10px] font-bold text-blue-400/80 border border-blue-500/20">
+                                    +@(index.ProductKeys.Count - 5)
+                                </span>
+                            }
+                        </div>
+
+                        <div class="mt-8 flex items-center justify-between pt-5 border-t border-slate-800/50">
+                            <span class="text-[10px] font-bold uppercase tracking-widest text-slate-600 group-hover:text-blue-500/70 transition-colors">
+                                Aggregate Performance
+                            </span>
+                            <div class="flex items-center gap-1 text-blue-400 font-bold text-xs">
+                                <span>Analyze</span>
+                                <i class="ph ph-arrow-right transition-transform group-hover:translate-x-1"></i>
+                            </div>
+                        </div>
+                    </div>
+                </a>
+            }
+        </div>
+    }
+</div>
+
+@code {
+    private List<IndexConfiguration> _indices = [];
+
+    protected override void OnInitialized()
+    {
+        _indices = IndexOptions.Value;
+    }
+}

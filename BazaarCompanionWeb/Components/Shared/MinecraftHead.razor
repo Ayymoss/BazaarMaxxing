@@ -1,40 +1,135 @@
 @using BazaarCompanionWeb.Models.Api.Items
 @using BazaarCompanionWeb.Utilities
 
-<div class="relative overflow-hidden shrink-0 select-none flex items-center justify-center transition-all duration-300 @Class"
-     style="width: @(Size)px; height: @(Size)px; border: @(Border)px solid @(Tier.ProductTierColor()); background-color: @(SkinUrl == null ? Tier.ProductTierColor() + "10" : "#1e293b"); @Style">
+<div class="minecraft-head-standalone @(Class)"
+     style="width: @(Size)px; 
+            height: @(Size)px; 
+            --tier-color: @(Tier.ProductTierColor());
+            --glow-opacity: @(SkinUrl is null ? "0.50" : "0.75");
+            --glow-spread: @(SkinUrl is null ? "50%" : "65%");
+            @Style">
+    
     @if (!string.IsNullOrEmpty(SkinUrl))
     {
-        <!-- Face Layer -->
-        <div style="width: 100%; height: 100%;
-            background-image: url('@SkinUrl');
-        background-size: 800%;
-        background-position: -100% -100%;
-        image-rendering: pixelated;
-        image-rendering: -moz-crisp-edges;
-        image-rendering: crisp-edges;">
-        </div>
-
-        <!-- Hat/Overlay Layer -->
-        <div style="width: 100%; height: 100%;
-            position: absolute;
-            top: 0; left: 0;
-            background-image: url('@SkinUrl');
-        background-size: 800%;
-        background-position: -500% -100%;
-        image-rendering: pixelated;
-        image-rendering: -moz-crisp-edges;
-        image-rendering: crisp-edges;">
+        <div class="skull-item" style="--size: @(Size * 0.85)px; --texture-url: url('@SkinUrl');">
+            <div class="skull-head">
+                <div class="skull-layer skull-inner">
+                    <div class="skull-left"></div>
+                    <div class="skull-right"></div>
+                    <div class="skull-bottom"></div>
+                    <div class="skull-top"></div>
+                    <div class="skull-front"></div>
+                    <div class="skull-back"></div>
+                </div>
+                <div class="skull-layer skull-outer">
+                    <div class="skull-left"></div>
+                    <div class="skull-right"></div>
+                    <div class="skull-bottom"></div>
+                    <div class="skull-top"></div>
+                    <div class="skull-front"></div>
+                    <div class="skull-back"></div>
+                </div>
+            </div>
         </div>
     }
     else
     {
-        <!-- Creative Fallback: Stylized Block Silhouette -->
-        <div class="flex flex-col items-center justify-center opacity-40">
-            <i class="ph ph-cube text-white" style="font-size: @(Size * 0.5)px"></i>
+        <div class="flex flex-col items-center justify-center opacity-40 w-full h-full">
+            <i class="ph ph-cube text-white" style="font-size: @(Size * 0.6)px"></i>
         </div>
     }
+
+    <!-- Tier backlight glow -->
+    <div class="standalone-glow"></div>
 </div>
+
+<style>
+    .minecraft-head-standalone {
+        position: relative;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        overflow: visible; /* Let the glow spread */
+        flex-shrink: 0;
+        user-select: none;
+        transition: transform 0.3s ease;
+    }
+
+    .standalone-glow {
+        position: absolute;
+        inset: -30%; /* Expanded reach */
+        background: radial-gradient(circle at center, var(--tier-color), transparent var(--glow-spread));
+        opacity: var(--glow-opacity);
+        pointer-events: none;
+        z-index: 0;
+        filter: blur(6px);
+        transition: opacity 0.3s ease, transform 0.3s ease;
+    }
+
+    .minecraft-head-standalone:hover .standalone-glow {
+        opacity: calc(var(--glow-opacity) * 1.25);
+        transform: scale(1.3);
+    }
+
+    /* 3D Item Internal Scaling & Layout */
+    .skull-item {
+        --texture-displacement: calc(var(--size) / 2.01);
+        --inc: calc(-1 * var(--size));
+        /* Larger scale since container borders are gone */
+        --outer-scale: calc(1 / 1.15); 
+        --inner-scale: calc(var(--outer-scale) / 9 * 8);
+        position: relative;
+        width: var(--size);
+        height: var(--size);
+        min-width: var(--size);
+        z-index: 1;
+        filter: drop-shadow(0 4px 8px rgba(0,0,0,0.5));
+        transition: transform 0.3s ease;
+    }
+
+    .skull-head,
+    .skull-layer,
+    .skull-layer > div {
+        position: absolute;
+        width: var(--size);
+        height: var(--size);
+    }
+
+    .skull-head {
+        transform-style: preserve-3d;
+        /* perfectly aligned for gem illusion */
+        transform: rotateX(-30deg) rotateY(45deg);
+    }
+
+    .skull-layer {
+        transform-style: preserve-3d;
+    }
+
+    .skull-inner {
+        --offset-x: 0%;
+        transform: scale3d(var(--inner-scale), var(--inner-scale), var(--inner-scale));
+    }
+
+    .skull-outer {
+        --offset-x: calc(4 * var(--inc));
+        transform: scale3d(var(--outer-scale), var(--outer-scale), var(--outer-scale));
+    }
+
+    .skull-layer > div {
+        background-image: var(--texture-url);
+        background-size: 800%;
+        background-repeat: no-repeat;
+        image-rendering: pixelated;
+    }
+
+    /* Directional shading for depth */
+    .skull-left { transform: rotateY(-90deg) translateZ(var(--texture-displacement)); filter: brightness(0.8); background-position: var(--offset-x) var(--inc); }
+    .skull-right { transform: rotateY(90deg) translateZ(var(--texture-displacement)); filter: brightness(0.95); background-position: calc(var(--offset-x) + 2 * var(--inc)) var(--inc); }
+    .skull-bottom { transform: rotateY(180deg) rotateX(-90deg) translateZ(var(--texture-displacement)); filter: brightness(0.5); background-position: calc(var(--offset-x) + 2 * var(--inc)) 0; }
+    .skull-top { transform: rotateX(90deg) translateZ(var(--texture-displacement)); filter: brightness(1.1); background-position: calc(var(--offset-x) + var(--inc)) 0; }
+    .skull-front { transform: translateZ(var(--texture-displacement)); filter: brightness(1); background-position: calc(var(--offset-x) + var(--inc)) var(--inc); }
+    .skull-back { transform: rotateY(180deg) translateZ(var(--texture-displacement)); filter: brightness(1.1); background-position: calc(var(--offset-x) + 3 * var(--inc)) var(--inc); }
+</style>
 
 @code {
     [Parameter] public string? SkinUrl { get; set; }
@@ -42,6 +137,6 @@
     [Parameter] public int Size { get; set; } = 32;
     [Parameter] public string? Alt { get; set; }
     [Parameter] public string? Class { get; set; }
-    [Parameter] public int Border { get; set; } = 2;
+    [Parameter] public int Border { get; set; } = 2; // Ignored in standalone view
     [Parameter] public string? Style { get; set; }
 }

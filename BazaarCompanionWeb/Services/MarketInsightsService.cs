@@ -21,6 +21,7 @@ public sealed partial class MarketInsightsService(
     private const double HotProductThreshold = 5.0; // 5% change in 15 min
     private const double VolumeSurgeThreshold = 2.0; // 2x average volume
     private const double SpreadWideningThreshold = 20.0; // 20% spread increase
+    private const long MinimumWeeklyVolumeForInsights = 10_000; // Filter out low-volume items
     private const int MaxInsightsPerCategory = 10;
 
     // Cache infrastructure
@@ -62,7 +63,7 @@ public sealed partial class MarketInsightsService(
             var hotProducts = await CalculateHotProductsAsync(context, ohlcRepository, now, ct);
             var volumeSurges = await CalculateVolumeSurgesAsync(context, ohlcRepository, now, ct);
             var spreadOpportunities = await CalculateSpreadOpportunitiesAsync(context, ohlcRepository, now, ct);
-            var fireSales = await CalculateFireSalesAsync(context, now, ct);
+            var fireSales = await CalculateFireSalesAsync(context, ohlcRepository, now, ct);
             var (gainers, losers) = await CalculateMarketMoversAsync(context, ohlcRepository, now, ct);
 
             // Track new hot products
@@ -113,7 +114,7 @@ public sealed partial class MarketInsightsService(
         var products = await context.Products
             .Include(p => p.Bid)
             .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
             .ToListAsync(ct);
 
         foreach (var product in products)
@@ -172,7 +173,7 @@ public sealed partial class MarketInsightsService(
             .Include(p => p.Bid)
             .Include(p => p.Ask)
             .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
             .ToListAsync(ct);
 
         var oneHourAgo = now.AddHours(-1);
@@ -246,7 +247,7 @@ public sealed partial class MarketInsightsService(
             .Include(p => p.Ask)
             .Include(p => p.Meta)
             .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
             .ToListAsync(ct);
 
         foreach (var product in products)
@@ -298,43 +299,101 @@ public sealed partial class MarketInsightsService(
     }
 
     /// <summary>
-    /// Calculates fire sale alerts using existing manipulation detection.
+    /// Calculates fire sale alerts using stacked indicators:
+    /// 1. Price 20%+ below 24h average (short-term deviation)
+    /// 2. Price 10%+ below 7-day low (breaking historical support)
+    /// 3. Volume 50%+ above average (panic selling confirmation)
     /// </summary>
     private async Task<List<FireSaleInsight>> CalculateFireSalesAsync(
         DataContext context,
+        IOhlcRepository ohlcRepository,
         DateTime now,
         CancellationToken ct)
     {
-        var manipulatedProducts = await context.Products
+        // Fire sale thresholds
+        const double priceDeviation24hThreshold = 0.20; // 20% below 24h average
+        const double priceBelow7dLowThreshold = 0.10;   // 10% below 7-day low
+        const double volumeSpikeThreshold = 1.50;       // 50% above average volume
+
+        List<FireSaleInsight> results = [];
+
+        var products = await context.Products
             .Include(p => p.Bid)
             .Include(p => p.Ask)
-            .Include(p => p.Meta)
             .AsNoTracking()
-            .Where(p => p.Meta.IsManipulated && p.Meta.ManipulationIntensity > 0)
-            .OrderByDescending(p => p.Meta.ManipulationIntensity)
-            .Take(MaxInsightsPerCategory)
+            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
             .ToListAsync(ct);
 
-        return manipulatedProducts.Select(p =>
+        foreach (var product in products)
         {
-            var currentPrice = p.Ask.UnitPrice;
-            var deviationPercent = p.Meta.PriceDeviationPercent;
-            var estimatedFairPrice = deviationPercent != 0
-                ? currentPrice / (1 + deviationPercent / 100)
-                : currentPrice;
+            // Get 7 days of hourly candles for analysis
+            var candles = await ohlcRepository.GetCandlesAsync(
+                product.ProductKey,
+                CandleInterval.OneHour,
+                limit: 7 * 24, // 168 hours
+                ct);
 
-            return new FireSaleInsight(
-                p.ProductKey,
-                p.FriendlyName,
-                p.Tier.ToString(),
+            if (candles.Count < 24) continue; // Need at least 24h of data
+
+            var ordered = candles.OrderBy(c => c.Time).ToList();
+            var currentAskPrice = product.Ask.UnitPrice;
+            if (currentAskPrice <= 0) continue;
+
+            // Calculate 24h average price
+            var last24hCandles = ordered.TakeLast(24).ToList();
+            var avg24hPrice = last24hCandles.Average(c => c.Close);
+            if (avg24hPrice <= 0) continue;
+
+            // Calculate 7-day low
+            var low7dPrice = ordered.Min(c => c.Low);
+            if (low7dPrice <= 0) continue;
+
+            // Calculate current hour volume vs average
+            var currentHourCandle = ordered.LastOrDefault();
+            var historicalCandles = ordered.SkipLast(1).ToList();
+            var avgHourlyVolume = historicalCandles
+                .Where(c => c.Volume > 0)
+                .Select(c => c.Volume)
+                .DefaultIfEmpty(1)
+                .Average();
+
+            var currentVolume = currentHourCandle?.Volume ?? 0;
+
+            // === STACKED INDICATOR CHECKS ===
+            // 1. Price must be 20%+ below 24h average
+            var priceBelow24hAvg = currentAskPrice < avg24hPrice * (1 - priceDeviation24hThreshold);
+
+            // 2. Price must be 10%+ below 7-day low (breaking support)
+            var priceBelow7dLow = currentAskPrice < low7dPrice * (1 - priceBelow7dLowThreshold);
+
+            // 3. Volume must be 50%+ above average (panic selling)
+            var volumeSpike = avgHourlyVolume > 0 && currentVolume > avgHourlyVolume * volumeSpikeThreshold;
+
+            // All three conditions must be met
+            if (!priceBelow24hAvg || !priceBelow7dLow || !volumeSpike) continue;
+
+            // Calculate deviation percentage for display
+            var deviationPercent = ((currentAskPrice - avg24hPrice) / avg24hPrice) * 100;
+            var intensityScore = Math.Min(1.0, Math.Abs(deviationPercent) / 50); // 0-1 scale
+
+            results.Add(new FireSaleInsight(
+                product.ProductKey,
+                product.FriendlyName,
+                product.Tier.ToString(),
                 now,
-                p.Meta.ManipulationIntensity,
+                intensityScore,
                 deviationPercent,
-                currentPrice,
-                estimatedFairPrice
-            );
-        }).ToList();
+                currentAskPrice,
+                avg24hPrice // Use 24h average as "fair price" estimate
+            ));
+        }
+
+        return results
+            .OrderByDescending(f => Math.Abs(f.PriceDeviationPercent))
+            .Take(MaxInsightsPerCategory)
+            .ToList();
     }
+
 
     /// <summary>
     /// Calculates market movers - top gainers and losers over 24 hours.
@@ -351,7 +410,7 @@ public sealed partial class MarketInsightsService(
             .Include(p => p.Bid)
             .Include(p => p.Ask)
             .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek > 0)
+            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
             .ToListAsync(ct);
 
         foreach (var product in products)

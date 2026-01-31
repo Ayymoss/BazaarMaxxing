@@ -15,7 +15,7 @@ public class OpportunityScoringService(
     private const double MinSpreadStability = 0.1; // Minimum acceptable spread stability
     private const int ManipulationLookbackDays = 7;
     private const int ManipulationMinCandles = 24; // 24 hours minimum
-    private const double ManipulationZScoreThreshold = 2.0;
+    private const double ManipulationZScoreThreshold = 1.5; // Lowered from 2.0 for Hypixel volatility
     
     // Minimum weekly volume for reliable flip execution (below this, execution risk is high)
     private const long MinWeeklyVolumeForFlipping = 100_000;

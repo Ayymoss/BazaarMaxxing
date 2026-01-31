@@ -19,20 +19,20 @@
         <div class="flex flex-col">
             <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Avg Spread</p>
             <p class="text-lg font-bold tracking-tight text-slate-200">
-                @(Metrics.AverageSpread.ToString("P2", CultureInfo.InvariantCulture))%
+                @(Metrics.AverageSpread.ToString("P2", CultureInfo.InvariantCulture))
             </p>
             <p class="text-[10px] text-slate-600 font-mono mt-0.5">Across all products</p>
         </div>
     </div>
 
-    <!-- Manipulation Index -->
+    <!-- Volatility Index -->
     <div class="group relative overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-2.5 shadow-md backdrop-blur-md transition-all duration-300 hover:border-slate-600/50 hover:bg-slate-800/60">
         <div class="flex flex-col">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Manipulation</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Volatility</p>
             <p class="text-lg font-bold tracking-tight" style="@($"color: {(Metrics.MarketManipulationIndex > 10 ? "#EF4444" : Metrics.MarketManipulationIndex > 5 ? "#F97316" : "#78F86A")}")">
                 @(Metrics.MarketManipulationIndex.ToString("F1", CultureInfo.InvariantCulture))%
             </p>
-            <p class="text-[10px] text-slate-600 font-mono mt-0.5">Products flagged</p>
+            <p class="text-[10px] text-slate-600 font-mono mt-0.5">Unusual price moves</p>
         </div>
     </div>
 
@@ -47,14 +47,14 @@
         </div>
     </div>
 
-    <!-- Market Health Score -->
+    <!-- Liquidity Score -->
     <div class="group relative overflow-hidden rounded-xl border border-slate-700/50 bg-slate-800/40 px-3 py-2.5 shadow-md backdrop-blur-md transition-all duration-300 hover:border-slate-600/50 hover:bg-slate-800/60">
         <div class="flex flex-col">
-            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Health Score</p>
+            <p class="text-[10px] font-semibold uppercase tracking-wider text-slate-500 mb-1">Liquidity</p>
             <p class="text-lg font-bold tracking-tight" style="@($"color: {(Metrics.MarketHealthScore >= 70 ? "#78F86A" : Metrics.MarketHealthScore >= 50 ? "#F9AD35" : "#EF4444")}")">
-                @(Metrics.MarketHealthScore.ToString("F1", CultureInfo.InvariantCulture))
+                @(Metrics.MarketHealthScore.ToString("F0", CultureInfo.InvariantCulture))
             </p>
-            <p class="text-[10px] text-slate-600 font-mono mt-0.5">0-100 scale</p>
+            <p class="text-[10px] text-slate-600 font-mono mt-0.5">Spread + volume score</p>
         </div>
     </div>
 

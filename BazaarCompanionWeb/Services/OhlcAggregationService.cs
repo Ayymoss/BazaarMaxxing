@@ -98,12 +98,24 @@ public class OhlcAggregationService(
     private async Task AggregateIntervalAsync(IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
         CancellationToken ct)
     {
-        var intervalMinutes = (int)interval;
         var now = DateTime.UtcNow;
 
-        // Determine how far back to look for new ticks
-        var latestCandle = await ohlcRepository.GetLatestCandleTimeAsync(productKey, interval, ct);
-        var lookbackStart = latestCandle ?? now.AddDays(-7);
+        // Determine how far back to look for ticks
+        // For daily/weekly intervals, ALWAYS look back the full tick retention period
+        // This ensures seeded flat candles get properly re-aggregated with actual tick data
+        DateTime lookbackStart;
+        if (interval is CandleInterval.OneDay or CandleInterval.OneWeek)
+        {
+            // Always re-aggregate from the full tick retention window for larger intervals
+            // This fixes seeded flat candles that have O=H=L=C
+            lookbackStart = now - TickRetention;
+        }
+        else
+        {
+            // For smaller intervals, use the latest candle as the starting point for efficiency
+            var latestCandle = await ohlcRepository.GetLatestCandleTimeAsync(productKey, interval, ct);
+            lookbackStart = latestCandle ?? now.AddDays(-7);
+        }
 
         var ticks = await ohlcRepository.GetTicksForAggregationAsync(productKey, lookbackStart, ct);
         if (ticks.Count is 0) return;

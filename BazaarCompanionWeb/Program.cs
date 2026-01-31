@@ -2,6 +2,7 @@ using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using BazaarCompanionWeb.Components;
+using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
@@ -16,6 +17,7 @@ using BazaarCompanionWeb.Utilities;
 using BazaarCompanionWeb.Hubs;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Options;
 using Refit;
 using Serilog;
 using Serilog.Events;
@@ -174,6 +176,43 @@ public class Program
                 askClose = c.AskClose
             }).ToList();
             
+            return Results.Ok(result);
+        });
+
+        // Index chart API for aggregated OHLC data (ETF-like indices)
+        app.MapGet("/api/chart/index/{slug}/{interval:int}", async (
+            string slug,
+            int interval,
+            int? limit,
+            IndexAggregationService indexService,
+            IOptions<List<IndexConfiguration>> indexOptions,
+            CancellationToken ct) =>
+        {
+            // Check if index exists
+            var indices = indexOptions.Value;
+            var index = indices.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+            if (index is null)
+            {
+                return Results.NotFound(new { error = $"Index '{slug}' not found" });
+            }
+
+            var candleInterval = (CandleInterval)interval;
+            var dataLimit = Math.Min(limit ?? 200, 500);
+
+            var candles = await indexService.GetAggregatedCandlesAsync(slug, candleInterval, dataLimit, ct);
+
+            // Return in KLineChart format (timestamp in milliseconds)
+            var result = candles.Select(c => new
+            {
+                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
+                open = c.Open,
+                high = c.High,
+                low = c.Low,
+                close = c.Close,
+                volume = c.Volume,
+                askClose = c.AskClose
+            }).ToList();
+
             return Results.Ok(result);
         });
 
@@ -384,6 +423,9 @@ public class Program
 
     private static void RegisterCustomServices(IHostApplicationBuilder builder)
     {
+        // Bind Indices configuration from appsettings.json
+        builder.Services.Configure<List<IndexConfiguration>>(builder.Configuration.GetSection("Indices"));
+
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
         builder.Services.AddSingleton<LiveCandleTracker>();
@@ -399,6 +441,7 @@ public class Program
         builder.Services.AddScoped<BrowserStorage>();
         builder.Services.AddSingleton<ComparisonStateService>();
         builder.Services.AddSingleton<AboutModalService>();
+        builder.Services.AddScoped<IndexAggregationService>();
 
         builder.Services.AddHostedService<OhlcAggregationService>();
     }
