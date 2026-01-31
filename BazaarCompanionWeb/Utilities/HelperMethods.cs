@@ -14,16 +14,21 @@ public static class HelperMethods
 
     public static string ToCompactString(this double value, bool isPercentage = false)
     {
-        const double threshold = 100_000;
-
         if (!isPercentage)
-            return value >= threshold
-                ? value.ToMetric()
-                : value.ToString("N0");
+            return Math.Abs(value) >= 1_000_000
+                ? value.ToMetric(decimals: 2)
+                : value.ToString("N2");
 
-        return Math.Abs(value) >= threshold
-            ? $"{value.ToMetric()}%"
-            : $"{value:0.#}%";
+        var absValue = Math.Abs(value);
+        return absValue switch
+        {
+            // Rule: If >= 1M, use Metric (1M%, 2.5B%)
+            >= 1_000_000 => $"{value.ToMetric(decimals: 0)}%",
+            // Rule: If >= 100%, drop decimals (19,998%)
+            >= 100 => $"{value:N0}%",
+            // Rule: Small percentages (0.1%), keep precision
+            _ => $"{value:0.##}%"
+        };
     }
 
     public static IQueryable<TDomain> ApplySort<TDomain>(this IQueryable<TDomain> query, SortDescriptor sort,
