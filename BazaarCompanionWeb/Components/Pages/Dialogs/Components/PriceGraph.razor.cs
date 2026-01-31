@@ -32,6 +32,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
     // Overlay indicators appear on the main candle pane
     private readonly List<KLineIndicatorOption> _overlayIndicators =
     [
+        new("ASK_LINE", "ASK", true), // ASK price overlay - enabled by default
         new("MA", "MA", false), // Moving Average - disabled by default (can enable)
         new("EMA", "EMA", false), // Exponential Moving Average  
         new("SMA", "SMA", false), // Simple Moving Average
@@ -334,12 +335,25 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         try
         {
             // Apply overlay indicators that are enabled
-            foreach (var indicator in _overlayIndicators.Where(i => i.Enabled))
+            // Skip ASK_LINE here - it's added automatically after chart creation
+            // and handled via toggleIndicator when disabled
+            foreach (var indicator in _overlayIndicators.Where(i => i.Enabled && i.Name != "ASK_LINE"))
             {
                 await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
                     $"chart-container-{_chartId}",
                     indicator.Name,
                     true,
+                    "candle_pane");
+            }
+
+            // Handle ASK_LINE specially - it's added by default in JS, so only remove if disabled
+            var askLineIndicator = _overlayIndicators.First(i => i.Name == "ASK_LINE");
+            if (!askLineIndicator.Enabled)
+            {
+                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
+                    $"chart-container-{_chartId}",
+                    "ASK_LINE",
+                    false,
                     "candle_pane");
             }
 
