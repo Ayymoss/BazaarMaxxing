@@ -29,6 +29,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 Tier = x.Tier,
                 Unstackable = x.Unstackable,
                 SkinUrl = x.SkinUrl,
+                LastSeenAt = DateTime.UtcNow,
 
                 Meta = new EFProductMeta
                 {
@@ -110,6 +111,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 product.Tier = incomingProduct.Tier;
                 product.Unstackable = incomingProduct.Unstackable;
                 product.SkinUrl = incomingProduct.SkinUrl;
+                product.LastSeenAt = DateTime.UtcNow;
 
                 // Map Meta properties
                 product.Meta.ProfitMultiplier = incomingProduct.Meta.ProfitMultiplier;
@@ -275,5 +277,23 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             .AsNoTracking()
             .OrderBy(x => x.Taken)
             .ToListAsync(ct);
+    }
+
+    public async Task<int> DeleteStaleProductsAsync(int staleAfterDays = 2, CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var cutoff = DateTime.UtcNow.AddDays(-staleAfterDays);
+
+        // Cascade delete will remove related Bid, Ask, Meta, Snapshots, etc.
+        var deletedCount = await context.Products
+            .Where(p => p.LastSeenAt < cutoff)
+            .ExecuteDeleteAsync(ct);
+
+        if (deletedCount > 0)
+        {
+            logger.LogInformation("Deleted {Count} stale products not seen in {Days} days", deletedCount, staleAfterDays);
+        }
+
+        return deletedCount;
     }
 }

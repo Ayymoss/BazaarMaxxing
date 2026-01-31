@@ -13,7 +13,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
     private const string IndicatorStorageKey = "klinechart_indicators";
 
     [Parameter] public required ProductDataInfo Product { get; set; }
-    [Parameter] public CandleInterval Interval { get; set; } = CandleInterval.FifteenMinute;
+    [Parameter] public CandleInterval Interval { get; set; } = CandleInterval.OneHour;
     [Parameter] public EventCallback<CandleInterval> IntervalChanged { get; set; }
 
     [Inject] private IJSRuntime JSRuntime { get; set; } = null!;

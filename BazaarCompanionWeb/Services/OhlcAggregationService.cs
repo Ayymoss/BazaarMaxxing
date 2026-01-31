@@ -35,9 +35,10 @@ public class OhlcAggregationService(
 
                 await AggregateAllCandlesAsync(ohlcRepository, stoppingToken);
                 
-                // Cleanup old ticks and candles
+                // Cleanup old ticks, candles, and stale products
                 await ohlcRepository.PruneOldTicksAsync(TickRetention, stoppingToken);
                 await ohlcRepository.PruneOldCandlesAsync(stoppingToken);
+                await productRepository.DeleteStaleProductsAsync(staleAfterDays: 2, stoppingToken);
                 
                 // Run VACUUM once per day to reclaim disk space
                 if (DateTime.UtcNow - _lastVacuumTime > VacuumInterval)

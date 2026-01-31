@@ -4,12 +4,27 @@ using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Models.Api.Items;
 using BazaarCompanionWeb.Models.Pagination;
+using Humanizer;
 
 namespace BazaarCompanionWeb.Utilities;
 
 public static class HelperMethods
 {
     public static string GetVersion() => Assembly.GetCallingAssembly().GetName().Version?.ToString() ?? "Unknown";
+
+    public static string ToCompactString(this double value, bool isPercentage = false)
+    {
+        const double threshold = 100_000;
+
+        if (!isPercentage)
+            return value >= threshold
+                ? value.ToMetric()
+                : value.ToString("N0");
+
+        return Math.Abs(value) >= threshold
+            ? $"{value.ToMetric()}%"
+            : $"{value:0.#}%";
+    }
 
     public static IQueryable<TDomain> ApplySort<TDomain>(this IQueryable<TDomain> query, SortDescriptor sort,
         Expression<Func<TDomain, object>> property) => sort.SortOrder is SortDirection.Ascending
@@ -84,7 +99,7 @@ public static class HelperMethods
         {
             < 0.33 => "#F97316", // Orange
             < 0.66 => "#FB923C", // Light orange
-            _ => "#EF4444"        // Red for high intensity
+            _ => "#EF4444" // Red for high intensity
         };
     }
 

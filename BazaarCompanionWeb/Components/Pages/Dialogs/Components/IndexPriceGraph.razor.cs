@@ -12,7 +12,7 @@ public partial class IndexPriceGraph : ComponentBase, IAsyncDisposable
 
     [Parameter] public required string IndexSlug { get; set; }
     [Parameter] public required string IndexName { get; set; }
-    [Parameter] public CandleInterval Interval { get; set; } = CandleInterval.FifteenMinute;
+    [Parameter] public CandleInterval Interval { get; set; } = CandleInterval.OneHour;
     [Parameter] public EventCallback<CandleInterval> IntervalChanged { get; set; }
 
     [Inject] private IJSRuntime JSRuntime { get; set; } = null!;

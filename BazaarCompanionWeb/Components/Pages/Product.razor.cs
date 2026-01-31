@@ -30,7 +30,7 @@ public partial class Product(
     private bool _loading = true;
     private DateTimeOffset? _lastServerRefresh;
 
-    internal CandleInterval _selectedInterval = CandleInterval.FifteenMinute;
+    internal CandleInterval _selectedInterval = CandleInterval.OneHour;
     private List<RelatedProduct> _relatedProducts = [];
 
     // Order book analysis

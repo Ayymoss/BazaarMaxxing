@@ -16,7 +16,7 @@ public partial class Index(
 
     private IndexConfiguration? _index;
     private bool _loading = true;
-    private CandleInterval _selectedInterval = CandleInterval.FifteenMinute;
+    private CandleInterval _selectedInterval = CandleInterval.OneHour;
 
     private List<UnderlyingProductInfo> _underlyingProducts = [];
     private List<string> _missingProductKeys = [];

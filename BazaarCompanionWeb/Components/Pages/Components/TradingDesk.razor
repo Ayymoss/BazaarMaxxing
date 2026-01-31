@@ -1,3 +1,4 @@
+@using BazaarCompanionWeb.Utilities
 @{
     // Bid Calculations (was Buy)
     var bidPrice = Product.BidUnitPrice;
@@ -25,8 +26,8 @@
             <div>
                 <p class="text-xs font-bold uppercase tracking-widest text-emerald-500 mb-1">Bid Price</p>
                 <div class="flex items-baseline gap-2">
-                    <div class="text-3xl font-black tracking-tight text-emerald-400">
-                        @Product.BidUnitPrice.ToString("N2")
+                    <div class="text-3xl font-black tracking-tight text-emerald-400" title="@Product.BidUnitPrice.ToString("N2")">
+                        @Product.BidUnitPrice.ToCompactString()
                     </div>
                     <div class="text-sm font-mono text-emerald-500/60">
                         × @bestBidSize.ToString("N0")
@@ -51,13 +52,17 @@
 
     <!-- 2. SPREAD CARD (The Bridge) -->
     <div
-        class="md:col-span-2 flex flex-col justify-center items-center rounded-2xl border border-slate-700 bg-slate-800/60 p-4 shadow-inner text-center">
-        <p class="text-[10px] uppercase text-slate-500 font-semibold tracking-wider">Spread</p>
-        <div class="text-xl font-bold text-white my-1">
-            @Product.OrderMetaSpread.ToString("N2")
+        class="md:col-span-2 flex flex-col justify-center items-center rounded-2xl border border-slate-700/50 bg-slate-800/40 p-4 shadow-xl text-center backdrop-blur-md relative">
+        <!-- Connecting Lines for 'Bridge' feel -->
+        <div class="absolute -left-4 top-1/2 w-4 h-px bg-slate-700/50 hidden md:block"></div>
+        <div class="absolute -right-4 top-1/2 w-4 h-px bg-slate-700/50 hidden md:block"></div>
+
+        <p class="text-[10px] uppercase text-slate-500 font-bold tracking-widest mb-1">Spread</p>
+        <div class="text-xl font-black text-white tracking-tighter" title="@Product.OrderMetaSpread.ToString("N2")">
+            @Product.OrderMetaSpread.ToCompactString()
         </div>
         <!-- Margin Badge -->
-        <span class="inline-flex items-center rounded-full bg-slate-700 px-2 py-0.5 text-[10px] font-medium text-slate-300">
+        <span class="mt-1 inline-flex items-center rounded-full bg-slate-700/50 px-2 py-0.5 text-[10px] font-bold text-slate-300 border border-slate-600/30">
             @(spreadPercent.ToString("P2"))
         </span>
     </div>
@@ -69,8 +74,8 @@
             <div>
                 <p class="text-xs font-bold uppercase tracking-widest text-rose-500 mb-1">Ask Price</p>
                 <div class="flex items-baseline gap-2">
-                    <div class="text-3xl font-black tracking-tight text-rose-400">
-                        @Product.AskUnitPrice.ToString("N2")
+                    <div class="text-3xl font-black tracking-tight text-rose-400" title="@Product.AskUnitPrice.ToString("N2")">
+                        @Product.AskUnitPrice.ToCompactString()
                     </div>
                     <div class="text-sm font-mono text-rose-500/60">
                         × @bestAskSize.ToString("N0")

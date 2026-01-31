@@ -11,4 +11,9 @@ public interface IProductRepository
     Task<ProductDataInfo> GetProductAsync(string productKey, CancellationToken cancellationToken);
     Task<List<ProductDataInfo>> GetProductsAsync(CancellationToken cancellationToken);
     Task<List<EFPriceSnapshot>> GetPriceSnapshotsAsync(CancellationToken ct = default);
+    
+    /// <summary>
+    /// Deletes products that haven't been seen in the API response for the specified number of days.
+    /// </summary>
+    Task<int> DeleteStaleProductsAsync(int staleAfterDays = 2, CancellationToken ct = default);
 }

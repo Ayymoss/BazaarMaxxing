@@ -21,7 +21,7 @@ public partial class Compare : IAsyncDisposable
     
     private List<string> _productKeys = [];
     private Dictionary<string, ProductDataInfo> _productData = new();
-    private CandleInterval _selectedInterval = CandleInterval.FifteenMinute;
+    private CandleInterval _selectedInterval = CandleInterval.OneHour;
     private bool _loading;
     
     // Search
