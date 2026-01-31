@@ -86,9 +86,10 @@ public class Program
             .SetApplicationName("BazaarWeb")
             .PersistKeysToFileSystem(new DirectoryInfo(dataProtectionKeysPath));
 
+        // RegisterLogging must be called FIRST to set Log.Logger before UseSerilog() in RegisterPackageServices
+        RegisterLogging(builder.Environment, dataDirectory);
         RegisterCustomServices(builder);
         RegisterPackageServices(builder);
-        RegisterLogging(builder.Environment, dataDirectory);
 
         var app = builder.Build();
 
@@ -334,7 +335,8 @@ public class Program
             loggerConfig
                 .MinimumLevel.Information()
                 .MinimumLevel.Override("BazaarCompanionWeb", LogEventLevel.Debug)
-                .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning);
+                .MinimumLevel.Override("Microsoft.EntityFrameworkCore", LogEventLevel.Warning)
+                .MinimumLevel.Override("Microsoft.AspNetCore", LogEventLevel.Warning);
         }
         else
         {

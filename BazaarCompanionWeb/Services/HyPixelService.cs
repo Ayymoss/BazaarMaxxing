@@ -19,6 +19,7 @@ public class HyPixelService(
     IOhlcRepository ohlcRepository,
     IOpportunityScoringService opportunityScoringService,
     MarketInsightsService marketInsightsService,
+    OrderBookAnalysisService orderBookAnalysisService,
     IHubContext<ProductHub> hubContext,
     TimeCache timeCache,
     LiveCandleTracker liveCandleTracker)
@@ -89,6 +90,13 @@ public class HyPixelService(
                 efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
 
             await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, cancellationToken);
+            
+            // Store order book snapshot for heatmap analysis
+            await orderBookAnalysisService.StoreSnapshotAsync(
+                efProduct.ProductKey,
+                updateInfo.BidBook!,
+                updateInfo.AskBook!,
+                cancellationToken);
         }
     }
 

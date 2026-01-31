@@ -3,8 +3,8 @@ using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Services;
 using Microsoft.AspNetCore.Components;
+using Microsoft.Extensions.Logging;
 using Microsoft.JSInterop;
-using Serilog;
 
 namespace BazaarCompanionWeb.Components.Pages;
 
@@ -14,6 +14,7 @@ public partial class Compare : IAsyncDisposable
     [Inject] private IOhlcRepository OhlcRepository { get; set; } = null!;
     [Inject] private IProductRepository ProductRepository { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
+    [Inject] private ILogger<Compare> Logger { get; set; } = null!;
 
     private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
     private IJSObjectReference? _chartModule;
@@ -82,7 +83,7 @@ public partial class Compare : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to load product data for {ProductKey}", productKey);
+                Logger.LogWarning(ex, "Failed to load product data for {ProductKey}", productKey);
             }
         }
     }
@@ -103,6 +104,9 @@ public partial class Compare : IAsyncDisposable
     {
         if (ComparisonState.Add(productKey))
         {
+            // Update local list immediately so chart renders correctly
+            _productKeys = [..ComparisonState.ProductKeys];
+            
             _searchQuery = string.Empty;
             _searchResults.Clear();
             
@@ -116,9 +120,10 @@ public partial class Compare : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Log.Warning(ex, "Failed to load product data for {ProductKey}", productKey);
+                Logger.LogWarning(ex, "Failed to load product data for {ProductKey}", productKey);
             }
             
+            StateHasChanged(); // Update UI to show new product card
             await UpdateChartAsync();
         }
     }
@@ -131,10 +136,14 @@ public partial class Compare : IAsyncDisposable
 
     private async Task UpdateChartAsync()
     {
-        if (_chartModule is null || _productKeys.Count is 0) return;
+        if (_chartModule is null || _productKeys.Count is 0)
+        {
+            return;
+        }
 
         _loading = true;
-        StateHasChanged();
+        await InvokeAsync(StateHasChanged);
+        await Task.Yield(); // Allow DOM to update before accessing chart container
 
         try
         {
@@ -178,7 +187,7 @@ public partial class Compare : IAsyncDisposable
         }
         catch (Exception ex)
         {
-            Log.Warning(ex, "Error updating comparison chart");
+            Logger.LogWarning(ex, "Error updating comparison chart");
         }
         finally
         {
