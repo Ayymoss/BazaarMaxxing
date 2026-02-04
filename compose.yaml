@@ -1,4 +1,4 @@
-﻿services:
+services:
   bazaarcompanionweb:
     restart: always
     image: bazaarcompanionweb
@@ -7,7 +7,7 @@
       dockerfile: BazaarCompanionWeb/Dockerfile
     environment:
       - DATA_DIR=/app/data
-      - ConnectionStrings__DefaultConnection=Data Source=/app/data/Database.db
+      # Set ConnectionStrings__DefaultConnection to your central PostgreSQL server
     volumes:
       - /opt/bazaar-data/:/app/data/
     ports:

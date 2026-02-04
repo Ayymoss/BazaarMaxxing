@@ -1,5 +1,6 @@
 ﻿using System;
 using Microsoft.EntityFrameworkCore.Migrations;
+using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 
 #nullable disable
 
@@ -15,12 +16,13 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFMarketData",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false),
-                    UnitPrice = table.Column<double>(type: "REAL", nullable: false),
-                    OrderVolumeWeek = table.Column<double>(type: "REAL", nullable: false),
-                    OrderVolume = table.Column<int>(type: "INTEGER", nullable: false),
-                    OrderCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    BookValue = table.Column<string>(type: "TEXT", maxLength: 8192, nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    UnitPrice = table.Column<double>(type: "double precision", nullable: false),
+                    OrderVolumeWeek = table.Column<double>(type: "double precision", nullable: false),
+                    OrderVolume = table.Column<int>(type: "integer", nullable: false),
+                    OrderCount = table.Column<int>(type: "integer", nullable: false),
+                    BookValue = table.Column<string>(type: "character varying(8192)", maxLength: 8192, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -31,15 +33,15 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFOrderBookSnapshots",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    Timestamp = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    PriceLevel = table.Column<double>(type: "REAL", nullable: false),
-                    BidVolume = table.Column<int>(type: "INTEGER", nullable: false),
-                    AskVolume = table.Column<int>(type: "INTEGER", nullable: false),
-                    BidOrderCount = table.Column<int>(type: "INTEGER", nullable: false),
-                    AskOrderCount = table.Column<int>(type: "INTEGER", nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    PriceLevel = table.Column<double>(type: "double precision", nullable: false),
+                    BidVolume = table.Column<int>(type: "integer", nullable: false),
+                    AskVolume = table.Column<int>(type: "integer", nullable: false),
+                    BidOrderCount = table.Column<int>(type: "integer", nullable: false),
+                    AskOrderCount = table.Column<int>(type: "integer", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -50,10 +52,12 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFProducts",
                 columns: table => new
                 {
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    FriendlyName = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    Tier = table.Column<int>(type: "INTEGER", nullable: false),
-                    Unstackable = table.Column<bool>(type: "INTEGER", nullable: false)
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    FriendlyName = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Tier = table.Column<int>(type: "integer", nullable: false),
+                    Unstackable = table.Column<bool>(type: "boolean", nullable: false),
+                    SkinUrl = table.Column<string>(type: "text", nullable: true),
+                    LastSeenAt = table.Column<DateTime>(type: "timestamp with time zone", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -64,8 +68,8 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFAskMarketData",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -88,8 +92,8 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFBidMarketData",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -112,17 +116,18 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFOhlcCandles",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    Interval = table.Column<int>(type: "INTEGER", nullable: false),
-                    PeriodStart = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    Open = table.Column<double>(type: "REAL", nullable: false),
-                    High = table.Column<double>(type: "REAL", nullable: false),
-                    Low = table.Column<double>(type: "REAL", nullable: false),
-                    Close = table.Column<double>(type: "REAL", nullable: false),
-                    Volume = table.Column<double>(type: "REAL", nullable: false),
-                    Spread = table.Column<double>(type: "REAL", nullable: false)
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    Interval = table.Column<int>(type: "integer", nullable: false),
+                    PeriodStart = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    Open = table.Column<double>(type: "double precision", nullable: false),
+                    High = table.Column<double>(type: "double precision", nullable: false),
+                    Low = table.Column<double>(type: "double precision", nullable: false),
+                    Close = table.Column<double>(type: "double precision", nullable: false),
+                    Volume = table.Column<double>(type: "double precision", nullable: false),
+                    Spread = table.Column<double>(type: "double precision", nullable: false),
+                    AskClose = table.Column<double>(type: "double precision", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -139,12 +144,12 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFPriceSnapshots",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    BidUnitPrice = table.Column<double>(type: "REAL", nullable: false),
-                    AskUnitPrice = table.Column<double>(type: "REAL", nullable: false),
-                    Taken = table.Column<DateOnly>(type: "TEXT", nullable: false),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    BidUnitPrice = table.Column<double>(type: "double precision", nullable: false),
+                    AskUnitPrice = table.Column<double>(type: "double precision", nullable: false),
+                    Taken = table.Column<DateOnly>(type: "date", nullable: false),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -161,14 +166,14 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFPriceTicks",
                 columns: table => new
                 {
-                    Id = table.Column<long>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false),
-                    BidPrice = table.Column<double>(type: "REAL", nullable: false),
-                    AskPrice = table.Column<double>(type: "REAL", nullable: false),
-                    Timestamp = table.Column<DateTime>(type: "TEXT", nullable: false),
-                    BidVolume = table.Column<long>(type: "INTEGER", nullable: false),
-                    AskVolume = table.Column<long>(type: "INTEGER", nullable: false)
+                    Id = table.Column<long>(type: "bigint", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false),
+                    BidPrice = table.Column<double>(type: "double precision", nullable: false),
+                    AskPrice = table.Column<double>(type: "double precision", nullable: false),
+                    Timestamp = table.Column<DateTime>(type: "timestamp with time zone", nullable: false),
+                    BidVolume = table.Column<long>(type: "bigint", nullable: false),
+                    AskVolume = table.Column<long>(type: "bigint", nullable: false)
                 },
                 constraints: table =>
                 {
@@ -185,16 +190,16 @@ namespace BazaarCompanionWeb.Migrations
                 name: "EFProductMetas",
                 columns: table => new
                 {
-                    Id = table.Column<int>(type: "INTEGER", nullable: false)
-                        .Annotation("Sqlite:Autoincrement", true),
-                    ProfitMultiplier = table.Column<double>(type: "REAL", nullable: false),
-                    Spread = table.Column<double>(type: "REAL", nullable: false),
-                    TotalWeekVolume = table.Column<double>(type: "REAL", nullable: false),
-                    FlipOpportunityScore = table.Column<double>(type: "REAL", nullable: false),
-                    IsManipulated = table.Column<bool>(type: "INTEGER", nullable: false),
-                    ManipulationIntensity = table.Column<double>(type: "REAL", nullable: false),
-                    PriceDeviationPercent = table.Column<double>(type: "REAL", nullable: false),
-                    ProductKey = table.Column<string>(type: "TEXT", maxLength: 64, nullable: false)
+                    Id = table.Column<int>(type: "integer", nullable: false)
+                        .Annotation("Npgsql:ValueGenerationStrategy", NpgsqlValueGenerationStrategy.IdentityByDefaultColumn),
+                    ProfitMultiplier = table.Column<double>(type: "double precision", nullable: false),
+                    Spread = table.Column<double>(type: "double precision", nullable: false),
+                    TotalWeekVolume = table.Column<double>(type: "double precision", nullable: false),
+                    FlipOpportunityScore = table.Column<double>(type: "double precision", nullable: false),
+                    IsManipulated = table.Column<bool>(type: "boolean", nullable: false),
+                    ManipulationIntensity = table.Column<double>(type: "double precision", nullable: false),
+                    PriceDeviationPercent = table.Column<double>(type: "double precision", nullable: false),
+                    ProductKey = table.Column<string>(type: "character varying(64)", maxLength: 64, nullable: false)
                 },
                 constraints: table =>
                 {
@@ -254,6 +259,11 @@ namespace BazaarCompanionWeb.Migrations
                 table: "EFProductMetas",
                 column: "ProductKey",
                 unique: true);
+
+            migrationBuilder.CreateIndex(
+                name: "IX_EFProducts_LastSeenAt",
+                table: "EFProducts",
+                column: "LastSeenAt");
         }
 
         /// <inheritdoc />

@@ -52,25 +52,10 @@ public class Program
 
         builder.Services.AddDbContextFactory<DataContext>(options =>
         {
-            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                // Fallback to default path in data directory
-                var dataDirectory = GetDataDirectory(builder.Environment);
-                var dbPath = Path.Join(dataDirectory, "Database.db");
-                connectionString = $"Data Source={dbPath}";
-            }
-            else
-            {
-                // Normalize the connection string to use absolute paths
-                connectionString = NormalizeConnectionString(connectionString, builder.Environment);
-            }
-            
-            // Ensure the database directory exists
-            EnsureDatabaseDirectoryFromConnectionString(connectionString);
-            
-            options.UseSqlite(connectionString,
-                sqlOpt => sqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
+            var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
+                ?? throw new InvalidOperationException("Connection string 'DefaultConnection' is required. Configure it in appsettings or via ConnectionStrings__DefaultConnection env var.");
+            options.UseNpgsql(connectionString,
+                npgsqlOpt => npgsqlOpt.UseQuerySplittingBehavior(QuerySplittingBehavior.SplitQuery));
         });
 
         // Add services to the container.
@@ -94,9 +79,6 @@ public class Program
         RegisterPackageServices(builder);
 
         var app = builder.Build();
-
-        // Ensure database directory exists before attempting migration
-        EnsureDatabaseDirectoryExists(app.Configuration, app.Environment);
 
         using (var scope = app.Services.CreateScope())
         {
@@ -241,115 +223,6 @@ public class Program
         }
 
         return "/app/data";
-    }
-
-    private static string NormalizeConnectionString(string connectionString, IWebHostEnvironment environment)
-    {
-        // Parse the connection string to extract the database file path
-        // Format: "Data Source=path/to/Database.db" or "Data Source=path/to/Database.db;Mode=ReadWrite"
-        var dataSourceKey = "Data Source=";
-        var dataSourceIndex = connectionString.IndexOf(dataSourceKey, StringComparison.OrdinalIgnoreCase);
-        if (dataSourceIndex < 0)
-            return connectionString; // Not a SQLite connection string, return as-is
-
-        var startIndex = dataSourceIndex + dataSourceKey.Length;
-        var endIndex = connectionString.IndexOf(';', startIndex);
-        var dbPath = endIndex >= 0 
-            ? connectionString.Substring(startIndex, endIndex - startIndex).Trim()
-            : connectionString.Substring(startIndex).Trim();
-        
-        // Remove quotes if present
-        if ((dbPath.StartsWith('"') && dbPath.EndsWith('"')) || 
-            (dbPath.StartsWith('\'') && dbPath.EndsWith('\'')))
-        {
-            dbPath = dbPath.Substring(1, dbPath.Length - 2);
-        }
-        
-        // Convert relative paths to absolute paths
-        if (dbPath.StartsWith("./") || dbPath.StartsWith(".\\"))
-        {
-            dbPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, dbPath.Substring(2)));
-        }
-        else if (!Path.IsPathRooted(dbPath))
-        {
-            // Relative path without ./ prefix
-            dbPath = Path.GetFullPath(Path.Combine(AppContext.BaseDirectory, dbPath));
-        }
-        else
-        {
-            // Already absolute, but normalize it
-            dbPath = Path.GetFullPath(dbPath);
-        }
-
-        // Reconstruct the connection string with the normalized path
-        var prefix = connectionString.Substring(0, startIndex);
-        var suffix = endIndex >= 0 ? connectionString.Substring(endIndex) : string.Empty;
-        return $"{prefix}{dbPath}{suffix}";
-    }
-
-    private static void EnsureDatabaseDirectoryFromConnectionString(string connectionString)
-    {
-        try
-        {
-            // Parse the connection string to extract the database file path
-            var dataSourceKey = "Data Source=";
-            var dataSourceIndex = connectionString.IndexOf(dataSourceKey, StringComparison.OrdinalIgnoreCase);
-            if (dataSourceIndex < 0)
-                return;
-
-            var startIndex = dataSourceIndex + dataSourceKey.Length;
-            var endIndex = connectionString.IndexOf(';', startIndex);
-            var dbPath = endIndex >= 0 
-                ? connectionString.Substring(startIndex, endIndex - startIndex).Trim()
-                : connectionString.Substring(startIndex).Trim();
-            
-            // Remove quotes if present
-            if ((dbPath.StartsWith('"') && dbPath.EndsWith('"')) || 
-                (dbPath.StartsWith('\'') && dbPath.EndsWith('\'')))
-            {
-                dbPath = dbPath.Substring(1, dbPath.Length - 2);
-            }
-
-            // Normalize to absolute path
-            dbPath = Path.GetFullPath(dbPath);
-
-            var dbDirectory = Path.GetDirectoryName(dbPath);
-            if (!string.IsNullOrEmpty(dbDirectory) && !Directory.Exists(dbDirectory))
-            {
-                Directory.CreateDirectory(dbDirectory);
-                Log.Information("Created database directory: {Directory}", dbDirectory);
-            }
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Failed to ensure database directory exists. Database operations may fail.");
-        }
-    }
-
-    private static void EnsureDatabaseDirectoryExists(IConfiguration configuration, IWebHostEnvironment environment)
-    {
-        try
-        {
-            var connectionString = configuration.GetConnectionString("DefaultConnection");
-            if (string.IsNullOrEmpty(connectionString))
-            {
-                // Fallback to default path in data directory
-                var dataDirectory = GetDataDirectory(environment);
-                var dbPath = Path.Join(dataDirectory, "Database.db");
-                connectionString = $"Data Source={dbPath}";
-            }
-            else
-            {
-                // Normalize the connection string
-                connectionString = NormalizeConnectionString(connectionString, environment);
-            }
-
-            EnsureDatabaseDirectoryFromConnectionString(connectionString);
-        }
-        catch (Exception ex)
-        {
-            Log.Warning(ex, "Failed to ensure database directory exists. Database operations may fail.");
-        }
     }
 
     private static void RegisterLogging(IWebHostEnvironment environment, string dataDirectory)
