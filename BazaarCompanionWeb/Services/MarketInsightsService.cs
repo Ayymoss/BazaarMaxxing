@@ -60,11 +60,23 @@ public sealed partial class MarketInsightsService(
             await using var context = await contextFactory.CreateDbContextAsync(ct);
             var now = DateTime.UtcNow;
 
-            var hotProducts = await CalculateHotProductsAsync(context, ohlcRepository, now, ct);
-            var volumeSurges = await CalculateVolumeSurgesAsync(context, ohlcRepository, now, ct);
-            var spreadOpportunities = await CalculateSpreadOpportunitiesAsync(context, ohlcRepository, now, ct);
-            var fireSales = await CalculateFireSalesAsync(context, ohlcRepository, now, ct);
-            var (gainers, losers) = await CalculateMarketMoversAsync(context, ohlcRepository, now, ct);
+            var products = await context.Products
+                .Include(p => p.Bid)
+                .Include(p => p.Ask)
+                .Include(p => p.Meta)
+                .AsNoTracking()
+                .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
+                .ToListAsync(ct);
+
+            var productKeys = products.Select(p => p.ProductKey).ToList();
+            var candles15m = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.FifteenMinute, 2, ct);
+            var candles1h = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.OneHour, 168, ct);
+
+            var hotProducts = CalculateHotProducts(products, candles15m, now, _previousHotProductKeys);
+            var volumeSurges = CalculateVolumeSurges(products, candles1h, now);
+            var spreadOpportunities = CalculateSpreadOpportunities(products, candles1h, now);
+            var fireSales = CalculateFireSales(products, candles1h, now);
+            var (gainers, losers) = CalculateMarketMovers(products, candles1h, now);
 
             // Track new hot products
             var currentHotKeys = hotProducts.Select(h => h.ProductKey).ToHashSet();
@@ -103,29 +115,17 @@ public sealed partial class MarketInsightsService(
     /// <summary>
     /// Calculates hot products - products with rapid price changes in last 15 minutes.
     /// </summary>
-    private async Task<List<HotProductInsight>> CalculateHotProductsAsync(
-        DataContext context,
-        IOhlcRepository ohlcRepository,
+    private static List<HotProductInsight> CalculateHotProducts(
+        List<EFProduct> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candles15m,
         DateTime now,
-        CancellationToken ct)
+        HashSet<string> previousHotProductKeys)
     {
         List<HotProductInsight> results = [];
 
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
-            .ToListAsync(ct);
-
         foreach (var product in products)
         {
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.FifteenMinute,
-                limit: 2,
-                ct);
-
-            if (candles.Count < 2) continue;
+            if (!candles15m.TryGetValue(product.ProductKey, out var candles) || candles.Count < 2) continue;
 
             var ordered = candles.OrderBy(c => c.Time).ToList();
             var price15MinAgo = ordered[^2].Close;
@@ -138,7 +138,7 @@ public sealed partial class MarketInsightsService(
 
             if (absChange < HotProductThreshold) continue;
 
-            var isNew = !_previousHotProductKeys.Contains(product.ProductKey);
+            var isNew = !previousHotProductKeys.Contains(product.ProductKey);
 
             results.Add(new HotProductInsight(
                 product.ProductKey,
@@ -161,34 +161,16 @@ public sealed partial class MarketInsightsService(
     /// <summary>
     /// Calculates volume surges - products with unusual volume activity.
     /// </summary>
-    private async Task<List<VolumeSurgeInsight>> CalculateVolumeSurgesAsync(
-        DataContext context,
-        IOhlcRepository ohlcRepository,
-        DateTime now,
-        CancellationToken ct)
+    private static List<VolumeSurgeInsight> CalculateVolumeSurges(
+        List<EFProduct> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candles1h,
+        DateTime now)
     {
         List<VolumeSurgeInsight> results = [];
 
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .Include(p => p.Ask)
-            .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
-            .ToListAsync(ct);
-
-        var oneHourAgo = now.AddHours(-1);
-        var twentyFourHoursAgo = now.AddHours(-24);
-
         foreach (var product in products)
         {
-            // Get candles for volume analysis
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 25, // Last 24 hours + current
-                ct);
-
-            if (candles.Count < 2) continue;
+            if (!candles1h.TryGetValue(product.ProductKey, out var candles) || candles.Count < 2) continue;
 
             var ordered = candles.OrderBy(c => c.Time).ToList();
             var currentHourCandle = ordered.LastOrDefault();
@@ -209,7 +191,6 @@ public sealed partial class MarketInsightsService(
 
             if (surgeRatio < VolumeSurgeThreshold) continue;
 
-            // Determine if buying or selling surge based on price movement
             var priceChange = currentHourCandle.Close - currentHourCandle.Open;
             var isBuyingSurge = priceChange >= 0;
 
@@ -234,42 +215,25 @@ public sealed partial class MarketInsightsService(
     /// <summary>
     /// Calculates spread opportunities - products where spread has widened significantly.
     /// </summary>
-    private async Task<List<SpreadOpportunityInsight>> CalculateSpreadOpportunitiesAsync(
-        DataContext context,
-        IOhlcRepository ohlcRepository,
-        DateTime now,
-        CancellationToken ct)
+    private static List<SpreadOpportunityInsight> CalculateSpreadOpportunities(
+        List<EFProduct> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candles1h,
+        DateTime now)
     {
         List<SpreadOpportunityInsight> results = [];
-
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .Include(p => p.Ask)
-            .Include(p => p.Meta)
-            .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
-            .ToListAsync(ct);
 
         foreach (var product in products)
         {
             var currentSpread = product.Ask.UnitPrice - product.Bid.UnitPrice;
             if (currentSpread <= 0) continue;
 
-            // Get 7-day candle history for spread calculation
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 7 * 24,
-                ct);
-
-            if (candles.Count < 24) continue;
+            if (!candles1h.TryGetValue(product.ProductKey, out var candles) || candles.Count < 24) continue;
 
             var historicalSpreads = candles
                 .Where(c => c.Spread > 0)
                 .Select(c => c.Spread)
                 .ToList();
 
-            // If no historical spread data, skip this product (data not yet populated)
             if (historicalSpreads.Count < 12) continue;
 
             var avgSpread = historicalSpreads.Average();
@@ -304,51 +268,32 @@ public sealed partial class MarketInsightsService(
     /// 2. Price 10%+ below 7-day low (breaking historical support)
     /// 3. Volume 50%+ above average (panic selling confirmation)
     /// </summary>
-    private async Task<List<FireSaleInsight>> CalculateFireSalesAsync(
-        DataContext context,
-        IOhlcRepository ohlcRepository,
-        DateTime now,
-        CancellationToken ct)
+    private static List<FireSaleInsight> CalculateFireSales(
+        List<EFProduct> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candles1h,
+        DateTime now)
     {
-        // Fire sale thresholds
-        const double priceDeviation24hThreshold = 0.20; // 20% below 24h average
-        const double priceBelow7dLowThreshold = 0.10;   // 10% below 7-day low
-        const double volumeSpikeThreshold = 1.50;       // 50% above average volume
+        const double priceDeviation24hThreshold = 0.20;
+        const double priceBelow7dLowThreshold = 0.10;
+        const double volumeSpikeThreshold = 1.50;
 
         List<FireSaleInsight> results = [];
 
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .Include(p => p.Ask)
-            .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
-            .ToListAsync(ct);
-
         foreach (var product in products)
         {
-            // Get 7 days of hourly candles for analysis
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 7 * 24, // 168 hours
-                ct);
-
-            if (candles.Count < 24) continue; // Need at least 24h of data
+            if (!candles1h.TryGetValue(product.ProductKey, out var candles) || candles.Count < 24) continue;
 
             var ordered = candles.OrderBy(c => c.Time).ToList();
             var currentAskPrice = product.Ask.UnitPrice;
             if (currentAskPrice <= 0) continue;
 
-            // Calculate 24h average price
             var last24hCandles = ordered.TakeLast(24).ToList();
             var avg24hPrice = last24hCandles.Average(c => c.Close);
             if (avg24hPrice <= 0) continue;
 
-            // Calculate 7-day low
             var low7dPrice = ordered.Min(c => c.Low);
             if (low7dPrice <= 0) continue;
 
-            // Calculate current hour volume vs average
             var currentHourCandle = ordered.LastOrDefault();
             var historicalCandles = ordered.SkipLast(1).ToList();
             var avgHourlyVolume = historicalCandles
@@ -359,22 +304,14 @@ public sealed partial class MarketInsightsService(
 
             var currentVolume = currentHourCandle?.Volume ?? 0;
 
-            // === STACKED INDICATOR CHECKS ===
-            // 1. Price must be 20%+ below 24h average
             var priceBelow24hAvg = currentAskPrice < avg24hPrice * (1 - priceDeviation24hThreshold);
-
-            // 2. Price must be 10%+ below 7-day low (breaking support)
             var priceBelow7dLow = currentAskPrice < low7dPrice * (1 - priceBelow7dLowThreshold);
-
-            // 3. Volume must be 50%+ above average (panic selling)
             var volumeSpike = avgHourlyVolume > 0 && currentVolume > avgHourlyVolume * volumeSpikeThreshold;
 
-            // All three conditions must be met
             if (!priceBelow24hAvg || !priceBelow7dLow || !volumeSpike) continue;
 
-            // Calculate deviation percentage for display
             var deviationPercent = ((currentAskPrice - avg24hPrice) / avg24hPrice) * 100;
-            var intensityScore = Math.Min(1.0, Math.Abs(deviationPercent) / 50); // 0-1 scale
+            var intensityScore = Math.Min(1.0, Math.Abs(deviationPercent) / 50);
 
             results.Add(new FireSaleInsight(
                 product.ProductKey,
@@ -384,7 +321,7 @@ public sealed partial class MarketInsightsService(
                 intensityScore,
                 deviationPercent,
                 currentAskPrice,
-                avg24hPrice // Use 24h average as "fair price" estimate
+                avg24hPrice
             ));
         }
 
@@ -398,30 +335,16 @@ public sealed partial class MarketInsightsService(
     /// <summary>
     /// Calculates market movers - top gainers and losers over 24 hours.
     /// </summary>
-    private async Task<(List<MarketMoverInsight> Gainers, List<MarketMoverInsight> Losers)> CalculateMarketMoversAsync(
-        DataContext context,
-        IOhlcRepository ohlcRepository,
-        DateTime now,
-        CancellationToken ct)
+    private static (List<MarketMoverInsight> Gainers, List<MarketMoverInsight> Losers) CalculateMarketMovers(
+        List<EFProduct> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candles1h,
+        DateTime now)
     {
         List<MarketMoverInsight> allMovers = [];
 
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .Include(p => p.Ask)
-            .AsNoTracking()
-            .Where(p => p.Bid.OrderVolumeWeek >= MinimumWeeklyVolumeForInsights)
-            .ToListAsync(ct);
-
         foreach (var product in products)
         {
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 25,
-                ct);
-
-            if (candles.Count < 24) continue;
+            if (!candles1h.TryGetValue(product.ProductKey, out var candles) || candles.Count < 24) continue;
 
             var ordered = candles.OrderBy(c => c.Time).ToList();
             var price24hAgo = ordered.First().Open;

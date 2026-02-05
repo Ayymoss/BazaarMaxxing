@@ -1,71 +1,58 @@
 using BazaarCompanionWeb.Dtos;
-using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces;
-using BazaarCompanionWeb.Interfaces.Database;
 
 namespace BazaarCompanionWeb.Services;
 
-public class OpportunityScoringService(
-    IOhlcRepository ohlcRepository,
-    ILogger<OpportunityScoringService> logger) : IOpportunityScoringService
+public class OpportunityScoringService(ILogger<OpportunityScoringService> logger) : IOpportunityScoringService
 {
     private const int MinCandlesForAnalysis = 6;
-    private const int VolatilityLookbackHours = 48;
-    private const double RiskBufferPercentage = 0.005; // 0.5% of mean price
-    private const double MinSpreadStability = 0.1; // Minimum acceptable spread stability
-    private const int ManipulationLookbackDays = 7;
-    private const int ManipulationMinCandles = 24; // 24 hours minimum
-    private const double ManipulationZScoreThreshold = 1.5; // Lowered from 2.0 for Hypixel volatility
-    
-    // Minimum weekly volume for reliable flip execution (below this, execution risk is high)
-    private const long MinWeeklyVolumeForFlipping = 100_000;
+    private const double RiskBufferPercentage = 0.005;
+    private const double MinSpreadStability = 0.1;
+    private const int ManipulationMinCandles = 24;
+    private const double ManipulationZScoreThreshold = 1.5;
 
-    public async Task<double> CalculateOpportunityScoreAsync(
-        string productKey,
-        double bidPrice,
-        double askPrice,
-        long bidMovingWeek,
-        long askMovingWeek,
-        CancellationToken ct = default)
+    // Hypixel Specific Constants
+    private const double BazaarTaxRate = 0.01125; // 1.125% (Standard for God Potion/Cookie users)
+    private const long MinWeeklyVolumeForFlipping = 150_000;
+
+    // Sweet Spot Pricing Constants
+    private const double TargetPriceMidpoint = 50_000; // The "perfect" price point
+    private const double PriceRangeWidth = 1.5; // Controls how fast the score drops outside the sweet spot
+    private const double MinWorthwhilePrice = 100.0; // Items below this are considered "dust" unless ROI is insane
+
+    public (IReadOnlyList<double> OpportunityScores, IReadOnlyList<ManipulationScore> ManipulationScores) CalculateScoresBatch(
+        IReadOnlyList<ScoringProductInput> products,
+        IReadOnlyDictionary<string, List<OhlcDataPoint>> candlesByProduct)
     {
-        // Edge case: zero volume or invalid prices
-        if (bidMovingWeek == 0 || askMovingWeek == 0 || bidPrice <= askPrice || askPrice <= 0)
-        {
-            return 0;
-        }
+        var opportunityScores = new double[products.Count];
+        var manipulationScores = new ManipulationScore[products.Count];
 
-        try
+        for (var i = 0; i < products.Count; i++)
         {
-            // Try to get OHLC data for advanced metrics
-            var candles = await ohlcRepository.GetCandlesAsync(
-                productKey,
-                CandleInterval.OneHour,
-                limit: VolatilityLookbackHours,
-                ct);
+            var p = products[i];
+            var candles = candlesByProduct.TryGetValue(p.ProductKey, out var c) ? c : [];
 
-            // If we have sufficient data, use advanced scoring
-            if (candles.Count >= MinCandlesForAnalysis)
+            double oppScore;
+            if (p.BidPrice >= p.AskPrice || p.AskPrice <= 0)
             {
-                return CalculateAdvancedScore(
-                    bidPrice,
-                    askPrice,
-                    bidMovingWeek,
-                    askMovingWeek,
-                    candles);
+                oppScore = 0;
+            }
+            else if (candles.Count >= MinCandlesForAnalysis)
+            {
+                oppScore = CalculateAdvancedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek, candles);
+            }
+            else
+            {
+                oppScore = CalculateSimplifiedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek);
+                logger.LogDebug("Insufficient candles ({Candles}/{TargetCandles}) for {ProductKey}, using simplified scoring",
+                    candles.Count, MinCandlesForAnalysis, p.ProductKey);
             }
 
-            // Fallback to simplified scoring for new products
-            logger.LogDebug(
-                "Insufficient OHLC data for {ProductKey} ({Count} candles), using simplified scoring",
-                productKey,
-                candles.Count);
-            return CalculateSimplifiedScore(bidPrice, askPrice, bidMovingWeek, askMovingWeek);
+            opportunityScores[i] = oppScore;
+            manipulationScores[i] = CalculateManipulationScoreFromCandles(p.BidPrice, candles);
         }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Error calculating opportunity score for {ProductKey}, using simplified scoring", productKey);
-            return CalculateSimplifiedScore(bidPrice, askPrice, bidMovingWeek, askMovingWeek);
-        }
+
+        return (opportunityScores, manipulationScores);
     }
 
     private double CalculateAdvancedScore(
@@ -75,330 +62,159 @@ public class OpportunityScoringService(
         long askMovingWeek,
         List<OhlcDataPoint> candles)
     {
-        // Calculate individual metrics
+        var netProfit = (askPrice * (1.0 - BazaarTaxRate)) - bidPrice;
+        if (netProfit <= 0) return 0;
+
+        var roi = bidPrice > 0 ? netProfit / bidPrice : 0;
+
         var volatility = CalculateVolatility(candles);
         var spreadStability = CalculateSpreadStability(candles);
         var volumeScore = CalculateVolumeScore(bidMovingWeek, askMovingWeek);
         var trendFactor = CalculateTrendFactor(candles);
-        var expectedReturn = CalculateExpectedReturn(bidPrice, askPrice, spreadStability);
-
-        // Risk buffer: minimum volatility to prevent division by zero
         var meanPrice = candles.Average(c => c.Close);
         var riskBuffer = meanPrice * RiskBufferPercentage;
         var adjustedVolatility = Math.Max(volatility, riskBuffer);
 
-        // Main scoring formula: (ExpectedReturn * VolumeScore * SpreadStabilityFactor) / (Volatility + RiskBuffer) * TrendMultiplier
-        var numerator = expectedReturn * volumeScore * spreadStability;
-        var denominator = adjustedVolatility + riskBuffer;
+        // Align with simple: high-ROI opportunities get a higher floor so we don't over-penalize cheap items with huge spread
+        var sweetSpotFactor = Math.Max(CalculateSweetSpotFactor(bidPrice), GetHighRoiSweetSpotFloor(roi));
 
-        if (denominator <= 0)
-        {
-            return 0;
-        }
+        // Capital potential: spread/ask < 100 → rating < 1 (Meh). Tiers: 0–1 Meh, 1–2 OK, 2–3 Good, 3–4 Excellent, 5+ Exceptional.
+        // Sigmoid so factor is near 0 below $100 and ramps to 1 above $100 (best flips = high spread + high volume + candle context).
+        var spread = askPrice - bidPrice;
+        const double capitalThreshold = 100.0;
+        const double capitalSteepness = 6.0; // steeper so spread/ask in 70s → factor ~0.001 → rating < 1 (Meh)
+        var spreadGate = 1.0 / (1.0 + Math.Exp(-(spread - capitalThreshold) / capitalSteepness));
+        var askGate = 1.0 / (1.0 + Math.Exp(-(askPrice - capitalThreshold) / capitalSteepness));
+        var capitalFactor = Math.Min(1.0, 4.0 * spreadGate * askGate); // 4 * 0.5 * 0.5 = 1 at spread=ask=100
 
-        var baseScore = numerator / denominator;
-        var finalScore = baseScore * trendFactor;
+        var denominator = adjustedVolatility + (bidPrice * 0.001);
+        var baseScore = (netProfit * volumeScore * spreadStability * sweetSpotFactor * capitalFactor) / denominator;
 
-        // Normalize to a reasonable range (0-10+ similar to current UI expectations)
-        // Apply logarithmic scaling to prevent extreme values
-        var normalizedScore = Math.Log(1 + finalScore) * 2;
+        // Reward high ROI so advanced doesn't regress vs simple for obvious flips (e.g. BID $0.2, ASK $1.8, 700k vol)
+        var roiBoost = 1.0 + Math.Log10(1.0 + Math.Min(roi, 100.0)) * 0.5;
+        var finalScore = baseScore * trendFactor * roiBoost;
 
-        return Math.Max(0, normalizedScore);
+        var normalizedScore = Math.Log10(1 + finalScore) * 3.5;
+        return Math.Clamp(normalizedScore, 0, 10);
     }
 
-    private double CalculateVolatility(List<OhlcDataPoint> candles)
+    /// <summary>For very high ROI, allow a higher sweet-spot floor so we don't cap at 0.15 for cheap, high-spread items.</summary>
+    private static double GetHighRoiSweetSpotFloor(double roi)
     {
-        if (candles.Count < 2)
-        {
-            return 0;
-        }
-
-        // Calculate returns: (Close[i] - Close[i-1]) / Close[i-1]
-        var returns = new List<double>();
-        for (int i = 1; i < candles.Count; i++)
-        {
-            var prevClose = candles[i - 1].Close;
-            if (prevClose > 0)
-            {
-                var returnValue = (candles[i].Close - prevClose) / prevClose;
-                returns.Add(returnValue);
-            }
-        }
-
-        if (returns.Count == 0)
-        {
-            return 0;
-        }
-
-        // Calculate standard deviation of returns
-        var meanReturn = returns.Average();
-        var variance = returns.Sum(r => Math.Pow(r - meanReturn, 2)) / returns.Count;
-        var stdDev = Math.Sqrt(variance);
-
-        // Return as absolute volatility (standard deviation of returns)
-        // Multiply by mean price to get price volatility in absolute terms
-        var meanPrice = candles.Average(c => c.Close);
-        return stdDev * meanPrice;
-    }
-
-    private double CalculateSpreadStability(List<OhlcDataPoint> candles)
-    {
-        // For spread stability, we need bid and ask prices over time
-        // Since candles only have bid prices (Close), we'll use the high-low range as a proxy
-        // In a real implementation, we might want to track spreads separately
-
-        if (candles.Count < 2)
-        {
-            return MinSpreadStability;
-        }
-
-        // Calculate spread proxy: (High - Low) / Close as a measure of price stability
-        var spreadRatios = candles
-            .Where(c => c.Close > 0)
-            .Select(c => (c.High - c.Low) / c.Close)
-            .ToList();
-
-        if (spreadRatios.Count == 0)
-        {
-            return MinSpreadStability;
-        }
-
-        var meanSpread = spreadRatios.Average();
-        var variance = spreadRatios.Sum(s => Math.Pow(s - meanSpread, 2)) / spreadRatios.Count;
-        var stdDev = Math.Sqrt(variance);
-
-        // Coefficient of variation: lower is better (more stable)
-        var coefficientOfVariation = meanSpread > 0 ? stdDev / meanSpread : 1.0;
-
-        // Convert to stability factor: lower CV = higher stability = higher multiplier
-        // Use inverse relationship with bounds
-        var stabilityFactor = 1.0 / (1.0 + coefficientOfVariation);
-        return Math.Max(MinSpreadStability, Math.Min(1.0, stabilityFactor));
+        if (roi >= 5.0) return 0.5;
+        if (roi >= 3.0) return 0.35;
+        if (roi >= 2.0) return 0.25;
+        return 0.15;
     }
 
     private double CalculateVolumeScore(long bidMovingWeek, long askMovingWeek)
     {
         var totalVolume = bidMovingWeek + askMovingWeek;
+        if (totalVolume <= 0) return 0;
 
-        if (totalVolume <= 0)
+        var executionFactor = totalVolume >= MinWeeklyVolumeForFlipping
+            ? 1.0
+            : Math.Pow((double)totalVolume / MinWeeklyVolumeForFlipping, 2);
+
+        var hourlyVolume = totalVolume / 168.0;
+        // Softer cap so 700k weekly (~4.2k/hr) gets a reasonable score; was 20k (required 3.36M/week for 1.0)
+        var throughputScore = Math.Min(1.0, hourlyVolume / 5_000.0);
+
+        var ratio = (double)bidMovingWeek / Math.Max(1, askMovingWeek);
+        var balanceFactor = Math.Min(ratio, 1.0 / ratio);
+
+        return throughputScore * executionFactor * (0.6 + 0.4 * balanceFactor);
+    }
+
+    private double CalculateVolatility(List<OhlcDataPoint> candles)
+    {
+        if (candles.Count < 2) return 0;
+        var returns = new List<double>();
+        for (var i = 1; i < candles.Count; i++)
         {
-            return 0;
+            if (candles[i - 1].Close > 0)
+                returns.Add((candles[i].Close - candles[i - 1].Close) / candles[i - 1].Close);
         }
 
-        // EXECUTION PROBABILITY: Penalize low-volume items heavily
-        // Below MinWeeklyVolumeForFlipping, apply a steep penalty curve
-        // This prevents high-margin/low-volume items from dominating
-        double executionProbability;
-        if (totalVolume >= MinWeeklyVolumeForFlipping)
-        {
-            executionProbability = 1.0; // Full execution probability
-        }
-        else
-        {
-            // Steep penalty: (volume / min)^2 -- quadratic penalty for low volume
-            // At 50k volume (half of 100k), this gives 0.25 penalty
-            // At 10k volume (1/10 of 100k), this gives 0.01 penalty
-            var ratio = (double)totalVolume / MinWeeklyVolumeForFlipping;
-            executionProbability = ratio * ratio;
-        }
+        if (returns.Count == 0) return 0;
+        var meanReturn = returns.Average();
+        var stdDev = Math.Sqrt(returns.Sum(r => Math.Pow(r - meanReturn, 2)) / returns.Count);
+        return stdDev * candles.Average(c => c.Close);
+    }
 
-        // HOURLY THROUGHPUT: How many items can actually be traded per hour
-        // Use linear scaling (not log) - more volume IS better for flipping
-        var hourlyVolume = totalVolume / (7.0 * 24.0);
-        
-        // Normalize to a reasonable scale (0-1 for typical volumes)
-        // Assume 10,000/hour is "excellent" throughput
-        var throughputScore = Math.Min(1.0, hourlyVolume / 10_000.0);
-
-        // VOLUME BALANCE: Balanced markets are better for flipping (easier to fill both sides)
-        var volumeRatio = bidMovingWeek / (double)askMovingWeek;
-        var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio); // Closer to 1.0 is better
-
-        // Final volume score: throughput * execution_probability * balance
-        // The execution probability is the key multiplier that kills low-volume items
-        return throughputScore * executionProbability * (0.7 + 0.3 * balanceFactor);
+    private double CalculateSpreadStability(List<OhlcDataPoint> candles)
+    {
+        if (candles.Count < 2) return MinSpreadStability;
+        var variations = candles.Select(c => (c.High - c.Low) / Math.Max(1, c.Close)).ToList();
+        var avgVar = variations.Average();
+        var stdDev = Math.Sqrt(variations.Sum(v => Math.Pow(v - avgVar, 2)) / variations.Count);
+        return Math.Clamp(1.0 / (1.0 + stdDev), MinSpreadStability, 1.0);
     }
 
     private double CalculateTrendFactor(List<OhlcDataPoint> candles)
     {
-        if (candles.Count < 3)
-        {
-            return 1.0; // Neutral if insufficient data
-        }
-
-        // Calculate simple moving average of recent closes
-        var recentCandles = candles.TakeLast(Math.Min(6, candles.Count)).ToList();
-        var sma = recentCandles.Average(c => c.Close);
-        var currentPrice = candles.Last().Close;
-
-        // If price is above SMA, trending up (opportunity may close faster)
-        // If price is below SMA, trending down (opportunity may persist)
-        var priceRatio = currentPrice / sma;
-
-        // Small multiplier range (0.9-1.1) to avoid over-weighting
-        // Trending up slightly reduces score (opportunity closing)
-        // Trending down slightly increases score (opportunity persisting)
-        var trendMultiplier = 1.0 + (1.0 - priceRatio) * 0.1;
-        return Math.Max(0.9, Math.Min(1.1, trendMultiplier));
-    }
-
-    private double CalculateExpectedReturn(double bidPrice, double askPrice, double spreadStability)
-    {
-        var margin = bidPrice - askPrice;
-        if (margin <= 0)
-        {
-            return 0;
-        }
-
-        // Expected return adjusted by spread stability
-        // More stable spreads suggest more reliable returns
-        return margin * spreadStability;
+        if (candles.Count < 5) return 1.0;
+        var recent = candles.TakeLast(5).ToList();
+        var sma = recent.Average(c => c.Close);
+        var current = candles.Last().Close;
+        var diff = (current - sma) / sma;
+        return Math.Clamp(1.0 + diff, 0.8, 1.2);
     }
 
     private double CalculateSimplifiedScore(double bidPrice, double askPrice, long bidMovingWeek, long askMovingWeek)
     {
-        // Simplified version for products without sufficient OHLC history
+        var netProfit = (askPrice * (1.0 - BazaarTaxRate)) - bidPrice;
+        if (netProfit <= 0) return 0;
 
-        if (bidMovingWeek == 0 || askMovingWeek == 0)
+        var roi = netProfit / bidPrice;
+        var volumeScore = CalculateVolumeScore(bidMovingWeek, askMovingWeek);
+
+        // SWEET SPOT LOGIC: Favor items between 100 and 100k
+        var sweetSpotFactor = CalculateSweetSpotFactor(bidPrice);
+
+        // DUST PENALTY: Specifically target items worth less than 100 coins.
+        var dustPenalty = bidPrice < MinWorthwhilePrice
+            ? Math.Pow(bidPrice / MinWorthwhilePrice, 2)
+            : 1.0;
+
+        // FEASIBILITY CHECK: Massive ROI + High Volume usually means a "Spread Trap"
+        // If an item has 10M volume but a 100x spread, it's impossible to maintain that spread.
+        // This penalty triggers when ROI is high AND Volume is high.
+        double feasibilityPenalty = 1.0;
+        if (roi > 10.0 && volumeScore > 0.5)
         {
-            return 0;
+            // The more volume and ROI combined, the more we suspect it's a fake spread
+            feasibilityPenalty = 1.0 / (1.0 + Math.Log10(roi) * volumeScore);
         }
 
-        var margin = bidPrice - askPrice;
-        if (margin <= 0)
-        {
-            return 0;
-        }
+        var baseValue = (roi * 10.0) * volumeScore * sweetSpotFactor * dustPenalty * feasibilityPenalty;
 
-        var totalVolume = bidMovingWeek + askMovingWeek;
-        
-        // EXECUTION PROBABILITY: Penalize low-volume items (same as advanced scoring)
-        double executionProbability;
-        if (totalVolume >= MinWeeklyVolumeForFlipping)
-        {
-            executionProbability = 1.0;
-        }
-        else
-        {
-            var ratio = (double)totalVolume / MinWeeklyVolumeForFlipping;
-            executionProbability = ratio * ratio; // Quadratic penalty
-        }
-        
-        var volumeRatio = bidMovingWeek / (double)askMovingWeek;
-        var balanceFactor = Math.Min(volumeRatio, 1.0 / volumeRatio);
-
-        // Hourly volume estimate
-        var hourlyVolume = totalVolume / (7.0 * 24.0);
-
-        // Profit per item
-        var profitPerItem = margin;
-
-        // Simplified risk adjustment: higher price = higher risk
-        var priceRisk = 1.0 / (1.0 + askPrice * 0.0001);
-
-        // Calculate base score with execution probability penalty
-        var baseScore = hourlyVolume * profitPerItem * balanceFactor * priceRisk * executionProbability;
-
-        // Normalize using logarithmic scaling
-        // Target: scores in 0-10 range for typical opportunities
-        var normalizedScore = Math.Log(1 + baseScore / 1_000_000.0) * 2;
-
-        return Math.Max(0, normalizedScore);
+        return Math.Clamp(Math.Log10(1 + baseValue) * 4.0, 0, 10);
     }
 
-    public async Task<ManipulationScore> CalculateManipulationScoreAsync(
-        string productKey,
-        double currentBidPrice,
-        double currentAskPrice,
-        CancellationToken ct = default)
+    private double CalculateSweetSpotFactor(double price)
     {
-        // Edge cases: invalid prices
-        if (currentBidPrice <= 0 || currentAskPrice <= 0)
-        {
-            return new ManipulationScore(false, 0, 0, 0);
-        }
+        if (price <= 0) return 0.01;
 
-        try
-        {
-            // Fetch historical OHLC candles (1-hour interval, last 7-14 days)
-            var lookbackHours = ManipulationLookbackDays * 24;
-            var candles = await ohlcRepository.GetCandlesAsync(
-                productKey,
-                CandleInterval.OneHour,
-                limit: lookbackHours,
-                ct);
+        var logPrice = Math.Log10(price);
+        var logTarget = Math.Log10(TargetPriceMidpoint);
 
-            // Need at least minimum candles for reliable statistics
-            if (candles.Count < ManipulationMinCandles)
-            {
-                logger.LogDebug(
-                    "Insufficient OHLC data for manipulation detection for {ProductKey} ({Count} candles, need {Min})",
-                    productKey,
-                    candles.Count,
-                    ManipulationMinCandles);
-                return new ManipulationScore(false, 0, 0, 0);
-            }
+        var exponent = -Math.Pow(logPrice - logTarget, 2) / (2 * Math.Pow(PriceRangeWidth, 2));
+        var factor = Math.Exp(exponent);
 
-            // Calculate mean and standard deviation of closing prices
-            var closingPrices = candles.Select(c => c.Close).Where(p => p > 0).ToList();
-            if (closingPrices.Count < ManipulationMinCandles)
-            {
-                return new ManipulationScore(false, 0, 0, 0);
-            }
+        return Math.Max(0.15, factor);
+    }
 
-            var mean = closingPrices.Average();
-            var variance = closingPrices.Sum(p => Math.Pow(p - mean, 2)) / closingPrices.Count;
-            var stdDev = Math.Sqrt(variance);
-
-            // Edge case: zero or very small standard deviation
-            // Use percentage deviation as fallback
-            if (stdDev < mean * 0.001) // Less than 0.1% of mean
-            {
-                var bidDeviationPercent = ((currentBidPrice - mean) / mean) * 100;
-                var askDeviationPercent = ((currentAskPrice - mean) / mean) * 100;
-                var maxDeviationPercent = Math.Max(Math.Abs(bidDeviationPercent), Math.Abs(askDeviationPercent));
-
-                // Use percentage threshold: >15% deviation indicates manipulation
-                var manipulated = maxDeviationPercent > 15.0;
-                var manipulationIntensity = manipulated ? Math.Min(1.0, maxDeviationPercent / 50.0) : 0.0;
-
-                return new ManipulationScore(
-                    manipulated,
-                    0, // No Z-score available
-                    maxDeviationPercent,
-                    manipulationIntensity);
-            }
-
-            // Calculate Z-score for current bid and ask prices
-            var bidZScore = (currentBidPrice - mean) / stdDev;
-            var askZScore = (currentAskPrice - mean) / stdDev;
-
-            // Use the more extreme Z-score (further from zero)
-            var extremeZScore = Math.Abs(bidZScore) > Math.Abs(askZScore) ? bidZScore : askZScore;
-            var currentPrice = Math.Abs(bidZScore) > Math.Abs(askZScore) ? currentBidPrice : currentAskPrice;
-
-            // Determine if manipulated: Z-score exceeds threshold
-            var isManipulated = Math.Abs(extremeZScore) > ManipulationZScoreThreshold;
-
-            // Calculate intensity: normalized to 0-1 scale
-            // Z-score of 2.5 = intensity 0.71, Z-score of 3.5 = intensity 1.0
-            var intensity = isManipulated
-                ? Math.Min(1.0, Math.Abs(extremeZScore) / 3.5)
-                : 0.0;
-
-            // Calculate deviation percentage
-            var deviationPercent = ((currentPrice - mean) / mean) * 100;
-
-            return new ManipulationScore(
-                isManipulated,
-                extremeZScore,
-                deviationPercent,
-                intensity);
-        }
-        catch (Exception ex)
-        {
-            logger.LogWarning(ex, "Error calculating manipulation score for {ProductKey}", productKey);
-            return new ManipulationScore(false, 0, 0, 0);
-        }
+    private static ManipulationScore CalculateManipulationScoreFromCandles(double currentBid, List<OhlcDataPoint> candles)
+    {
+        if (candles.Count < ManipulationMinCandles) return new ManipulationScore(false, 0, 0, 0);
+        var prices = candles.Select(c => c.Close).ToList();
+        var mean = prices.Average();
+        var stdDev = Math.Sqrt(prices.Sum(p => Math.Pow(p - mean, 2)) / prices.Count);
+        if (stdDev < mean * 0.001) stdDev = mean * 0.001;
+        var z = (currentBid - mean) / stdDev;
+        var isManipulated = Math.Abs(z) > ManipulationZScoreThreshold;
+        var deviation = ((currentBid - mean) / mean) * 100;
+        return new ManipulationScore(isManipulated, z, deviation, isManipulated ? Math.Min(1.0, Math.Abs(z) / 5.0) : 0);
     }
 }

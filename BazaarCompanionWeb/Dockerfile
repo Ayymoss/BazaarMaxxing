@@ -1,4 +1,4 @@
-﻿FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
+FROM mcr.microsoft.com/dotnet/aspnet:10.0 AS base
 WORKDIR /app
 EXPOSE 6969
 
@@ -18,6 +18,10 @@ RUN dotnet publish "BazaarCompanionWeb.csproj" -c $BUILD_CONFIGURATION -o /app/p
 FROM base AS final
 WORKDIR /app
 COPY --from=publish /app/publish .
+
+# Npgsql may load libgssapi_krb5 for GSSAPI/Kerberos; install it so PostgreSQL works in container
+RUN apt-get update && apt-get install -y --no-install-recommends libgssapi-krb5-2 && \
+    rm -rf /var/lib/apt/lists/*
 
 # Create data directory with proper permissions
 # The .NET base image runs as a non-root user (typically UID 1000)

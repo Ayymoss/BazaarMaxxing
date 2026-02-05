@@ -1,4 +1,5 @@
 using BazaarCompanionWeb.Dtos;
+using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Hubs;
 using BazaarCompanionWeb.Interfaces;
 using Microsoft.AspNetCore.SignalR;
@@ -22,18 +23,27 @@ public class HyPixelService(
     OrderBookAnalysisService orderBookAnalysisService,
     IHubContext<ProductHub> hubContext,
     TimeCache timeCache,
-    LiveCandleTracker liveCandleTracker)
+    LiveCandleTracker liveCandleTracker,
+    IBazaarRunCache bazaarRunCache,
+    ILogger<HyPixelService> logger)
 {
     public async Task FetchDataAsync(CancellationToken cancellationToken)
     {
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
         var itemResponse = await hyPixelApi.GetItemsAsync();
-        var products = await BuildProductDataAsync(bazaarResponse, itemResponse, cancellationToken);
-        var mappedProducts = products.Select(x => x.Map()).ToList();
+        var (products, changedKeys) = await BuildProductDataAsync(bazaarResponse, itemResponse, cancellationToken);
+        var productList = products.ToList();
+        var mappedProducts = productList.Select(x => x.Map()).ToList();
+
+        var stateByProduct = productList.ToDictionary(p => p.ItemId, p => new ProductState(
+            p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, (long)p.Bid.WeekVolume, (long)p.Ask.WeekVolume));
+        var scoresByProduct = mappedProducts.ToDictionary(ef => ef.ProductKey, ef => new CachedScores(
+            ef.Meta.FlipOpportunityScore, ef.Meta.IsManipulated, ef.Meta.ManipulationIntensity, ef.Meta.PriceDeviationPercent));
+        bazaarRunCache.Update(stateByProduct, scoresByProduct);
+
         await productRepository.UpdateOrAddProductsAsync(mappedProducts, cancellationToken);
 
-        // Record granular price ticks for OHLC chart with volume
-        var ticks = products.Select(p => (
+        var ticks = productList.Select(p => (
             p.ItemId,
             p.Bid.OrderPrice,
             p.Ask.OrderPrice,
@@ -44,104 +54,132 @@ public class HyPixelService(
 
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
 
-        // Trigger market insights recalculation after data is updated
-        // Trigger market insights recalculation after data is updated
         await marketInsightsService.RefreshInsightsAsync(cancellationToken);
 
-        // Broadcast updates via SignalR
-        foreach (var (product, efProduct) in products.Zip(mappedProducts))
-        {
-            var updateInfo = new ProductDataInfo
+        var changedSet = changedKeys.ToHashSet();
+        var snapshotItems = productList.Zip(mappedProducts)
+            .Where(z => changedSet.Contains(z.First.ItemId))
+            .Select(z =>
             {
-                ItemId = efProduct.ProductKey,
-                ItemFriendlyName = efProduct.FriendlyName,
-                ItemTier = efProduct.Tier,
-                ItemUnstackable = efProduct.Unstackable,
-                SkinUrl = efProduct.SkinUrl,
-                BidUnitPrice = efProduct.Bid.UnitPrice,
-                BidWeekVolume = efProduct.Bid.OrderVolumeWeek,
-                BidCurrentOrders = efProduct.Bid.OrderCount,
-                BidCurrentVolume = efProduct.Bid.OrderVolume,
-                AskUnitPrice = efProduct.Ask.UnitPrice,
-                AskWeekVolume = efProduct.Ask.OrderVolumeWeek,
-                AskCurrentOrders = efProduct.Ask.OrderCount,
-                AskCurrentVolume = efProduct.Ask.OrderVolume,
-                OrderMetaPotentialProfitMultiplier = efProduct.Meta.ProfitMultiplier,
-                OrderMetaSpread = efProduct.Meta.Spread,
-                OrderMetaTotalWeekVolume = efProduct.Meta.TotalWeekVolume,
-                OrderMetaFlipOpportunityScore = efProduct.Meta.FlipOpportunityScore,
-                IsManipulated = efProduct.Meta.IsManipulated,
-                ManipulationIntensity = efProduct.Meta.ManipulationIntensity,
-                PriceDeviationPercent = efProduct.Meta.PriceDeviationPercent,
-                // These are expensive to fetch and not strictly needed for the quick update, 
-                // but we should at least clear them or preserve if needed.
-                BidMarketDataId = efProduct.Bid.Id,
-                AskMarketDataId = efProduct.Ask.Id,
-                BidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
-                AskBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
-            };
+                var (product, efProduct) = z;
+                var bidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList();
+                var askBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList();
+                return (efProduct.ProductKey, bidBook, askBook);
+            }).ToList();
+        if (snapshotItems.Count > 0)
+            await orderBookAnalysisService.StoreSnapshotsBatchAsync(snapshotItems, cancellationToken);
 
-            await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("ProductUpdated", updateInfo, cancellationToken);
+        var broadcastItems = productList.Zip(mappedProducts).Where(z => changedSet.Contains(z.First.ItemId)).ToList();
+        await Parallel.ForEachAsync(
+            broadcastItems,
+            new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = cancellationToken },
+            async (item, ct) =>
+            {
+                var (product, efProduct) = item;
+                var updateInfo = new ProductDataInfo
+                {
+                    ItemId = efProduct.ProductKey,
+                    ItemFriendlyName = efProduct.FriendlyName,
+                    ItemTier = efProduct.Tier,
+                    ItemUnstackable = efProduct.Unstackable,
+                    SkinUrl = efProduct.SkinUrl,
+                    BidUnitPrice = efProduct.Bid.UnitPrice,
+                    BidWeekVolume = efProduct.Bid.OrderVolumeWeek,
+                    BidCurrentOrders = efProduct.Bid.OrderCount,
+                    BidCurrentVolume = efProduct.Bid.OrderVolume,
+                    AskUnitPrice = efProduct.Ask.UnitPrice,
+                    AskWeekVolume = efProduct.Ask.OrderVolumeWeek,
+                    AskCurrentOrders = efProduct.Ask.OrderCount,
+                    AskCurrentVolume = efProduct.Ask.OrderVolume,
+                    OrderMetaPotentialProfitMultiplier = efProduct.Meta.ProfitMultiplier,
+                    OrderMetaSpread = efProduct.Meta.Spread,
+                    OrderMetaTotalWeekVolume = efProduct.Meta.TotalWeekVolume,
+                    OrderMetaFlipOpportunityScore = efProduct.Meta.FlipOpportunityScore,
+                    IsManipulated = efProduct.Meta.IsManipulated,
+                    ManipulationIntensity = efProduct.Meta.ManipulationIntensity,
+                    PriceDeviationPercent = efProduct.Meta.PriceDeviationPercent,
+                    BidMarketDataId = efProduct.Bid.Id,
+                    AskMarketDataId = efProduct.Ask.Id,
+                    BidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
+                    AskBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
+                };
 
-            // Broadcast a tick for the chart with proper OHLC aggregation
-            var liveTick = liveCandleTracker.UpdateAndGetTick(
-                efProduct.ProductKey,
-                efProduct.Bid.UnitPrice,
-                efProduct.Ask.UnitPrice,
-                efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
+                await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("ProductUpdated", updateInfo, ct);
 
-            await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, cancellationToken);
-            
-            // Store order book snapshot for heatmap analysis
-            await orderBookAnalysisService.StoreSnapshotAsync(
-                efProduct.ProductKey,
-                updateInfo.BidBook!,
-                updateInfo.AskBook!,
-                cancellationToken);
-        }
+                var liveTick = liveCandleTracker.UpdateAndGetTick(
+                    efProduct.ProductKey,
+                    efProduct.Bid.UnitPrice,
+                    efProduct.Ask.UnitPrice,
+                    efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
+                await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, ct);
+            });
     }
 
-    private async Task<IEnumerable<ProductData>> BuildProductDataAsync(BazaarResponse bazaarResponse, ItemResponse itemResponse,
-        CancellationToken cancellationToken)
+    private async Task<(IEnumerable<ProductData> Products, IReadOnlyList<string> ChangedKeys)> BuildProductDataAsync(
+        BazaarResponse bazaarResponse, ItemResponse itemResponse, CancellationToken cancellationToken)
     {
         var itemMap = itemResponse.Items.ToDictionary(x => x.Id, x => x);
+        var bazaarList = bazaarResponse.Products.Values.Where(x => x.Bids.Count is not 0).ToList();
 
+        if (bazaarList.Count == 0)
+            return ([], []);
+
+        var currentState = bazaarList.ToDictionary(b => b.ProductId, b =>
+        {
+            var ask = b.Asks.FirstOrDefault();
+            var bid = b.Bids.FirstOrDefault();
+            var askOrderPrice = (double)(ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f);
+            var bidOrderPrice = (double)(bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f);
+            return new ProductState(b.ProductId, bidOrderPrice, askOrderPrice, b.Ticker.MovingWeekSells, b.Ticker.MovingWeekBuys);
+        });
+
+        var changedKeys = bazaarRunCache.GetChangedProductKeys(currentState);
+        logger.LogDebug("Detected {ChangedCount} changed products out of {TotalCount} total products", changedKeys.Count, bazaarList.Count);
+
+        IReadOnlyList<double> opportunityScores;
+        IReadOnlyList<ManipulationScore> manipulationScores;
+
+        if (changedKeys.Count == 0)
+        {
+            opportunityScores = [];
+            manipulationScores = [];
+        }
+        else
+        {
+            const int lookbackHours = 7 * 24;
+            var candlesByProduct =
+                await ohlcRepository.GetCandlesBulkAsync(changedKeys, CandleInterval.OneHour, lookbackHours, cancellationToken);
+
+            var changedInputs = changedKeys.Select(key =>
+            {
+                var b = bazaarList.First(x => x.ProductId == key);
+                var ask = b.Asks.FirstOrDefault();
+                var bid = b.Bids.FirstOrDefault();
+                var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
+                var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
+                return new ScoringProductInput(key, bidOrderPrice, askOrderPrice, b.Ticker.MovingWeekBuys, b.Ticker.MovingWeekSells);
+            }).ToList();
+
+            (opportunityScores, manipulationScores) = opportunityScoringService.CalculateScoresBatch(changedInputs, candlesByProduct);
+        }
+
+        var changedKeyToIndex = changedKeys.Select((key, idx) => (key, idx)).ToDictionary(x => x.key, x => x.idx);
         var productList = new List<ProductData>();
 
-        foreach (var bazaar in bazaarResponse.Products.Values.Where(x => x.Bids.Count is not 0))
+        foreach (var bazaar in bazaarList)
         {
             var item = itemMap.GetValueOrDefault(bazaar.ProductId);
-
             var ask = bazaar.Asks.FirstOrDefault();
             var bid = bazaar.Bids.FirstOrDefault();
-
             var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
             var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
             var movingWeekSells = bazaar.Ticker.MovingWeekSells;
             var movingWeekBuys = bazaar.Ticker.MovingWeekBuys;
-
             var spread = askOrderPrice - bidOrderPrice;
             var totalWeekVolume = movingWeekSells + movingWeekBuys;
             var potentialProfitMultiplier = askOrderPrice / bidOrderPrice;
             var buyingPower = (float)movingWeekSells / movingWeekBuys;
-
             var friendlyName = item?.Name ?? ProductIdToName(bazaar.ProductId);
-
-            // Calculate opportunity score using the new service
-            var flipOpportunityScore = await opportunityScoringService.CalculateOpportunityScoreAsync(
-                bazaar.ProductId,
-                askOrderPrice,
-                bidOrderPrice,
-                movingWeekSells,
-                movingWeekBuys,
-                cancellationToken);
-
-            // Calculate manipulation score to detect fire sale opportunities
-            var manipulationScore = await opportunityScoringService.CalculateManipulationScoreAsync(
-                bazaar.ProductId,
-                askOrderPrice,
-                bidOrderPrice,
-                cancellationToken);
 
             string? skinUrl = null;
             if (item?.Skin?.Value is not null)
@@ -160,6 +198,38 @@ public class HyPixelService(
                 catch
                 {
                     // Ignore skin parse errors
+                }
+            }
+
+            double flipScore;
+            bool isManipulated;
+            double manipulationIntensity;
+            double deviationPercent;
+
+            if (changedKeyToIndex.TryGetValue(bazaar.ProductId, out var changedIdx))
+            {
+                flipScore = opportunityScores[changedIdx];
+                var ms = manipulationScores[changedIdx];
+                isManipulated = ms.IsManipulated;
+                manipulationIntensity = ms.ManipulationIntensity;
+                deviationPercent = ms.DeviationPercent;
+            }
+            else
+            {
+                var cached = bazaarRunCache.GetCachedScores(bazaar.ProductId);
+                if (cached is not null)
+                {
+                    flipScore = cached.FlipOpportunityScore;
+                    isManipulated = cached.IsManipulated;
+                    manipulationIntensity = cached.ManipulationIntensity;
+                    deviationPercent = cached.PriceDeviationPercent;
+                }
+                else
+                {
+                    flipScore = 0;
+                    isManipulated = false;
+                    manipulationIntensity = 0;
+                    deviationPercent = 0;
                 }
             }
 
@@ -207,15 +277,15 @@ public class HyPixelService(
                     Spread = spread,
                     TotalWeekVolume = totalWeekVolume,
                     BidOrderPower = buyingPower,
-                    FlipOpportunityScore = flipOpportunityScore,
-                    IsManipulated = manipulationScore.IsManipulated,
-                    ManipulationIntensity = manipulationScore.ManipulationIntensity,
-                    PriceDeviationPercent = manipulationScore.DeviationPercent
+                    FlipOpportunityScore = flipScore,
+                    IsManipulated = isManipulated,
+                    ManipulationIntensity = manipulationIntensity,
+                    PriceDeviationPercent = deviationPercent
                 }
             });
         }
 
-        return productList;
+        return (productList, changedKeys);
     }
 
     private static string ProductIdToName(string productId)

@@ -74,22 +74,21 @@ public class ProductsPaginationQueryHelper(
         var searchWords = search.Split(' ');
         var regularSearchWords = searchWords.Where(x => x.Length >= 3);
 
+        // ILike = case-insensitive (PostgreSQL); "ascen" matches "Ascension Rope"
         query = regularSearchWords.Aggregate(query, (current, word) =>
-            current.Where(product => EF.Functions.Like(product.FriendlyName, $"%{word}%")));
+            current.Where(product => EF.Functions.ILike(product.FriendlyName, $"%{word}%")));
 
         return query;
     }
 
     private static IQueryable<EFProduct> ApplyFuzzySearchQuery(IQueryable<EFProduct> query, string search)
     {
-        // For database queries, we still use LIKE for performance
-        // Fuzzy matching will be done client-side if needed
-        // This is a simplified version - full fuzzy search would require client-side filtering
+        // For database queries we use ILike for case-insensitive substring match
         var searchWords = search.Split(' ', StringSplitOptions.RemoveEmptyEntries);
         var regularSearchWords = searchWords.Where(x => x.Length >= 2); // Lower threshold for fuzzy
 
         query = regularSearchWords.Aggregate(query, (current, word) =>
-            current.Where(product => EF.Functions.Like(product.FriendlyName, $"%{word}%")));
+            current.Where(product => EF.Functions.ILike(product.FriendlyName, $"%{word}%")));
 
         return query;
     }

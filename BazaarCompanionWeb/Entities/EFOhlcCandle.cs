@@ -4,7 +4,7 @@ using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Entities;
 
-[Index(nameof(ProductKey), nameof(Interval), nameof(PeriodStart))]
+[Index(nameof(ProductKey), nameof(Interval), nameof(PeriodStart), IsUnique = true)]
 [Index(nameof(Interval), nameof(PeriodStart))] // For efficient cleanup queries by interval
 public sealed record EFOhlcCandle
 {

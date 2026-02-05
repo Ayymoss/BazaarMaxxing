@@ -12,7 +12,7 @@ using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 namespace BazaarCompanionWeb.Migrations
 {
     [DbContext(typeof(DataContext))]
-    [Migration("20260204204152_Init")]
+    [Migration("20260204213044_Init")]
     partial class Init
     {
         /// <inheritdoc />
@@ -101,7 +101,8 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasIndex("Interval", "PeriodStart");
 
-                    b.HasIndex("ProductKey", "Interval", "PeriodStart");
+                    b.HasIndex("ProductKey", "Interval", "PeriodStart")
+                        .IsUnique();
 
                     b.ToTable("EFOhlcCandles", (string)null);
                 });

@@ -302,6 +302,7 @@ public class Program
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
         builder.Services.AddSingleton<LiveCandleTracker>();
+        builder.Services.AddSingleton<IBazaarRunCache, BazaarRunCache>();
 
         builder.Services.AddScoped<HyPixelService>();
         builder.Services.AddScoped<IProductRepository, ProductRepository>();

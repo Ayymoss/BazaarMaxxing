@@ -15,19 +15,27 @@ public static class HelperMethods
     public static string ToCompactString(this double value, bool isPercentage = false)
     {
         if (!isPercentage)
+        {
             return Math.Abs(value) >= 1_000_000
                 ? value.ToMetric(decimals: 2)
                 : value.ToString("N2");
+        }
 
-        var absValue = Math.Abs(value);
-        return absValue switch
+        // For percentages, standard practice is value 0.25 = 25%
+        var displayValue = value * 100;
+        var absDisplayValue = Math.Abs(displayValue);
+
+        return absDisplayValue switch
         {
-            // Rule: If >= 1M, use Metric (1M%, 2.5B%)
-            >= 1_000_000 => $"{value.ToMetric(decimals: 0)}%",
-            // Rule: If >= 100%, drop decimals (19,998%)
-            >= 100 => $"{value:N0}%",
-            // Rule: Small percentages (0.1%), keep precision
-            _ => $"{value:0.##}%"
+            // Rule: If >= 1M% (very rare in Bazaar, but handled)
+            >= 1_000_000 => $"{displayValue.ToMetric(decimals: 0)}%",
+
+            // Rule: If >= 100% (e.g. 200% profit), drop decimals
+            >= 100 => $"{displayValue:N0}%",
+
+            // Rule: Small percentages (e.g. 0.34%), keep precision
+            // This handles the "0.34%" bug by using displayValue instead of raw value
+            _ => $"{displayValue:0.##}%"
         };
     }
 

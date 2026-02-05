@@ -98,7 +98,8 @@ namespace BazaarCompanionWeb.Migrations
 
                     b.HasIndex("Interval", "PeriodStart");
 
-                    b.HasIndex("ProductKey", "Interval", "PeriodStart");
+                    b.HasIndex("ProductKey", "Interval", "PeriodStart")
+                        .IsUnique();
 
                     b.ToTable("EFOhlcCandles", (string)null);
                 });

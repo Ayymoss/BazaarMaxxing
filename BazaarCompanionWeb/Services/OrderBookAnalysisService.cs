@@ -293,30 +293,63 @@ public sealed partial class OrderBookAnalysisService(
         List<Order> askBook,
         CancellationToken ct = default)
     {
+        var snapshots = BuildSnapshotEntities(productKey, bidBook, askBook, DateTime.UtcNow);
+        if (snapshots.Count == 0) return;
+
         await using var context = await contextFactory.CreateDbContextAsync(ct);
+        await context.OrderBookSnapshots.AddRangeAsync(snapshots, ct);
+        await context.SaveChangesAsync(ct);
+    }
+
+    /// <summary>
+    /// Stores order book snapshots for many products in one or few batched writes.
+    /// </summary>
+    public async Task StoreSnapshotsBatchAsync(
+        IReadOnlyList<(string ProductKey, List<Order> BidBook, List<Order> AskBook)> items,
+        CancellationToken ct = default)
+    {
+        if (items.Count == 0) return;
+
+        const int chunkSize = 500;
         var now = DateTime.UtcNow;
 
-        // Find mid price
+        for (var i = 0; i < items.Count; i += chunkSize)
+        {
+            var chunk = items.Skip(i).Take(chunkSize).ToList();
+            var allSnapshots = new List<EFOrderBookSnapshot>();
+
+            foreach (var (productKey, bidBook, askBook) in chunk)
+            {
+                var snapshots = BuildSnapshotEntities(productKey, bidBook, askBook, now);
+                allSnapshots.AddRange(snapshots);
+            }
+
+            if (allSnapshots.Count > 0)
+            {
+                await using var context = await contextFactory.CreateDbContextAsync(ct);
+                await context.OrderBookSnapshots.AddRangeAsync(allSnapshots, ct);
+                await context.SaveChangesAsync(ct);
+            }
+        }
+    }
+
+    private static List<EFOrderBookSnapshot> BuildSnapshotEntities(string productKey, List<Order> bidBook, List<Order> askBook, DateTime now)
+    {
         var bestBid = bidBook.Count > 0 ? bidBook.Max(o => o.UnitPrice) : 0;
         var bestAsk = askBook.Count > 0 ? askBook.Min(o => o.UnitPrice) : 0;
         var midPrice = (bestBid + bestAsk) / 2;
+        var snapshots = new List<EFOrderBookSnapshot>();
+        if (midPrice <= 0) return snapshots;
 
-        if (midPrice <= 0) return;
-
-        // Sample at 1% price intervals
         var priceStep = midPrice * 0.01;
-        List<EFOrderBookSnapshot> snapshots = [];
-
         for (var factor = -20; factor <= 20; factor++)
         {
             var priceLevel = midPrice + (factor * priceStep);
             var halfStep = priceStep / 2;
-
             var bidVol = bidBook.Where(o => Math.Abs(o.UnitPrice - priceLevel) < halfStep).Sum(o => o.Amount);
             var askVol = askBook.Where(o => Math.Abs(o.UnitPrice - priceLevel) < halfStep).Sum(o => o.Amount);
             var bidOrders = bidBook.Where(o => Math.Abs(o.UnitPrice - priceLevel) < halfStep).Sum(o => o.Orders);
             var askOrders = askBook.Where(o => Math.Abs(o.UnitPrice - priceLevel) < halfStep).Sum(o => o.Orders);
-
             if (bidVol > 0 || askVol > 0)
             {
                 snapshots.Add(new EFOrderBookSnapshot
@@ -331,12 +364,7 @@ public sealed partial class OrderBookAnalysisService(
                 });
             }
         }
-
-        if (snapshots.Count > 0)
-        {
-            await context.OrderBookSnapshots.AddRangeAsync(snapshots, ct);
-            await context.SaveChangesAsync(ct);
-        }
+        return snapshots;
     }
 
     /// <summary>

@@ -232,7 +232,8 @@ namespace BazaarCompanionWeb.Migrations
             migrationBuilder.CreateIndex(
                 name: "IX_EFOhlcCandles_ProductKey_Interval_PeriodStart",
                 table: "EFOhlcCandles",
-                columns: new[] { "ProductKey", "Interval", "PeriodStart" });
+                columns: new[] { "ProductKey", "Interval", "PeriodStart" },
+                unique: true);
 
             migrationBuilder.CreateIndex(
                 name: "IX_EFOrderBookSnapshots_ProductKey_Timestamp",

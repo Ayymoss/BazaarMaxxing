@@ -70,7 +70,7 @@ public class OhlcAggregationService(
         {
             ProductKey = s.ProductKey,
             Interval = CandleInterval.OneDay,
-            PeriodStart = s.Taken.ToDateTime(TimeOnly.MinValue),
+            PeriodStart = DateTime.SpecifyKind(s.Taken.ToDateTime(TimeOnly.MinValue), DateTimeKind.Utc),
             Open = s.BidUnitPrice,
             High = s.BidUnitPrice,
             Low = s.BidUnitPrice,
@@ -86,39 +86,47 @@ public class OhlcAggregationService(
     private async Task AggregateAllCandlesAsync(IOhlcRepository ohlcRepository, CancellationToken ct)
     {
         var productKeys = await ohlcRepository.GetAllProductKeysAsync(ct);
+        var now = DateTime.UtcNow;
+        var since = now - TickRetention;
+        var ticksByProduct = await ohlcRepository.GetTicksForAggregationBulkAsync(productKeys, since, ct);
 
-        foreach (var productKey in productKeys)
-        {
-            foreach (var interval in Enum.GetValues<CandleInterval>())
+        await Parallel.ForEachAsync(
+            productKeys,
+            new ParallelOptions { MaxDegreeOfParallelism = 8, CancellationToken = ct },
+            async (productKey, cancellationToken) =>
             {
-                await AggregateIntervalAsync(ohlcRepository, productKey, interval, ct);
-            }
-        }
+                var ticks = ticksByProduct.GetValueOrDefault(productKey) ?? [];
+                foreach (var interval in Enum.GetValues<CandleInterval>())
+                {
+                    await AggregateIntervalAsync(ohlcRepository, productKey, interval, cancellationToken, ticks);
+                }
+            });
     }
 
     private async Task AggregateIntervalAsync(IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
-        CancellationToken ct)
+        CancellationToken ct, List<EFPriceTick>? preloadedTicks = null)
     {
         var now = DateTime.UtcNow;
 
-        // Determine how far back to look for ticks
-        // For daily/weekly intervals, ALWAYS look back the full tick retention period
-        // This ensures seeded flat candles get properly re-aggregated with actual tick data
         DateTime lookbackStart;
         if (interval is CandleInterval.OneDay or CandleInterval.OneWeek)
-        {
-            // Always re-aggregate from the full tick retention window for larger intervals
-            // This fixes seeded flat candles that have O=H=L=C
             lookbackStart = now - TickRetention;
-        }
         else
         {
-            // For smaller intervals, use the latest candle as the starting point for efficiency
             var latestCandle = await ohlcRepository.GetLatestCandleTimeAsync(productKey, interval, ct);
             lookbackStart = latestCandle ?? now.AddDays(-7);
         }
 
-        var ticks = await ohlcRepository.GetTicksForAggregationAsync(productKey, lookbackStart, ct);
+        List<EFPriceTick> ticks;
+        if (preloadedTicks is { Count: > 0 })
+        {
+            ticks = preloadedTicks.Where(t => t.Timestamp >= lookbackStart).OrderBy(t => t.Timestamp).ToList();
+        }
+        else
+        {
+            ticks = await ohlcRepository.GetTicksForAggregationAsync(productKey, lookbackStart, ct);
+        }
+
         if (ticks.Count is 0) return;
 
         // Group ticks into period buckets

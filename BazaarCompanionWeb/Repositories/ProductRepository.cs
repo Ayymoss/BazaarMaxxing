@@ -72,16 +72,16 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 },
             });
 
-        var test = productMap.Keys.ToList();
+        var incomingKeys = productMap.Keys.ToList();
 
+        // Load all existing products in this batch so Bid/Ask/Meta stay current. Snapshots are used for 12h EMA;
+        // when yesterday's snapshot is missing we add today with current price (no EMA).
         var existingProducts = await context.Products
             .Include(x => x.Snapshots)
             .Include(x => x.Meta)
             .Include(x => x.Bid)
             .Include(x => x.Ask)
-            .Where(x => test.Contains(x.ProductKey))
-            // Get 2 days of EMA
-            .Where(x => x.Snapshots.Any(y => y.Taken >= DateOnly.FromDateTime(TimeProvider.System.GetLocalNow().AddDays(-1).Date)))
+            .Where(x => incomingKeys.Contains(x.ProductKey))
             .ToListAsync(cancellationToken);
 
         logger.LogInformation("Starting transaction...");
@@ -118,6 +118,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 product.Meta.Spread = incomingProduct.Meta.Spread;
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
                 product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
+                product.Meta.IsManipulated = incomingProduct.Meta.IsManipulated;
+                product.Meta.ManipulationIntensity = incomingProduct.Meta.ManipulationIntensity;
+                product.Meta.PriceDeviationPercent = incomingProduct.Meta.PriceDeviationPercent;
 
                 // Map Bid properties
                 product.Bid.UnitPrice = incomingProduct.Bid.UnitPrice;
@@ -147,12 +150,19 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 }
                 else if (product.Snapshots.All(x => x.Taken != todayDate))
                 {
-                    var yesterday = product.Snapshots.First(x => x.Taken == yesterdayDate);
+                    var yesterday = product.Snapshots.FirstOrDefault(x => x.Taken == yesterdayDate);
+                    double bidEma = incomingProduct.Bid.UnitPrice;
+                    double askEma = incomingProduct.Ask.UnitPrice;
+                    if (yesterday is not null)
+                    {
+                        bidEma = (incomingProduct.Bid.UnitPrice - yesterday.BidUnitPrice) * alpha + yesterday.BidUnitPrice;
+                        askEma = (incomingProduct.Ask.UnitPrice - yesterday.AskUnitPrice) * alpha + yesterday.AskUnitPrice;
+                    }
 
                     product.Snapshots.Add(new EFPriceSnapshot
                     {
-                        BidUnitPrice = (incomingProduct.Bid.UnitPrice - yesterday.BidUnitPrice) * alpha + yesterday.BidUnitPrice,
-                        AskUnitPrice = (incomingProduct.Ask.UnitPrice - yesterday.AskUnitPrice) * alpha + yesterday.AskUnitPrice,
+                        BidUnitPrice = bidEma,
+                        AskUnitPrice = askEma,
                         Taken = todayDate,
                         ProductKey = product.ProductKey,
                     });

@@ -186,7 +186,7 @@
 
         <div class="flex items-center gap-3">
             @{
-                var lastPageIndex = _pagination.TotalItemCount > 0 ? (int)Math.Ceiling((double)_pagination.TotalItemCount / _pagination.ItemsPerPage) - 1 : 0;
+                var lastPageIndex = _totalItemCount > 0 ? (int)Math.Ceiling((double)_totalItemCount / _pagination.ItemsPerPage) - 1 : 0;
             }
 
             <div class="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
