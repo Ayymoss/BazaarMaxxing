@@ -391,7 +391,10 @@ export async function createKLineChart(containerId, data, options = {}) {
                         const cache = chartDataCache[containerId];
                         const earliestTimestamp = cache[0].timestamp;
 
-                        const url = `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${earliestTimestamp}&limit=200`;
+                        // Index charts use productKey "index:slug" - route to index API
+                        const url = meta.productKey?.startsWith('index:')
+                            ? `/api/chart/index/${encodeURIComponent(meta.productKey.slice(6))}/${meta.interval}?before=${earliestTimestamp}&limit=200`
+                            : `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${earliestTimestamp}&limit=200`;
                         const response = await fetch(url);
 
                         if (!response.ok) {

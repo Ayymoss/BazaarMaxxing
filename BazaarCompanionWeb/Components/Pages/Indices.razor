@@ -1,8 +1,10 @@
 @page "/indices"
 @using BazaarCompanionWeb.Configurations
+@using BazaarCompanionWeb.Interfaces.Database
 @using Microsoft.Extensions.Options
 @rendermode InteractiveServer
 @inject IOptions<List<IndexConfiguration>> IndexOptions
+@inject IProductRepository ProductRepository
 
 <PageTitle>Indices | Bazaar Maxxing</PageTitle>
 <div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
@@ -52,7 +54,7 @@
             <div class="relative z-10">
                 <span class="text-[10px] font-bold uppercase tracking-widest text-purple-400/80">Total Constituents</span>
                 <div class="mt-1 flex items-baseline gap-2">
-                    <span class="text-3xl font-black text-white">@_indices.Sum(i => i.ProductKeys.Count)</span>
+                    <span class="text-3xl font-black text-white">@_resolvedKeysBySlug.Values.Sum(i => i.Count)</span>
                     <span class="text-xs text-slate-500">Products tracking</span>
                 </div>
             </div>
@@ -102,7 +104,7 @@
                             </div>
                             <div class="flex items-center gap-1.5 px-2.5 py-1 rounded-full bg-white/5 border border-white/10 text-[10px] font-bold text-slate-400 group-hover:text-blue-300 group-hover:border-blue-500/30 transition-all">
                                 <i class="ph ph-rows text-xs"></i>
-                                @index.ProductKeys.Count Components
+                                @GetResolvedCount(index.Slug) Components
                             </div>
                         </div>
 
@@ -111,21 +113,24 @@
                                 @index.Name
                             </h3>
                             <p class="mt-1 text-xs text-slate-500 line-clamp-2">
-                                Tracking movement across @index.ProductKeys.Count normalized Hypixel Bazaar products.
+                                Tracking movement across @GetResolvedCount(index.Slug) normalized Hypixel Bazaar products.
                             </p>
                         </div>
 
                         <div class="mt-6 flex flex-wrap gap-1.5">
-                            @foreach (var productKey in index.ProductKeys.Take(5))
+                            @foreach (var productKey in GetResolvedSampleKeys(index.Slug))
                             {
                                 <span class="px-2.5 py-1 rounded-lg bg-slate-950/40 text-[10px] font-medium text-slate-500 border border-slate-800/50 group-hover:border-slate-700 transition-colors">
                                     @productKey.Replace("_", " ").ToLower()
                                 </span>
                             }
-                            @if (index.ProductKeys.Count > 5)
+                            @{
+                                var resolvedCount = GetResolvedCount(index.Slug);
+                            }
+                            @if (resolvedCount > 5)
                             {
                                 <span class="px-2.5 py-1 rounded-lg bg-blue-500/10 text-[10px] font-bold text-blue-400/80 border border-blue-500/20">
-                                    +@(index.ProductKeys.Count - 5)
+                                    +@(resolvedCount - 5)
                                 </span>
                             }
                         </div>
@@ -148,9 +153,23 @@
 
 @code {
     private List<IndexConfiguration> _indices = [];
+    private Dictionary<string, List<string>> _resolvedKeysBySlug = new();
 
-    protected override void OnInitialized()
+    protected override async Task OnInitializedAsync()
     {
         _indices = IndexOptions.Value;
+        const double minVolume = 100;
+        foreach (var index in _indices)
+        {
+            var resolved = await ProductRepository.GetProductKeysMatchingAsync(index.ProductKeys);
+            var volumeFiltered = await ProductRepository.GetProductKeysWithMinVolumeAsync(resolved, minVolume);
+            _resolvedKeysBySlug[index.Slug] = volumeFiltered;
+        }
     }
+
+    private int GetResolvedCount(string slug) =>
+        _resolvedKeysBySlug.TryGetValue(slug, out var keys) ? keys.Count : 0;
+
+    private IEnumerable<string> GetResolvedSampleKeys(string slug) =>
+        _resolvedKeysBySlug.TryGetValue(slug, out var keys) ? keys.Take(5) : [];
 }

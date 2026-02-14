@@ -162,15 +162,16 @@ public class Program
         });
 
         // Index chart API for aggregated OHLC data (ETF-like indices)
+        // Supports lazy loading: pass ?before=<unixMs> for historical data before that timestamp
         app.MapGet("/api/chart/index/{slug}/{interval:int}", async (
             string slug,
             int interval,
+            long? before,
             int? limit,
             IndexAggregationService indexService,
             IOptions<List<IndexConfiguration>> indexOptions,
             CancellationToken ct) =>
         {
-            // Check if index exists
             var indices = indexOptions.Value;
             var index = indices.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
             if (index is null)
@@ -181,9 +182,17 @@ public class Program
             var candleInterval = (CandleInterval)interval;
             var dataLimit = Math.Min(limit ?? 200, 500);
 
-            var candles = await indexService.GetAggregatedCandlesAsync(slug, candleInterval, dataLimit, ct);
+            List<OhlcDataPoint> candles;
+            if (before.HasValue)
+            {
+                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
+                candles = await indexService.GetAggregatedCandlesBeforeAsync(slug, candleInterval, beforeTime, dataLimit, ct);
+            }
+            else
+            {
+                candles = await indexService.GetAggregatedCandlesAsync(slug, candleInterval, dataLimit, ct);
+            }
 
-            // Return in KLineChart format (timestamp in milliseconds)
             var result = candles.Select(c => new
             {
                 timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),

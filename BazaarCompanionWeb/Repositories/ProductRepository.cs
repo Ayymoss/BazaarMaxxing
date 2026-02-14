@@ -1,3 +1,4 @@
+using System.Text.RegularExpressions;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
@@ -305,5 +306,115 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         }
 
         return deletedCount;
+    }
+
+    public async Task<List<string>> GetProductKeysMatchingAsync(IEnumerable<string> keysOrPatterns, CancellationToken ct = default)
+    {
+        var list = keysOrPatterns.ToList();
+        if (list.Count == 0)
+            return [];
+
+        var literals = list
+            .Where(k => !k.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+            .ToHashSet();
+        var patterns = list
+            .Where(k => k.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+            .Select(k => k["regex:".Length..])
+            .ToList();
+
+        var resolvedKeys = new HashSet<string>();
+
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        if (literals.Count > 0)
+        {
+            var fromLiterals = await context.Products
+                .AsNoTracking()
+                .Where(p => literals.Contains(p.ProductKey))
+                .Select(p => p.ProductKey)
+                .ToListAsync(ct);
+            foreach (var k in fromLiterals)
+                resolvedKeys.Add(k);
+        }
+
+        foreach (var pattern in patterns)
+        {
+            var fromRegex = await context.Products
+                .AsNoTracking()
+                .Where(p => Regex.IsMatch(p.ProductKey, pattern))
+                .Select(p => p.ProductKey)
+                .ToListAsync(ct);
+            foreach (var k in fromRegex)
+                resolvedKeys.Add(k);
+        }
+
+        return resolvedKeys.OrderBy(k => k).ToList();
+    }
+
+    public async Task<List<ProductDataInfo>> GetProductsByKeysAsync(IReadOnlyList<string> productKeys, CancellationToken ct = default)
+    {
+        if (productKeys.Count == 0)
+            return [];
+
+        const int chunkSize = 500;
+        var result = new List<ProductDataInfo>();
+
+        for (var i = 0; i < productKeys.Count; i += chunkSize)
+        {
+            var chunk = productKeys.Skip(i).Take(chunkSize).ToList();
+            await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+            var products = await context.Products
+                .AsNoTracking()
+                .Include(x => x.Bid)
+                .Include(x => x.Ask)
+                .Include(x => x.Meta)
+                .Where(p => chunk.Contains(p.ProductKey))
+                .Select(x => new ProductDataInfo
+                {
+                    BidMarketDataId = x.Bid.Id,
+                    AskMarketDataId = x.Ask.Id,
+                    ItemId = x.ProductKey,
+                    ItemFriendlyName = x.FriendlyName,
+                    ItemTier = x.Tier,
+                    ItemUnstackable = x.Unstackable,
+                    SkinUrl = x.SkinUrl,
+                    BidUnitPrice = x.Bid.UnitPrice,
+                    BidWeekVolume = x.Bid.OrderVolumeWeek,
+                    BidCurrentOrders = x.Bid.OrderCount,
+                    BidCurrentVolume = x.Bid.OrderVolume,
+                    AskUnitPrice = x.Ask.UnitPrice,
+                    AskWeekVolume = x.Ask.OrderVolumeWeek,
+                    AskCurrentOrders = x.Ask.OrderCount,
+                    AskCurrentVolume = x.Ask.OrderVolume,
+                    OrderMetaPotentialProfitMultiplier = x.Meta.ProfitMultiplier,
+                    OrderMetaSpread = x.Meta.Spread,
+                    OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
+                    OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
+                    IsManipulated = x.Meta.IsManipulated,
+                    ManipulationIntensity = x.Meta.ManipulationIntensity,
+                    PriceDeviationPercent = x.Meta.PriceDeviationPercent,
+                })
+                .ToListAsync(ct);
+
+            result.AddRange(products);
+        }
+
+        return result;
+    }
+
+    public async Task<List<string>> GetProductKeysWithMinVolumeAsync(IEnumerable<string> productKeys, double minVolume, CancellationToken ct = default)
+    {
+        var keySet = productKeys.ToList();
+        if (keySet.Count == 0)
+            return [];
+
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        return await context.Products
+            .AsNoTracking()
+            .Where(p => keySet.Contains(p.ProductKey) && p.Meta.TotalWeekVolume >= minVolume)
+            .Select(p => p.ProductKey)
+            .ToListAsync(ct);
     }
 }

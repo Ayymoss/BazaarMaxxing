@@ -187,7 +187,7 @@ public partial class IndexPriceGraph : ComponentBase, IAsyncDisposable
                 askClose = c.AskClose
             }).ToList();
 
-            // Create the KLineChart (no lazy loading for indices in v1)
+            // Create the KLineChart with lazy loading (productKey "index:slug" routes to index API)
             await _chartModule.InvokeVoidAsync("createKLineChart",
                 $"chart-container-{_chartId}",
                 ohlcDataForKLine,
@@ -195,8 +195,7 @@ public partial class IndexPriceGraph : ComponentBase, IAsyncDisposable
                 {
                     productName = IndexName,
                     productKey = $"index:{IndexSlug}",
-                    interval = (int)Interval,
-                    isIndex = true // Flag to disable lazy loading in JS
+                    interval = (int)Interval
                 });
 
             if (!_chartInitialized)

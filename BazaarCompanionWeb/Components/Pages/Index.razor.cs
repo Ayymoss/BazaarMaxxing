@@ -57,38 +57,44 @@ public partial class Index(
     {
         if (_index is null) return;
 
-        List<UnderlyingProductInfo> products = [];
-        List<string> missing = [];
-
-        foreach (var productKey in _index.ProductKeys)
+        var resolvedKeys = await productRepository.GetProductKeysMatchingAsync(_index.ProductKeys, ct);
+        if (resolvedKeys.Count == 0)
         {
-            try
-            {
-                var product = await productRepository.GetProductAsync(productKey, ct);
-                if (product is not null)
-                {
-                    products.Add(new UnderlyingProductInfo(
-                        productKey,
-                        product.ItemFriendlyName,
-                        product.SkinUrl,
-                        product.ItemTier,
-                        (product.BidUnitPrice + product.AskUnitPrice) / 2
-                    ));
-                }
-                else
-                {
-                    missing.Add(productKey);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Could not load product info for {ProductKey}", productKey);
-                missing.Add(productKey);
-            }
+            _underlyingProducts = [];
+            _missingProductKeys = _index.ProductKeys
+                .Where(k => !k.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+                .ToList();
+            return;
         }
 
-        _underlyingProducts = products;
-        _missingProductKeys = missing;
+        // Exclude low-volume products (matches IndexAggregationService; avoids truncation from pruned items)
+        const double minVolume = 100;
+        var volumeFilteredKeys = await productRepository.GetProductKeysWithMinVolumeAsync(resolvedKeys, minVolume, ct);
+        if (volumeFilteredKeys.Count == 0)
+        {
+            _underlyingProducts = [];
+            _missingProductKeys = [];
+            return;
+        }
+
+        var products = await productRepository.GetProductsByKeysAsync(volumeFilteredKeys, ct);
+        _underlyingProducts = products
+            .Select(p => new UnderlyingProductInfo(
+                p.ItemId,
+                p.ItemFriendlyName,
+                p.SkinUrl,
+                p.ItemTier,
+                (p.BidUnitPrice + p.AskUnitPrice) / 2,
+                p.OrderMetaTotalWeekVolume
+            ))
+            .ToList();
+
+        var literalKeys = _index.ProductKeys
+            .Where(k => !k.StartsWith("regex:", StringComparison.OrdinalIgnoreCase))
+            .ToHashSet();
+        _missingProductKeys = literalKeys
+            .Where(k => !volumeFilteredKeys.Contains(k))
+            .ToList();
     }
 
     private Task OnIntervalChangedAsync(CandleInterval interval)
@@ -103,6 +109,7 @@ public partial class Index(
         string FriendlyName,
         string? SkinUrl,
         ItemTier ProductTier,
-        double CurrentPrice
+        double CurrentPrice,
+        double WeekVolume
     );
 }
