@@ -43,23 +43,56 @@ public class MarketAnalyticsService(
             .Where(p => p.Bid.UnitPrice > 0 && p.Bid.OrderVolume > 0)
             .Sum(p => p.Bid.UnitPrice * p.Bid.OrderVolume);
 
-        // Average Spread: Mean spread ratio across all products (stored as decimal, P2 will format)
-        var spreads = activeProducts
-            .Where(p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0)
-            .Select(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) / p.Bid.UnitPrice) // Decimal ratio (e.g., 0.05 for 5%)
+        // For spread/health calculations, only consider liquid products (>10K volume on both sides)
+        // to avoid dead/illiquid items skewing the metrics
+        var liquidProducts = activeProducts
+            .Where(p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0
+                && p.Bid.OrderVolumeWeek > 10_000 && p.Ask.OrderVolumeWeek > 10_000)
             .ToList();
-        var averageSpread = spreads.Any() ? spreads.Average() : 0;
+
+        var spreads = liquidProducts
+            .Select(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) / p.Bid.UnitPrice) // Decimal ratio (e.g., 0.05 for 5%)
+            .OrderBy(s => s)
+            .ToList();
+
+        // Use median spread instead of mean (robust to outliers)
+        var averageSpread = spreads.Count > 0
+            ? spreads[spreads.Count / 2]
+            : 0;
 
         // Market Manipulation Index: Percentage of products currently flagged as manipulated
         var manipulatedCount = activeProducts.Count(p => p.Meta.IsManipulated);
         var manipulationIndex = activeProducts.Any() ? (double)manipulatedCount / activeProducts.Count * 100 : 0;
 
         // Market Health Score: Composite score (0-100)
-        // Factors: spread stability, volume distribution, manipulation rate
-        var spreadStability = spreads.Any() ? 100 - Math.Min(100, spreads.StandardDeviation() * 2) : 50;
+        // Use IQR-based spread stability (robust to outliers)
+        double spreadStability;
+        if (spreads.Count >= 4)
+        {
+            var q1 = spreads[spreads.Count / 4];
+            var q3 = spreads[spreads.Count * 3 / 4];
+            var iqr = q3 - q1;
+            spreadStability = 100.0 * (1.0 / (1.0 + iqr));
+        }
+        else
+        {
+            spreadStability = 50;
+        }
+
         var volumeDistribution = CalculateVolumeDistributionScore(activeProducts);
         var manipulationScore = 100 - manipulationIndex; // Lower manipulation = better
-        var marketHealthScore = (spreadStability * 0.4 + volumeDistribution * 0.4 + manipulationScore * 0.2);
+
+        // Liquidity score: proportion of active products with balanced bid/ask volumes (ask ratio 0.25-0.75)
+        var balancedCount = activeProducts.Count(p =>
+        {
+            var total = p.Bid.OrderVolumeWeek + p.Ask.OrderVolumeWeek;
+            if (total <= 0) return false;
+            var askRatio = (double)p.Ask.OrderVolumeWeek / total;
+            return askRatio >= 0.25 && askRatio <= 0.75;
+        });
+        var liquidityScore = activeProducts.Any() ? (double)balancedCount / activeProducts.Count * 100 : 0;
+
+        var marketHealthScore = (spreadStability * 0.3 + volumeDistribution * 0.3 + manipulationScore * 0.2 + liquidityScore * 0.2);
 
         // Volume Trends
         var volumeTrends = await CalculateVolumeTrendsAsync(context, ct);

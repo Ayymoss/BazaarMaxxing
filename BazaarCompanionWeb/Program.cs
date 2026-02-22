@@ -5,7 +5,6 @@ using BazaarCompanionWeb.Components;
 using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
-using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Interfaces.Api;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -15,9 +14,9 @@ using BazaarCompanionWeb.Repositories;
 using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using BazaarCompanionWeb.Hubs;
+using BazaarCompanionWeb.Middleware;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
 using Refit;
 using Serilog;
 using Serilog.Events;
@@ -114,98 +113,14 @@ public class Program
         //app.UseHttpsRedirection();
 
         app.UseAntiforgery();
+        app.UseMiddleware<ApiKeyMiddleware>();
 
         app.MapStaticAssets();
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
         app.MapHub<ProductHub>("/hubs/products");
-
-        // Chart data API for lazy loading historical candles
-        app.MapGet("/api/chart/{productKey}/{interval:int}", async (
-            string productKey,
-            int interval,
-            long? before,
-            int? limit,
-            IOhlcRepository ohlcRepository,
-            CancellationToken ct) =>
-        {
-            var candleInterval = (CandleInterval)interval;
-            var dataLimit = Math.Min(limit ?? 200, 500); // Cap at 500 per request
-            
-            List<OhlcDataPoint> candles;
-            if (before.HasValue)
-            {
-                // Load historical data before the specified timestamp
-                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
-                candles = await ohlcRepository.GetCandlesBeforeAsync(productKey, candleInterval, beforeTime, dataLimit, ct);
-            }
-            else
-            {
-                // Initial load - get most recent candles
-                candles = await ohlcRepository.GetCandlesAsync(productKey, candleInterval, dataLimit, ct);
-            }
-            
-            // Return in KLineChart format (timestamp in milliseconds)
-            var result = candles.Select(c => new
-            {
-                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
-                open = c.Open,
-                high = c.High,
-                low = c.Low,
-                close = c.Close,
-                volume = c.Volume,
-                askClose = c.AskClose
-            }).ToList();
-            
-            return Results.Ok(result);
-        });
-
-        // Index chart API for aggregated OHLC data (ETF-like indices)
-        // Supports lazy loading: pass ?before=<unixMs> for historical data before that timestamp
-        app.MapGet("/api/chart/index/{slug}/{interval:int}", async (
-            string slug,
-            int interval,
-            long? before,
-            int? limit,
-            IndexAggregationService indexService,
-            IOptions<List<IndexConfiguration>> indexOptions,
-            CancellationToken ct) =>
-        {
-            var indices = indexOptions.Value;
-            var index = indices.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
-            if (index is null)
-            {
-                return Results.NotFound(new { error = $"Index '{slug}' not found" });
-            }
-
-            var candleInterval = (CandleInterval)interval;
-            var dataLimit = Math.Min(limit ?? 200, 500);
-
-            List<OhlcDataPoint> candles;
-            if (before.HasValue)
-            {
-                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
-                candles = await indexService.GetAggregatedCandlesBeforeAsync(slug, candleInterval, beforeTime, dataLimit, ct);
-            }
-            else
-            {
-                candles = await indexService.GetAggregatedCandlesAsync(slug, candleInterval, dataLimit, ct);
-            }
-
-            var result = candles.Select(c => new
-            {
-                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
-                open = c.Open,
-                high = c.High,
-                low = c.Low,
-                close = c.Close,
-                volume = c.Volume,
-                askClose = c.AskClose
-            }).ToList();
-
-            return Results.Ok(result);
-        });
+        app.MapApiEndpoints();
 
         app.Run();
         Log.CloseAndFlush();

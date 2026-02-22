@@ -1,5 +1,6 @@
 ﻿namespace BazaarCompanionWeb.Utilities;
 
+[Obsolete("Use appsettings.json")]
 public class Configuration
 {
     public string HyPixelApikey { get; set; } = "Change Me";

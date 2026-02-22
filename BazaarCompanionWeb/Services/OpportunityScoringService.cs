@@ -20,39 +20,141 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     private const double PriceRangeWidth = 1.5; // Controls how fast the score drops outside the sweet spot
     private const double MinWorthwhilePrice = 100.0; // Items below this are considered "dust" unless ROI is insane
 
+    // Hard rejection thresholds
+    private const long MinAskWeeklyVolume = 25_000; // Must be able to sell
+    private const double MinAskRatio = 0.30; // At least 30% of volume must be on the ask side (matches balance factor cutoff)
+    private const double MinAbsoluteSpread = 100.0; // Spread must be at least 100 coins to be worth executing
+    private const double MinBidPrice = 100.0; // Items below this bid price are impractical to flip at scale
+
+    // Z-score normalization constants
+    private const double ZScoreBase = 2.0; // Mean raw score maps to this (average tradeable item)
+    private const double ZScoreScale = 1.5; // Each standard deviation adds this many points
+    // Result: mean→2.0, +1σ→3.5, +2σ→5.0 (exceptional), +3.3σ→7.0 (incredible), +5.3σ→10.0 (unattainable)
+    private const int MinSamplesForZScore = 10; // Need enough data for meaningful statistics
+
     public (IReadOnlyList<double> OpportunityScores, IReadOnlyList<ManipulationScore> ManipulationScores) CalculateScoresBatch(
         IReadOnlyList<ScoringProductInput> products,
         IReadOnlyDictionary<string, List<OhlcDataPoint>> candlesByProduct)
     {
-        var opportunityScores = new double[products.Count];
+        var rawScores = new double[products.Count];
         var manipulationScores = new ManipulationScore[products.Count];
 
+        // Phase 1: Calculate raw (log-compressed) scores for each product
         for (var i = 0; i < products.Count; i++)
         {
             var p = products[i];
             var candles = candlesByProduct.TryGetValue(p.ProductKey, out var c) ? c : [];
 
-            double oppScore;
+            double rawScore;
             if (p.BidPrice >= p.AskPrice || p.AskPrice <= 0)
             {
-                oppScore = 0;
+                rawScore = 0;
+            }
+            else if (FailsHardGates(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek))
+            {
+                rawScore = 0;
             }
             else if (candles.Count >= MinCandlesForAnalysis)
             {
-                oppScore = CalculateAdvancedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek, candles);
+                rawScore = CalculateAdvancedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek, candles);
             }
             else
             {
-                oppScore = CalculateSimplifiedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek);
+                rawScore = CalculateSimplifiedScore(p.BidPrice, p.AskPrice, p.BidMovingWeek, p.AskMovingWeek);
                 logger.LogDebug("Insufficient candles ({Candles}/{TargetCandles}) for {ProductKey}, using simplified scoring",
                     candles.Count, MinCandlesForAnalysis, p.ProductKey);
             }
 
-            opportunityScores[i] = oppScore;
+            rawScores[i] = rawScore;
             manipulationScores[i] = CalculateManipulationScoreFromCandles(p.BidPrice, candles);
         }
 
+        // Phase 2: Z-score normalize across all non-zero scores
+        var opportunityScores = NormalizeToZScores(rawScores);
+
         return (opportunityScores, manipulationScores);
+    }
+
+    /// <summary>
+    /// Normalizes raw scores to a 0-10 scale using z-score distribution.
+    /// Zero scores (hard-rejected items) remain zero. Non-zero scores are
+    /// positioned relative to the market: mean→2.0, each σ adds 1.5 points.
+    /// This ensures >5 is exceptional (+2σ, top ~2.5%) and 10 is unattainable (+5.3σ).
+    /// </summary>
+    private static double[] NormalizeToZScores(double[] rawScores)
+    {
+        var result = new double[rawScores.Length];
+
+        // Collect non-zero scores for statistics
+        var nonZero = rawScores.Where(s => s > 0).ToList();
+
+        if (nonZero.Count < MinSamplesForZScore)
+        {
+            // Not enough data for meaningful z-scores — use simple rank-based fallback
+            // This handles edge cases like first startup or very few tradeable items
+            if (nonZero.Count == 0) return result;
+
+            var maxRaw = nonZero.Max();
+            for (var i = 0; i < rawScores.Length; i++)
+            {
+                if (rawScores[i] > 0)
+                    result[i] = Math.Clamp((rawScores[i] / maxRaw) * 4.0, 0.1, 4.0);
+            }
+
+            return result;
+        }
+
+        var mean = nonZero.Average();
+        var stdDev = Math.Sqrt(nonZero.Sum(s => Math.Pow(s - mean, 2)) / nonZero.Count);
+
+        // Safety: if all scores are identical, stdDev is 0
+        if (stdDev < mean * 0.001)
+            stdDev = mean * 0.001;
+
+        for (var i = 0; i < rawScores.Length; i++)
+        {
+            if (rawScores[i] <= 0)
+            {
+                result[i] = 0;
+                continue;
+            }
+
+            var z = (rawScores[i] - mean) / stdDev;
+            result[i] = Math.Clamp(ZScoreBase + (z * ZScoreScale), 0.1, 10.0);
+        }
+
+        return result;
+    }
+
+    /// <summary>
+    /// Hard rejection gates — items failing these are fundamentally untradeable.
+    /// No amount of ROI or volume should rescue them.
+    /// </summary>
+    private static bool FailsHardGates(double bidPrice, double askPrice, long bidMovingWeek, long askMovingWeek)
+    {
+        // Items below minimum bid price are impractical to flip at scale
+        if (bidPrice < MinBidPrice)
+            return true;
+
+        // Must have minimum ask-side volume to ensure we can sell
+        if (askMovingWeek < MinAskWeeklyVolume)
+            return true;
+
+        // Spread must be worth executing
+        var spread = askPrice - bidPrice;
+        if (spread < MinAbsoluteSpread)
+            return true;
+
+        // Must have minimum proportion of volume on the ask (sell) side
+        var totalVolume = bidMovingWeek + askMovingWeek;
+        if (totalVolume > 0)
+        {
+            var askRatio = (double)askMovingWeek / totalVolume;
+            if (askRatio < MinAskRatio)
+                return true;
+        }
+
+        return false;
     }
 
     private double CalculateAdvancedScore(
@@ -75,39 +177,45 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
         var riskBuffer = meanPrice * RiskBufferPercentage;
         var adjustedVolatility = Math.Max(volatility, riskBuffer);
 
-        // Align with simple: high-ROI opportunities get a higher floor so we don't over-penalize cheap items with huge spread
-        var sweetSpotFactor = Math.Max(CalculateSweetSpotFactor(bidPrice), GetHighRoiSweetSpotFloor(roi));
+        var sweetSpotFactor = CalculateSweetSpotFactor(bidPrice);
 
-        // Capital potential: spread/ask < 100 → rating < 1 (Meh). Tiers: 0–1 Meh, 1–2 OK, 2–3 Good, 3–4 Excellent, 5+ Exceptional.
-        // Sigmoid so factor is near 0 below $100 and ramps to 1 above $100 (best flips = high spread + high volume + candle context).
-        var spread = askPrice - bidPrice;
-        const double capitalThreshold = 100.0;
-        const double capitalSteepness = 6.0; // steeper so spread/ask in 70s → factor ~0.001 → rating < 1 (Meh)
-        var spreadGate = 1.0 / (1.0 + Math.Exp(-(spread - capitalThreshold) / capitalSteepness));
-        var askGate = 1.0 / (1.0 + Math.Exp(-(askPrice - capitalThreshold) / capitalSteepness));
-        var capitalFactor = Math.Min(1.0, 4.0 * spreadGate * askGate); // 4 * 0.5 * 0.5 = 1 at spread=ask=100
+        // Spread-percent based capital factor: penalizes excessive spread percentages
+        var spreadPercent = (askPrice - bidPrice) / bidPrice;
+        var capitalFactor = CalculateSpreadPercentFactor(spreadPercent);
 
         var denominator = adjustedVolatility + (bidPrice * 0.001);
         var baseScore = (netProfit * volumeScore * spreadStability * sweetSpotFactor * capitalFactor) / denominator;
 
-        // Reward high ROI so advanced doesn't regress vs simple for obvious flips (e.g. BID $0.2, ASK $1.8, 700k vol)
-        var roiBoost = 1.0 + Math.Log10(1.0 + Math.Min(roi, 100.0)) * 0.5;
+        // Capped ROI boost: prevent high ROI from rescuing bad fundamentals
+        var roiBoost = 1.0 + Math.Log10(1.0 + Math.Min(roi, 2.0)) * 0.3;
         var finalScore = baseScore * trendFactor * roiBoost;
 
-        var normalizedScore = Math.Log10(1 + finalScore) * 3.5;
-        return Math.Clamp(normalizedScore, 0, 10);
+        // Return log-compressed raw score (normalization happens in batch via z-scores)
+        return Math.Log10(1 + Math.Max(0, finalScore));
     }
 
-    /// <summary>For very high ROI, allow a higher sweet-spot floor so we don't cap at 0.15 for cheap, high-spread items.</summary>
-    private static double GetHighRoiSweetSpotFloor(double roi)
+    /// <summary>
+    /// Spread-percent factor: no penalty up to 500% spread.
+    /// Gentle decay from 500% to 10000% (Hypixel markets are volatile).
+    /// High spreads with healthy ask volume can still be genuine opportunities
+    /// (e.g., bid-side depression).
+    /// </summary>
+    private static double CalculateSpreadPercentFactor(double spreadPercent)
     {
-        if (roi >= 5.0) return 0.5;
-        if (roi >= 3.0) return 0.35;
-        if (roi >= 2.0) return 0.25;
-        return 0.15;
+        if (spreadPercent <= 5.0)
+            return 1.0; // No penalty up to 500% spread
+
+        if (spreadPercent <= 100.0)
+        {
+            // Gentle decay from 1.0 at 500% to 0.3 at 10000%
+            return 1.0 - ((spreadPercent - 5.0) / 95.0 * 0.7);
+        }
+
+        // Beyond 10000% — minimal score but not zero (volume gates are the real protection)
+        return 0.3;
     }
 
-    private double CalculateVolumeScore(long bidMovingWeek, long askMovingWeek)
+    private static double CalculateVolumeScore(long bidMovingWeek, long askMovingWeek)
     {
         var totalVolume = bidMovingWeek + askMovingWeek;
         if (totalVolume <= 0) return 0;
@@ -117,13 +225,34 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             : Math.Pow((double)totalVolume / MinWeeklyVolumeForFlipping, 2);
 
         var hourlyVolume = totalVolume / 168.0;
-        // Softer cap so 700k weekly (~4.2k/hr) gets a reasonable score; was 20k (required 3.36M/week for 1.0)
         var throughputScore = Math.Min(1.0, hourlyVolume / 5_000.0);
 
-        var ratio = (double)bidMovingWeek / Math.Max(1, askMovingWeek);
-        var balanceFactor = Math.Min(ratio, 1.0 / ratio);
+        // Calculate the proportion of volume on the asking side (0.0 to 1.0)
+        var askRatio = (double)askMovingWeek / totalVolume;
+        double balanceFactor;
 
-        return throughputScore * executionFactor * (0.6 + 0.4 * balanceFactor);
+        if (askRatio >= 0.5)
+        {
+            // PREFERRED SKEW: Ask volume >= Bid volume (Easy to offload)
+            // Slight penalty for extreme ask dominance, but still good.
+            balanceFactor = 1.0 - ((askRatio - 0.5) * 0.6);
+        }
+        else if (askRatio >= 0.3)
+        {
+            // MARGINAL SKEW: Bid volume is higher but not critically so.
+            // Square root ramp from 0 at 0.3 to 1.0 at 0.5.
+            // Gentle near 0.5 (near-balanced markets aren't over-penalized),
+            // steep near 0.3 cutoff.
+            balanceFactor = Math.Sqrt((askRatio - 0.3) / 0.2);
+        }
+        else
+        {
+            // DANGEROUS SKEW: Less than 30% ask volume — hard kill.
+            // Should already be caught by FailsHardGates, but safety net.
+            balanceFactor = 0;
+        }
+
+        return throughputScore * executionFactor * balanceFactor;
     }
 
     private double CalculateVolatility(List<OhlcDataPoint> candles)
@@ -177,19 +306,21 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             ? Math.Pow(bidPrice / MinWorthwhilePrice, 2)
             : 1.0;
 
-        // FEASIBILITY CHECK: Massive ROI + High Volume usually means a "Spread Trap"
-        // If an item has 10M volume but a 100x spread, it's impossible to maintain that spread.
-        // This penalty triggers when ROI is high AND Volume is high.
+        // FEASIBILITY CHECK: High ROI alone is suspicious — spread traps.
         double feasibilityPenalty = 1.0;
-        if (roi > 10.0 && volumeScore > 0.5)
+        if (roi > 3.0)
         {
-            // The more volume and ROI combined, the more we suspect it's a fake spread
-            feasibilityPenalty = 1.0 / (1.0 + Math.Log10(roi) * volumeScore);
+            feasibilityPenalty = 1.0 / (1.0 + Math.Log10(roi));
         }
 
-        var baseValue = (roi * 10.0) * volumeScore * sweetSpotFactor * dustPenalty * feasibilityPenalty;
+        // Spread-percent penalty (same as advanced scoring)
+        var spreadPercent = (askPrice - bidPrice) / bidPrice;
+        var spreadFactor = CalculateSpreadPercentFactor(spreadPercent);
 
-        return Math.Clamp(Math.Log10(1 + baseValue) * 4.0, 0, 10);
+        var baseValue = (roi * 10.0) * volumeScore * sweetSpotFactor * dustPenalty * feasibilityPenalty * spreadFactor;
+
+        // Return log-compressed raw score (normalization happens in batch via z-scores)
+        return Math.Log10(1 + Math.Max(0, baseValue));
     }
 
     private double CalculateSweetSpotFactor(double price)
