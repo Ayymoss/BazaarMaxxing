@@ -41,6 +41,13 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                     IsManipulated = x.Meta.IsManipulated,
                     ManipulationIntensity = x.Meta.ManipulationIntensity,
                     PriceDeviationPercent = x.Meta.PriceDeviationPercent,
+                    SuggestedBidVolume = x.Meta.SuggestedBidVolume,
+                    SuggestedBidPrice = x.Meta.SuggestedBidPrice,
+                    SuggestedAskPrice = x.Meta.SuggestedAskPrice,
+                    EstimatedFillTimeHours = x.Meta.EstimatedFillTimeHours,
+                    EstimatedProfitPerUnit = x.Meta.EstimatedProfitPerUnit,
+                    EstimatedTotalProfit = x.Meta.EstimatedTotalProfit,
+                    RecommendationConfidence = x.Meta.RecommendationConfidence,
                     ProductKey = x.ProductKey
                 },
                 Snapshots =
@@ -122,6 +129,13 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 product.Meta.IsManipulated = incomingProduct.Meta.IsManipulated;
                 product.Meta.ManipulationIntensity = incomingProduct.Meta.ManipulationIntensity;
                 product.Meta.PriceDeviationPercent = incomingProduct.Meta.PriceDeviationPercent;
+                product.Meta.SuggestedBidVolume = incomingProduct.Meta.SuggestedBidVolume;
+                product.Meta.SuggestedBidPrice = incomingProduct.Meta.SuggestedBidPrice;
+                product.Meta.SuggestedAskPrice = incomingProduct.Meta.SuggestedAskPrice;
+                product.Meta.EstimatedFillTimeHours = incomingProduct.Meta.EstimatedFillTimeHours;
+                product.Meta.EstimatedProfitPerUnit = incomingProduct.Meta.EstimatedProfitPerUnit;
+                product.Meta.EstimatedTotalProfit = incomingProduct.Meta.EstimatedTotalProfit;
+                product.Meta.RecommendationConfidence = incomingProduct.Meta.RecommendationConfidence;
 
                 // Map Bid properties
                 product.Bid.UnitPrice = incomingProduct.Bid.UnitPrice;
@@ -236,6 +250,13 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 IsManipulated = x.Meta.IsManipulated,
                 ManipulationIntensity = x.Meta.ManipulationIntensity,
                 PriceDeviationPercent = x.Meta.PriceDeviationPercent,
+                SuggestedBidVolume = x.Meta.SuggestedBidVolume,
+                SuggestedBidPrice = x.Meta.SuggestedBidPrice,
+                SuggestedAskPrice = x.Meta.SuggestedAskPrice,
+                EstimatedFillTimeHours = x.Meta.EstimatedFillTimeHours,
+                EstimatedProfitPerUnit = x.Meta.EstimatedProfitPerUnit,
+                EstimatedTotalProfit = x.Meta.EstimatedTotalProfit,
+                RecommendationConfidence = x.Meta.RecommendationConfidence,
             }).FirstAsync(cancellationToken: cancellationToken);
 
         product.PriceHistory = await GetPriceHistoryAsync(product.ItemId, cancellationToken);
@@ -394,6 +415,13 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                     IsManipulated = x.Meta.IsManipulated,
                     ManipulationIntensity = x.Meta.ManipulationIntensity,
                     PriceDeviationPercent = x.Meta.PriceDeviationPercent,
+                    SuggestedBidVolume = x.Meta.SuggestedBidVolume,
+                    SuggestedBidPrice = x.Meta.SuggestedBidPrice,
+                    SuggestedAskPrice = x.Meta.SuggestedAskPrice,
+                    EstimatedFillTimeHours = x.Meta.EstimatedFillTimeHours,
+                    EstimatedProfitPerUnit = x.Meta.EstimatedProfitPerUnit,
+                    EstimatedTotalProfit = x.Meta.EstimatedTotalProfit,
+                    RecommendationConfidence = x.Meta.RecommendationConfidence,
                 })
                 .ToListAsync(ct);
 

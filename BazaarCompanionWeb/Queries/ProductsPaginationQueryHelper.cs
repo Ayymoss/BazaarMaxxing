@@ -209,6 +209,8 @@ public class ProductsPaginationQueryHelper(
             nameof(ProductDataInfo.OrderMetaFlipOpportunityScore) => current.ApplySort(sort, p => p.Meta.FlipOpportunityScore),
             nameof(ProductDataInfo.BidCurrentOrders) => current.ApplySort(sort, p => p.Bid.OrderCount),
             nameof(ProductDataInfo.AskCurrentOrders) => current.ApplySort(sort, p => p.Ask.OrderCount),
+            nameof(ProductDataInfo.EstimatedTotalProfit) => current.ApplySort(sort, p => p.Meta.EstimatedTotalProfit),
+            nameof(ProductDataInfo.RecommendationConfidence) => current.ApplySort(sort, p => p.Meta.RecommendationConfidence),
             _ => current
         });
         return query;
@@ -258,6 +260,13 @@ public class ProductsPaginationQueryHelper(
             IsManipulated = product.Meta.IsManipulated,
             ManipulationIntensity = product.Meta.ManipulationIntensity,
             PriceDeviationPercent = product.Meta.PriceDeviationPercent,
+            SuggestedBidVolume = product.Meta.SuggestedBidVolume,
+            SuggestedBidPrice = product.Meta.SuggestedBidPrice,
+            SuggestedAskPrice = product.Meta.SuggestedAskPrice,
+            EstimatedFillTimeHours = product.Meta.EstimatedFillTimeHours,
+            EstimatedProfitPerUnit = product.Meta.EstimatedProfitPerUnit,
+            EstimatedTotalProfit = product.Meta.EstimatedTotalProfit,
+            RecommendationConfidence = product.Meta.RecommendationConfidence,
         };
     }
 }

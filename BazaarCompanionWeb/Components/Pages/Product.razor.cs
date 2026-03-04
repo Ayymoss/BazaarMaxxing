@@ -37,6 +37,9 @@ public partial class Product(
     private OrderBookAnalysisResult? _orderBookAnalysis;
     private bool _showOrderBookAnalysis;
 
+    // Timer to refresh humanized "Last Updated" text
+    private Timer? _refreshTimer;
+
     // Comparison state
     private bool _isInComparison;
 
@@ -88,6 +91,9 @@ public partial class Product(
                 await _priceGraph.UpdateTickAsync(tick);
             }
         });
+
+        // Tick every 30s to keep the humanized "Last Updated" text fresh
+        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -214,6 +220,7 @@ public partial class Product(
             await _hubConnection.DisposeAsync();
         }
 
+        _refreshTimer?.Dispose();
         _cancellationTokenSource?.Cancel();
         _cancellationTokenSource?.Dispose();
     }

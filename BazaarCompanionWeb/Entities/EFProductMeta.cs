@@ -15,6 +15,15 @@ public sealed record EFProductMeta
     public required double ManipulationIntensity { get; set; }
     public required double PriceDeviationPercent { get; set; }
 
+    // Trade recommendation fields
+    public int? SuggestedBidVolume { get; set; }
+    public double? SuggestedBidPrice { get; set; }
+    public double? SuggestedAskPrice { get; set; }
+    public double? EstimatedFillTimeHours { get; set; }
+    public double? EstimatedProfitPerUnit { get; set; }
+    public double? EstimatedTotalProfit { get; set; }
+    public double? RecommendationConfidence { get; set; }
+
     [MaxLength(64)] public required string ProductKey { get; set; }
     [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

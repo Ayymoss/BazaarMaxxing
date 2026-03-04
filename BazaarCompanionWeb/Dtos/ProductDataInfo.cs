@@ -26,6 +26,16 @@ public class ProductDataInfo
     public bool IsManipulated { get; set; }
     public double ManipulationIntensity { get; set; }
     public double PriceDeviationPercent { get; set; }
+
+    // Trade recommendation fields
+    public int? SuggestedBidVolume { get; set; }
+    public double? SuggestedBidPrice { get; set; }
+    public double? SuggestedAskPrice { get; set; }
+    public double? EstimatedFillTimeHours { get; set; }
+    public double? EstimatedProfitPerUnit { get; set; }
+    public double? EstimatedTotalProfit { get; set; }
+    public double? RecommendationConfidence { get; set; }
+
     public List<PriceHistorySnapshot>? PriceHistory { get; set; }
     public List<Order>? AskBook { get; set; }
     public List<Order>? BidBook { get; set; }

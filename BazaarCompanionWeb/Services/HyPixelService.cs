@@ -38,7 +38,11 @@ public class HyPixelService(
         var stateByProduct = productList.ToDictionary(p => p.ItemId, p => new ProductState(
             p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, (long)p.Bid.WeekVolume, (long)p.Ask.WeekVolume));
         var scoresByProduct = mappedProducts.ToDictionary(ef => ef.ProductKey, ef => new CachedScores(
-            ef.Meta.FlipOpportunityScore, ef.Meta.IsManipulated, ef.Meta.ManipulationIntensity, ef.Meta.PriceDeviationPercent));
+            ef.Meta.FlipOpportunityScore, ef.Meta.IsManipulated, ef.Meta.ManipulationIntensity, ef.Meta.PriceDeviationPercent,
+            ef.Meta.SuggestedBidVolume.HasValue ? new TradeRecommendation(
+                ef.Meta.SuggestedBidVolume.Value, ef.Meta.SuggestedBidPrice ?? 0, ef.Meta.SuggestedAskPrice ?? 0,
+                ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
+                ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
         bazaarRunCache.Update(stateByProduct, scoresByProduct);
 
         await productRepository.UpdateOrAddProductsAsync(mappedProducts, cancellationToken);
@@ -98,6 +102,13 @@ public class HyPixelService(
                     IsManipulated = efProduct.Meta.IsManipulated,
                     ManipulationIntensity = efProduct.Meta.ManipulationIntensity,
                     PriceDeviationPercent = efProduct.Meta.PriceDeviationPercent,
+                    SuggestedBidVolume = efProduct.Meta.SuggestedBidVolume,
+                    SuggestedBidPrice = efProduct.Meta.SuggestedBidPrice,
+                    SuggestedAskPrice = efProduct.Meta.SuggestedAskPrice,
+                    EstimatedFillTimeHours = efProduct.Meta.EstimatedFillTimeHours,
+                    EstimatedProfitPerUnit = efProduct.Meta.EstimatedProfitPerUnit,
+                    EstimatedTotalProfit = efProduct.Meta.EstimatedTotalProfit,
+                    RecommendationConfidence = efProduct.Meta.RecommendationConfidence,
                     BidMarketDataId = efProduct.Bid.Id,
                     AskMarketDataId = efProduct.Ask.Id,
                     BidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
@@ -136,13 +147,11 @@ public class HyPixelService(
         var changedKeys = bazaarRunCache.GetChangedProductKeys(currentState);
         logger.LogDebug("Detected {ChangedCount} changed products out of {TotalCount} total products", changedKeys.Count, bazaarList.Count);
 
-        IReadOnlyList<double> opportunityScores;
-        IReadOnlyList<ManipulationScore> manipulationScores;
+        IReadOnlyList<ScoringResult> scoringResults;
 
         if (changedKeys.Count == 0)
         {
-            opportunityScores = [];
-            manipulationScores = [];
+            scoringResults = [];
         }
         else
         {
@@ -157,10 +166,13 @@ public class HyPixelService(
                 var bid = b.Bids.FirstOrDefault();
                 var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
                 var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
-                return new ScoringProductInput(key, bidOrderPrice, askOrderPrice, b.Ticker.MovingWeekBuys, b.Ticker.MovingWeekSells);
+                return new ScoringProductInput(key, bidOrderPrice, askOrderPrice,
+                    b.Ticker.MovingWeekBuys, b.Ticker.MovingWeekSells,
+                    b.Ticker.ActiveBidOrders, b.Ticker.ActiveAskOrders,
+                    b.Ticker.TotalBidVolume, b.Ticker.TotalAskVolume);
             }).ToList();
 
-            (opportunityScores, manipulationScores) = opportunityScoringService.CalculateScoresBatch(changedInputs, candlesByProduct);
+            scoringResults = opportunityScoringService.CalculateScoresBatch(changedInputs, candlesByProduct);
         }
 
         var changedKeyToIndex = changedKeys.Select((key, idx) => (key, idx)).ToDictionary(x => x.key, x => x.idx);
@@ -205,14 +217,16 @@ public class HyPixelService(
             bool isManipulated;
             double manipulationIntensity;
             double deviationPercent;
+            TradeRecommendation? recommendation = null;
 
             if (changedKeyToIndex.TryGetValue(bazaar.ProductId, out var changedIdx))
             {
-                flipScore = opportunityScores[changedIdx];
-                var ms = manipulationScores[changedIdx];
-                isManipulated = ms.IsManipulated;
-                manipulationIntensity = ms.ManipulationIntensity;
-                deviationPercent = ms.DeviationPercent;
+                var sr = scoringResults[changedIdx];
+                flipScore = sr.OpportunityScore;
+                isManipulated = sr.IsManipulated;
+                manipulationIntensity = sr.ManipulationIntensity;
+                deviationPercent = sr.PriceDeviationPercent;
+                recommendation = sr.Recommendation;
             }
             else
             {
@@ -223,6 +237,7 @@ public class HyPixelService(
                     isManipulated = cached.IsManipulated;
                     manipulationIntensity = cached.ManipulationIntensity;
                     deviationPercent = cached.PriceDeviationPercent;
+                    recommendation = cached.Recommendation;
                 }
                 else
                 {
@@ -280,7 +295,14 @@ public class HyPixelService(
                     FlipOpportunityScore = flipScore,
                     IsManipulated = isManipulated,
                     ManipulationIntensity = manipulationIntensity,
-                    PriceDeviationPercent = deviationPercent
+                    PriceDeviationPercent = deviationPercent,
+                    SuggestedBidVolume = recommendation?.SuggestedBidVolume,
+                    SuggestedBidPrice = recommendation?.SuggestedBidPrice,
+                    SuggestedAskPrice = recommendation?.SuggestedAskPrice,
+                    EstimatedFillTimeHours = recommendation?.EstimatedFillTimeHours,
+                    EstimatedProfitPerUnit = recommendation?.EstimatedProfitPerUnit,
+                    EstimatedTotalProfit = recommendation?.EstimatedTotalProfit,
+                    RecommendationConfidence = recommendation?.Confidence
                 }
             });
         }

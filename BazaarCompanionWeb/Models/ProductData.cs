@@ -31,6 +31,13 @@ public class ProductData
                 IsManipulated = OrderMeta.IsManipulated,
                 ManipulationIntensity = OrderMeta.ManipulationIntensity,
                 PriceDeviationPercent = OrderMeta.PriceDeviationPercent,
+                SuggestedBidVolume = OrderMeta.SuggestedBidVolume,
+                SuggestedBidPrice = OrderMeta.SuggestedBidPrice,
+                SuggestedAskPrice = OrderMeta.SuggestedAskPrice,
+                EstimatedFillTimeHours = OrderMeta.EstimatedFillTimeHours,
+                EstimatedProfitPerUnit = OrderMeta.EstimatedProfitPerUnit,
+                EstimatedTotalProfit = OrderMeta.EstimatedTotalProfit,
+                RecommendationConfidence = OrderMeta.RecommendationConfidence,
                 ProductKey = ItemId
             },
             Snapshots =

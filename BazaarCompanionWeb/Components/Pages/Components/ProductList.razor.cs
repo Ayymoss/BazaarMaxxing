@@ -1,7 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
 using BazaarCompanionWeb.Dtos;
-using BazaarCompanionWeb.Enums;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Models.Pagination;
 using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
@@ -9,7 +8,6 @@ using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.QuickGrid;
-using Microsoft.AspNetCore.Components.Web.Virtualization;
 using SortDescriptor = BazaarCompanionWeb.Models.Pagination.SortDescriptor;
 using AppSortDirection = BazaarCompanionWeb.Enums.SortDirection;
 
@@ -55,6 +53,7 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
     private int _currentPageIndex = 0;
     private int _totalItemCount = 0;
     private Timer? _debounceTimer;
+    private Timer? _refreshTimer;
 
     protected override async Task OnInitializedAsync()
     {
@@ -157,6 +156,9 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
                 totalItemCount: context.Count
             );
         };
+
+        // Tick every 30s to keep the humanized "Last Updated" text fresh
+        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
     }
 
     private void OnSearchInput(ChangeEventArgs e)
@@ -336,6 +338,7 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
             "Profit x" => nameof(ProductDataInfo.OrderMetaPotentialProfitMultiplier),
             "Rating" => nameof(ProductDataInfo.OrderMetaFlipOpportunityScore),
             "7d Vol." => nameof(ProductDataInfo.OrderMetaTotalWeekVolume),
+            "Est. Profit" => nameof(ProductDataInfo.EstimatedTotalProfit),
             _ => null
         };
     }
@@ -360,5 +363,6 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
     public void Dispose()
     {
         _debounceTimer?.Dispose();
+        _refreshTimer?.Dispose();
     }
 }

@@ -161,6 +161,22 @@
                     </div>
                 </TemplateColumn>
 
+                <TemplateColumn Title="Est. Profit" SortBy="@(GridSort<ProductDataInfo>.ByAscending(p => p.EstimatedTotalProfit))">
+                    <div class="flex flex-col items-end gap-px">
+                        @if (context.EstimatedTotalProfit is > 0)
+                        {
+                            <span class="text-amber-400 font-medium text-[11px]" title="@context.EstimatedTotalProfit?.ToString("N2")">
+                                @context.EstimatedTotalProfit?.ToCompactString()
+                            </span>
+                            <span class="text-[9px] text-slate-600">@context.SuggestedBidVolume?.ToString("N0") units</span>
+                        }
+                        else
+                        {
+                            <span class="text-slate-700 text-[10px]">-</span>
+                        }
+                    </div>
+                </TemplateColumn>
+
                 <PropertyColumn TGridItem="ProductDataInfo" TProp="double" Property="@(p => p.OrderMetaTotalWeekVolume)" Sortable="true"
                                 Title="7d Vol." Format="N0" Class="text-right text-slate-400"/>
 

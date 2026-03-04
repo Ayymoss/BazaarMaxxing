@@ -1,10 +1,10 @@
 namespace BazaarCompanionWeb.Dtos;
 
 /// <summary>
-/// Cached scores from the previous run for unchanged products.
+/// Per-product scoring result combining opportunity score, manipulation detection, and trade recommendation.
 /// </summary>
-public record CachedScores(
-    double FlipOpportunityScore,
+public record ScoringResult(
+    double OpportunityScore,
     bool IsManipulated,
     double ManipulationIntensity,
     double PriceDeviationPercent,
