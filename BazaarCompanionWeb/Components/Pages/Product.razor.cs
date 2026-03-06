@@ -17,6 +17,7 @@ public partial class Product(
     MarketAnalyticsService marketAnalyticsService,
     OrderBookAnalysisService orderBookAnalysisService,
     ComparisonStateService comparisonStateService,
+    LastTradedPriceService lastTradedPriceService,
     NavigationManager navigationManager) : ComponentBase, IAsyncDisposable
 {
     [Parameter] public required string ProductKey { get; set; }
@@ -136,6 +137,8 @@ public partial class Product(
         try
         {
             _product = await productRepository.GetProductAsync(ProductKey, ct);
+            if (_product is not null)
+                _product.EstimatedLastTradedPrice ??= lastTradedPriceService.GetEstimate(ProductKey);
             _lastServerRefresh = timeCache.LastUpdated;
 
             // Load order book analysis if we have order book data

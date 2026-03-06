@@ -8,4 +8,6 @@ public record ProductState(
     double BidOrderPrice,
     double AskOrderPrice,
     long MovingWeekSells,
-    long MovingWeekBuys);
+    long MovingWeekBuys,
+    int TotalBidVolume,
+    int TotalAskVolume);

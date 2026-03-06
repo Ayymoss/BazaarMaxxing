@@ -44,6 +44,8 @@ public sealed class BazaarRunCache : IBazaarRunCache
         }
     }
 
+    // Only compare price and weekly volume for change detection — TotalBidVolume/TotalAskVolume
+    // are used by LastTradedPriceService separately and shouldn't trigger re-scoring
     private static bool Equals(ProductState a, ProductState b) =>
         a.ProductKey == b.ProductKey
         && a.BidOrderPrice.Equals(b.BidOrderPrice)

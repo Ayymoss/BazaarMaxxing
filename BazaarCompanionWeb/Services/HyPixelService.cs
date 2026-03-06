@@ -25,6 +25,7 @@ public class HyPixelService(
     TimeCache timeCache,
     LiveCandleTracker liveCandleTracker,
     IBazaarRunCache bazaarRunCache,
+    LastTradedPriceService lastTradedPriceService,
     ILogger<HyPixelService> logger)
 {
     public async Task FetchDataAsync(CancellationToken cancellationToken)
@@ -36,7 +37,8 @@ public class HyPixelService(
         var mappedProducts = productList.Select(x => x.Map()).ToList();
 
         var stateByProduct = productList.ToDictionary(p => p.ItemId, p => new ProductState(
-            p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, (long)p.Bid.WeekVolume, (long)p.Ask.WeekVolume));
+            p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, (long)p.Bid.WeekVolume, (long)p.Ask.WeekVolume,
+            p.Bid.CurrentVolume, p.Ask.CurrentVolume));
         var scoresByProduct = mappedProducts.ToDictionary(ef => ef.ProductKey, ef => new CachedScores(
             ef.Meta.FlipOpportunityScore, ef.Meta.IsManipulated, ef.Meta.ManipulationIntensity, ef.Meta.PriceDeviationPercent,
             ef.Meta.SuggestedBidVolume.HasValue ? new TradeRecommendation(
@@ -44,6 +46,14 @@ public class HyPixelService(
                 ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
                 ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
         bazaarRunCache.Update(stateByProduct, scoresByProduct);
+
+        // Compute LTP estimates for ALL products (not just changed — volume can shift without price changing)
+        var ltpByProduct = new Dictionary<string, double?>();
+        foreach (var p in productList)
+        {
+            ltpByProduct[p.ItemId] = lastTradedPriceService.UpdateAndEstimate(
+                p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, p.Bid.CurrentVolume, p.Ask.CurrentVolume);
+        }
 
         await productRepository.UpdateOrAddProductsAsync(mappedProducts, cancellationToken);
 
@@ -111,6 +121,7 @@ public class HyPixelService(
                     RecommendationConfidence = efProduct.Meta.RecommendationConfidence,
                     BidMarketDataId = efProduct.Bid.Id,
                     AskMarketDataId = efProduct.Ask.Id,
+                    EstimatedLastTradedPrice = ltpByProduct.GetValueOrDefault(efProduct.ProductKey),
                     BidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
                     AskBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
                 };
@@ -141,7 +152,8 @@ public class HyPixelService(
             var bid = b.Bids.FirstOrDefault();
             var askOrderPrice = (double)(ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f);
             var bidOrderPrice = (double)(bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f);
-            return new ProductState(b.ProductId, bidOrderPrice, askOrderPrice, b.Ticker.MovingWeekSells, b.Ticker.MovingWeekBuys);
+            return new ProductState(b.ProductId, bidOrderPrice, askOrderPrice, b.Ticker.MovingWeekSells, b.Ticker.MovingWeekBuys,
+                b.Ticker.TotalBidVolume, b.Ticker.TotalAskVolume);
         });
 
         var changedKeys = bazaarRunCache.GetChangedProductKeys(currentState);

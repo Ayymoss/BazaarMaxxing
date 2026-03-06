@@ -16,7 +16,9 @@
             @if (ProductData is not null)
             {
                 var history = GetLastPriceHistoryAverage();
-                var currentMid = (ProductData.BidUnitPrice + ProductData.AskUnitPrice) / 2;
+                var hasLtp = ProductData.EstimatedLastTradedPrice.HasValue;
+                var currentMid = ProductData.EstimatedLastTradedPrice
+                    ?? (ProductData.BidUnitPrice + ProductData.AskUnitPrice) / 2;
                 var refMid = (history.Bid + history.Ask) / 2;
                 var change = currentMid - refMid;
                 var percentChange = refMid > 0 ? change / refMid : 0;
@@ -33,6 +35,10 @@
                     <div class="flex items-center gap-3 mt-1.5">
                         <div class="text-lg font-bold text-slate-200">
                             @currentMid.ToString("N2")
+                            <span class="text-[10px] font-semibold ml-1 @(hasLtp ? "text-cyan-500" : "text-slate-600")"
+                                  title="@(hasLtp ? "Estimated Last Traded Price (inferred from volume changes)" : "Midpoint of bid/ask spread")">
+                                @(hasLtp ? "eLTP" : "MID")
+                            </span>
                         </div>
                         <div class="flex items-center gap-1.5 text-xs font-bold @changeColor">
                             <span>@changeSign@change.ToString("N2")</span>

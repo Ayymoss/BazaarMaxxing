@@ -27,6 +27,9 @@ public class ProductDataInfo
     public double ManipulationIntensity { get; set; }
     public double PriceDeviationPercent { get; set; }
 
+    // Estimated Last Traded Price (inferred from volume deltas between polls)
+    public double? EstimatedLastTradedPrice { get; set; }
+
     // Trade recommendation fields
     public int? SuggestedBidVolume { get; set; }
     public double? SuggestedBidPrice { get; set; }
