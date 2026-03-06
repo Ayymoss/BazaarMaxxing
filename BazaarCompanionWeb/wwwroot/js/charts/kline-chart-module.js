@@ -336,41 +336,34 @@ export async function createKLineChart(containerId, data, options = {}) {
                 askClose: item.askClose // No fallback - null/0 means no ASK data
             }));
 
-            // Cache the data before setting data loader
+            // Cache the data
             chartDataCache[containerId] = formattedData;
 
-            // Use setDataLoader with lazy loading support
-            // KLineChart getBars signature: { type, symbol, period, timestamp, callback }
-            // type: 'init' | 'backward' | 'forward'
-            // timestamp: earliest/latest bar timestamp (null for init)
-            // callback(data[], more) where more = { backward?: bool, forward?: bool } or bool
+            // v10 uses setDataLoader with getBars for all data operations.
+            // KNOWN ISSUE: for backward requests, KLineChart passes the LATEST bar's
+            // timestamp (not earliest). We work around this by ignoring its timestamp
+            // and using our cache's earliest bar. After fetching, we merge into cache
+            // and call resetData() which re-triggers getBars({type:'init'}) with the
+            // full merged dataset, then scrollToTimestamp() to restore the viewport.
             chart.setDataLoader({
                 getBars: async ({ type, timestamp, callback }) => {
-                    // INIT: Return the full cached dataset
+                    const meta = chartMetadata[containerId];
+
                     if (!type || type === 'init') {
                         const cached = chartDataCache[containerId] || formattedData;
-                        const meta = chartMetadata[containerId];
                         const hasMore = meta?.hasMoreHistory ?? true;
                         if (meta) meta.initComplete = true;
                         callback(cached, { backward: hasMore, forward: false });
                         return;
                     }
 
-                    // FORWARD: No future candles — real-time comes via subscribeBar
                     if (type === 'forward') {
                         callback([], { backward: false, forward: false });
                         return;
                     }
 
-                    // BACKWARD: fetch older historical data from the API
-                    const meta = chartMetadata[containerId];
-
-                    if (!meta?.initComplete) {
-                        callback([], { backward: true, forward: false });
-                        return;
-                    }
-
-                    if (!meta?.productKey || !meta.hasMoreHistory) {
+                    // BACKWARD
+                    if (!meta?.initComplete || !meta?.productKey || !meta.hasMoreHistory) {
                         callback([], { backward: false, forward: false });
                         return;
                     }
@@ -380,49 +373,60 @@ export async function createKLineChart(containerId, data, options = {}) {
                         return;
                     }
 
+                    // Use our cache's earliest timestamp (not KLineChart's, which is the latest bar)
+                    const cache = chartDataCache[containerId];
+                    const beforeTs = cache?.length > 0 ? cache[0].timestamp : null;
+
+                    if (!beforeTs) {
+                        callback([], { backward: false, forward: false });
+                        return;
+                    }
+
+                    // Guard: don't re-fetch the same boundary
+                    if (meta.lastBackwardTs === beforeTs) {
+                        meta.hasMoreHistory = false;
+                        callback([], { backward: false, forward: false });
+                        return;
+                    }
+
+                    // Return empty for now — we'll resetData after fetching
+                    callback([], { backward: true, forward: false });
+
                     loadingState[containerId] = true;
+                    meta.lastBackwardTs = beforeTs;
 
                     try {
-                        const cache = chartDataCache[containerId];
-                        const beforeTs = timestamp || (cache?.length > 0 ? cache[0].timestamp : null);
-
-                        if (!beforeTs) {
-                            callback([], { backward: false, forward: false });
-                            return;
-                        }
-
                         const url = meta.productKey?.startsWith('index:')
                             ? `/api/chart/index/${encodeURIComponent(meta.productKey.slice(6))}/${meta.interval}?before=${beforeTs}&limit=200`
                             : `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${beforeTs}&limit=200`;
                         const response = await fetch(url);
 
-                        if (!response.ok) {
-                            throw new Error(`HTTP error! status: ${response.status}`);
-                        }
+                        if (!response.ok) throw new Error(`HTTP ${response.status}`);
 
                         const historicalData = await response.json();
 
                         if (!historicalData || historicalData.length === 0) {
                             meta.hasMoreHistory = false;
-                            callback([], { backward: false, forward: false });
                             return;
                         }
 
-                        const hasMoreHistory = historicalData.length >= 200;
-                        meta.hasMoreHistory = hasMoreHistory;
+                        meta.hasMoreHistory = historicalData.length >= 200;
 
-                        // Prepend to our local cache for tick merging
-                        if (cache) {
-                            chartDataCache[containerId] = [...historicalData, ...cache];
+                        // Merge: prepend older data to cache
+                        chartDataCache[containerId] = [...historicalData, ...cache];
+
+                        // resetData() clears chart and re-triggers getBars({type:'init'}),
+                        // which will return the full merged cache.
+                        // Then scroll back to where the user was.
+                        const chartRef = klineCharts[containerId];
+                        if (chartRef) {
+                            chartRef.resetData();
+                            // After init, scroll to where the user was (the old earliest bar)
+                            chartRef.scrollToTimestamp(beforeTs, 0);
                         }
-
-                        // Pass historical data directly to the callback
-                        // KLineChart will prepend it to its internal data list
-                        callback(historicalData, { backward: hasMoreHistory, forward: false });
 
                     } catch (error) {
                         console.error('[KLineChart] Error loading historical data:', error);
-                        callback([], { backward: false, forward: false });
                     } finally {
                         loadingState[containerId] = false;
                     }
@@ -494,23 +498,9 @@ export async function updateKLineChart(containerId, data) {
         volume: item.volume || 0
     }));
 
-    // Cache the data
+    // Cache the data and reset — triggers getBars({type:'init'}) which reads from cache
     chartDataCache[containerId] = formattedData;
-
-    // Reset data loader to use the new data
-    //console.log(`[KLineChart] Re-assigning data loader for ${containerId} after update`);
-    chart.setDataLoader({
-        getBars: ({ type, callback }) => {
-            //console.log(`[KLineChart] Update-triggered getBars: type=${type}`);
-            callback(chartDataCache[containerId] || formattedData);
-        },
-        subscribeBar: ({ callback }) => {
-            realtimeCallbacks[containerId] = callback;
-        },
-        unsubscribeBar: () => {
-            delete realtimeCallbacks[containerId];
-        }
-    });
+    chart.resetData();
 }
 
 /**
@@ -521,13 +511,6 @@ export async function updateKLineChart(containerId, data) {
 export function updateKLineChartWithTick(containerId, tick) {
     const chart = klineCharts[containerId];
     if (!chart) return;
-
-    const callback = realtimeCallbacks[containerId];
-    if (!callback) {
-        // This is expected if 'init' hasn't finished or subscribeBar hasn't been called yet
-        console.warn('[KLineChart] No real-time callback registered for', containerId);
-        return;
-    }
 
     const timestamp = typeof tick.time === 'number'
         ? (tick.time < 10000000000 ? tick.time * 1000 : tick.time)
@@ -540,27 +523,18 @@ export function updateKLineChartWithTick(containerId, tick) {
     const existingIndex = cache ? cache.findIndex(d => d.timestamp === timestamp) : -1;
 
     if (existingIndex >= 0) {
-        // MERGE with existing candle:
-        // - Open: PRESERVE the original open (first price of the interval)
-        // - High: MAX of existing high and new close
-        // - Low: MIN of existing low and new close
-        // - Close: new close (latest price)
-        // - Volume: use the latest volume snapshot (or accumulate if preferred)
-        // - AskClose: always use latest ASK price
         const existing = cache[existingIndex];
         mergedTick = {
             timestamp: timestamp,
-            open: existing.open,  // Preserve original open
-            high: Math.max(existing.high, tick.close),  // Max of existing high and new price
-            low: Math.min(existing.low, tick.close),    // Min of existing low and new price
-            close: tick.close,    // Latest price
-            volume: tick.volume || existing.volume || 0, // Use latest volume
-            askClose: tick.askClose || existing.askClose // No fallback to close
+            open: existing.open,
+            high: Math.max(existing.high, tick.close),
+            low: Math.min(existing.low, tick.close),
+            close: tick.close,
+            volume: tick.volume || existing.volume || 0,
+            askClose: tick.askClose || existing.askClose
         };
-        // Update the cache with merged values
         cache[existingIndex] = mergedTick;
     } else {
-        // New candle - use the tick's values directly
         mergedTick = {
             timestamp: timestamp,
             open: tick.open,
@@ -568,16 +542,18 @@ export function updateKLineChartWithTick(containerId, tick) {
             low: tick.low,
             close: tick.close,
             volume: tick.volume || 0,
-            askClose: tick.askClose // No fallback to close
+            askClose: tick.askClose
         };
-        // Add new candle to cache
         if (cache) {
             cache.push(mergedTick);
         }
     }
 
-    // Call the subscription callback with the properly merged tick data
-    callback(mergedTick);
+    // Push via subscribeBar callback (v10 real-time update mechanism)
+    const callback = realtimeCallbacks[containerId];
+    if (callback) {
+        callback(mergedTick);
+    }
 }
 
 /**
