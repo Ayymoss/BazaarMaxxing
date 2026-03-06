@@ -311,9 +311,17 @@ export async function createKLineChart(containerId, data, options = {}) {
         // Set symbol and period info
         chart.setSymbol({ ticker: options.productName || 'Product' });
 
-        // IMPORTANT: Set correct period based on interval
-        // CandleInterval enum values are in minutes
-        chart.setPeriod({ span: interval, type: 'minute' });
+        // Set correct period based on interval
+        // CandleInterval enum values are in minutes — map to appropriate KLineChart period types
+        if (interval >= 10080) {
+            chart.setPeriod({ span: Math.round(interval / 10080), type: 'week' });
+        } else if (interval >= 1440) {
+            chart.setPeriod({ span: Math.round(interval / 1440), type: 'day' });
+        } else if (interval >= 60) {
+            chart.setPeriod({ span: Math.round(interval / 60), type: 'hour' });
+        } else {
+            chart.setPeriod({ span: interval, type: 'minute' });
+        }
         //console.log(`[KLineChart] Set period to ${interval}m`);
 
         // Apply data if provided
@@ -330,71 +338,95 @@ export async function createKLineChart(containerId, data, options = {}) {
                 askClose: item.askClose // No fallback - null/0 means no ASK data
             }));
 
+            // === DEBUG: Log initial data from Blazor ===
+            console.log(`[KLineChart DEBUG] Initial data from Blazor: ${formattedData.length} bars, interval=${interval}m`);
+            if (formattedData.length > 0) {
+                const first = formattedData[0];
+                const last = formattedData[formattedData.length - 1];
+                console.log(`[KLineChart DEBUG] Initial range: ${new Date(first.timestamp).toISOString()} → ${new Date(last.timestamp).toISOString()}`);
+                console.log('[KLineChart DEBUG] First bar:', JSON.stringify(first));
+                console.log('[KLineChart DEBUG] Last bar:', JSON.stringify(last));
+                // Check for flat OHLC (O==H==L==C)
+                const flatBars = formattedData.filter(d => d.open === d.high && d.high === d.low && d.low === d.close);
+                console.log(`[KLineChart DEBUG] Flat OHLC bars (O==H==L==C): ${flatBars.length} of ${formattedData.length}`);
+                if (flatBars.length > 0) {
+                    console.log('[KLineChart DEBUG] Sample flat bar:', JSON.stringify(flatBars[0]));
+                }
+                // Check askClose coverage
+                const withAsk = formattedData.filter(d => d.askClose && d.askClose !== 0);
+                console.log(`[KLineChart DEBUG] Bars with askClose data: ${withAsk.length} of ${formattedData.length}`);
+            }
+
             // Cache the data before setting data loader
             chartDataCache[containerId] = formattedData;
-            //console.log(`[KLineChart] Cached ${formattedData.length} records for ${containerId}`);
 
             // Use setDataLoader with lazy loading support
+            // KLineChart getBars signature: { type, symbol, period, timestamp, callback }
+            // type: 'init' | 'backward' | 'forward'
+            // timestamp: earliest/latest bar timestamp (null for init)
+            // callback(data[], more) where more = { backward?: bool, forward?: bool } or bool
             chart.setDataLoader({
-                getBars: async ({ type, data: currentData, callback }) => {
-                    //console.log(`[KLineChart] Data loading requested: type=${type}, currentCount=${currentData?.length || 0}`);
-
-                    // type: 'init' (initial load), 'forward' (newer data), 'backward' (older data)
+                getBars: async ({ type, timestamp, callback }) => {
+                    console.log(`[KLineChart DEBUG] getBars called: type=${type}, timestamp=${timestamp} (${timestamp ? new Date(timestamp).toISOString() : 'null'})`);
 
                     // INIT: Return the full cached dataset
                     if (!type || type === 'init') {
                         const cached = chartDataCache[containerId] || formattedData;
                         const meta = chartMetadata[containerId];
                         const hasMore = meta?.hasMoreHistory ?? true;
-                        //console.log(`[KLineChart] [INIT] Returning ${cached.length} cached bars (hasMoreHistory=${hasMore})`);
-                        // Mark init as complete so backward loading can proceed
                         if (meta) meta.initComplete = true;
-                        callback(cached, hasMore);
+                        console.log(`[KLineChart DEBUG] [INIT] Returning ${cached.length} bars, hasMoreBackward=${hasMore}`);
+                        callback(cached, { backward: hasMore, forward: false });
                         return;
                     }
 
-                    // FORWARD: Return empty - we don't have future candles to provide
-                    // Real-time updates come through subscribeBar, not forward loading
+                    // FORWARD: No future candles — real-time comes via subscribeBar
                     if (type === 'forward') {
-                        //console.log('[KLineChart] [FORWARD] No future data available, returning empty');
-                        callback([], false);
+                        console.log('[KLineChart DEBUG] [FORWARD] No future data, returning empty');
+                        callback([], { backward: false, forward: false });
                         return;
                     }
 
-                    // Backward loading - fetch more historical data
+                    // BACKWARD: fetch older historical data from the API
                     const meta = chartMetadata[containerId];
 
-                    // GUARD: Skip backward loading if init hasn't completed yet
-                    // We track this ourselves since KLineChart's currentData is unreliable
                     if (!meta?.initComplete) {
-                        //console.log('[KLineChart] [BACKWARD] Skipping - init not yet complete');
-                        callback([], true); // true = still has more, just not ready yet
+                        console.log('[KLineChart DEBUG] [BACKWARD] Skipping — init not complete');
+                        callback([], { backward: true, forward: false });
                         return;
                     }
 
-                    if (!meta || !meta.productKey || !meta.hasMoreHistory) {
-                        //console.log('[KLineChart] No more history flags or metadata missing, skipping backward load');
-                        callback([], false);
+                    if (!meta?.productKey || !meta.hasMoreHistory) {
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Skipping — productKey=${meta?.productKey}, hasMoreHistory=${meta?.hasMoreHistory}`);
+                        callback([], { backward: false, forward: false });
                         return;
                     }
 
                     if (loadingState[containerId]) {
-                        //console.log('[KLineChart] Already loading history, skipping');
-                        callback([], false);
+                        console.log('[KLineChart DEBUG] [BACKWARD] Skipping — already loading');
+                        callback([], { backward: true, forward: false });
                         return;
                     }
 
                     loadingState[containerId] = true;
-                    //console.log(`[KLineChart] Fetching history for ${meta.productKey} before ${chartDataCache[containerId][0].timestamp}`);
 
                     try {
+                        // Use the timestamp KLineChart gives us (earliest visible bar)
+                        // Fall back to our cache's earliest entry
                         const cache = chartDataCache[containerId];
-                        const earliestTimestamp = cache[0].timestamp;
+                        const beforeTs = timestamp || (cache?.length > 0 ? cache[0].timestamp : null);
+                        console.log(`[KLineChart DEBUG] [BACKWARD] beforeTs=${beforeTs} (${beforeTs ? new Date(beforeTs).toISOString() : 'null'}), cache size=${cache?.length || 0}`);
 
-                        // Index charts use productKey "index:slug" - route to index API
+                        if (!beforeTs) {
+                            console.log('[KLineChart DEBUG] [BACKWARD] No beforeTs available, returning empty');
+                            callback([], { backward: false, forward: false });
+                            return;
+                        }
+
                         const url = meta.productKey?.startsWith('index:')
-                            ? `/api/chart/index/${encodeURIComponent(meta.productKey.slice(6))}/${meta.interval}?before=${earliestTimestamp}&limit=200`
-                            : `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${earliestTimestamp}&limit=200`;
+                            ? `/api/chart/index/${encodeURIComponent(meta.productKey.slice(6))}/${meta.interval}?before=${beforeTs}&limit=200`
+                            : `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${beforeTs}&limit=200`;
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Fetching: ${url}`);
                         const response = await fetch(url);
 
                         if (!response.ok) {
@@ -402,48 +434,53 @@ export async function createKLineChart(containerId, data, options = {}) {
                         }
 
                         const historicalData = await response.json();
-                        //console.log(`[KLineChart] [BACKWARD] Received ${historicalData?.length || 0} historical records`);
+                        console.log(`[KLineChart DEBUG] [BACKWARD] API returned ${historicalData?.length || 0} bars`);
 
                         if (!historicalData || historicalData.length === 0) {
                             meta.hasMoreHistory = false;
-                            callback([], false);
+                            console.log('[KLineChart DEBUG] [BACKWARD] No more history available');
+                            callback([], { backward: false, forward: false });
                             return;
                         }
 
-                        // Log the time range for debugging
-                        const firstTs = historicalData[0]?.timestamp;
-                        const lastTs = historicalData[historicalData.length - 1]?.timestamp;
-                        //console.log(`[KLineChart] [BACKWARD] Historical range: ${new Date(firstTs).toISOString()} to ${new Date(lastTs).toISOString()}`);
-                        //console.log(`[KLineChart] [BACKWARD] Current cache starts at: ${new Date(cache[0].timestamp).toISOString()}`);
+                        // Log the received data details
+                        const firstBar = historicalData[0];
+                        const lastBar = historicalData[historicalData.length - 1];
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Received range: ${new Date(firstBar.timestamp).toISOString()} → ${new Date(lastBar.timestamp).toISOString()}`);
+                        console.log('[KLineChart DEBUG] [BACKWARD] First bar:', JSON.stringify(firstBar));
+                        console.log('[KLineChart DEBUG] [BACKWARD] Last bar:', JSON.stringify(lastBar));
+                        // Check for flat OHLC in backward data
+                        const flatBars = historicalData.filter(d => d.open === d.high && d.high === d.low && d.low === d.close);
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Flat OHLC bars: ${flatBars.length} of ${historicalData.length}`);
+                        // Check askClose coverage
+                        const withAsk = historicalData.filter(d => d.askClose && d.askClose !== 0);
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Bars with askClose: ${withAsk.length} of ${historicalData.length}`);
 
-                        // Prepend to cache (historical data comes BEFORE current data)
-                        const mergedData = [...historicalData, ...cache];
-                        chartDataCache[containerId] = mergedData;
-                        //console.log(`[KLineChart] [BACKWARD] Cache updated with ${mergedData.length} bars, calling resetData()`);
+                        const hasMoreHistory = historicalData.length >= 200;
+                        meta.hasMoreHistory = hasMoreHistory;
 
-                        // Signal no new data via callback (we'll reset instead)
-                        callback([], historicalData.length >= 200);
-
-                        // Force chart to re-initialize with merged data
-                        // resetData() clears data and triggers getBars with type='init'
-                        const chart = klineCharts[containerId];
-                        if (chart) {
-                            chart.resetData();
+                        // Prepend to our local cache for tick merging
+                        if (cache) {
+                            chartDataCache[containerId] = [...historicalData, ...cache];
+                            console.log(`[KLineChart DEBUG] [BACKWARD] Cache updated: ${chartDataCache[containerId].length} total bars`);
                         }
+
+                        // Pass historical data directly to the callback
+                        // KLineChart will prepend it to its internal data list
+                        console.log(`[KLineChart DEBUG] [BACKWARD] Passing ${historicalData.length} bars to callback, hasMore=${hasMoreHistory}`);
+                        callback(historicalData, { backward: hasMoreHistory, forward: false });
 
                     } catch (error) {
                         console.error('[KLineChart] Error loading historical data:', error);
-                        callback([], false);
+                        callback([], { backward: false, forward: false });
                     } finally {
                         loadingState[containerId] = false;
                     }
                 },
                 subscribeBar: ({ callback }) => {
-                    //console.log(`[KLineChart] Real-time subscription started for ${containerId}`);
                     realtimeCallbacks[containerId] = callback;
                 },
                 unsubscribeBar: () => {
-                    //console.log(`[KLineChart] Real-time subscription stopped for ${containerId}`);
                     delete realtimeCallbacks[containerId];
                 }
             });

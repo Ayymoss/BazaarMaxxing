@@ -81,8 +81,13 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             var mean = prices.Average();
             deviationPercents[i] = mean > 0 ? ((p.BidPrice - mean) / mean) * 100 : 0;
 
-            // Composite raw score
-            rawScores[i] = spreadPersistence * executionConfidence * (1.0 - bagRisk) * profitMagnitude;
+            // Composite raw score — weighted geometric mean so one weak component doesn't zero everything
+            // Weights: profitMagnitude 35%, executionConfidence 30%, spreadPersistence 20%, safety 15%
+            var safety = 1.0 - bagRisk;
+            rawScores[i] = Math.Pow(Math.Max(0.001, profitMagnitude), 0.35)
+                         * Math.Pow(Math.Max(0.001, executionConfidence), 0.30)
+                         * Math.Pow(Math.Max(0.001, spreadPersistence), 0.20)
+                         * Math.Pow(Math.Max(0.001, safety), 0.15);
 
             // Trade recommendation (only for products with meaningful scores)
             if (rawScores[i] > 0)
@@ -147,21 +152,26 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
         var historicalSpreads = candles.Select(c => c.Spread).Where(s => s > 0).OrderBy(s => s).ToList();
         if (historicalSpreads.Count == 0) return 0.5;
 
-        // 1. Percentile score (40%): current spread vs 7-day distribution
-        // Median = best (stable, typical). Extremes = bad (collapsed or spiking).
+        // 1. Percentile score (35%): current spread vs 7-day distribution
+        // We only penalize if spread is BELOW the 25th percentile (collapsed/unusable).
+        // Spreads at or above the median are fine — we want profitable spreads.
         var belowCount = historicalSpreads.Count(s => s <= currentSpread);
         var percentileRank = (double)belowCount / historicalSpreads.Count;
-        var percentileScore = 1.0 - (2.0 * Math.Abs(percentileRank - 0.5));
+        var percentileScore = percentileRank < 0.25
+            ? percentileRank / 0.25 // Linear ramp from 0→1 for bottom quartile
+            : 1.0; // At or above 25th percentile = full score
 
-        // 2. Profitable candle fraction (40%): what % of candles had profitable spread after tax?
+        // 2. Profitable candle fraction (35%): what % of candles had profitable spread after tax?
+        // Use a softer threshold (25% of MinNetProfitAfterTax) so most historical candles aren't rejected
+        var softProfitThreshold = MinNetProfitAfterTax * 0.25;
         var profitableCount = candles.Count(c =>
         {
             var candleNetProfit = (c.AskClose * (1.0 - BazaarTaxRate)) - c.Close;
-            return candleNetProfit >= MinNetProfitAfterTax;
+            return candleNetProfit >= softProfitThreshold;
         });
         var profitableFraction = (double)profitableCount / candles.Count;
 
-        // 3. Spread trend (20%): slope of last 24 candle spreads
+        // 3. Spread trend (30%): slope of last 24 candle spreads — positive trend is good
         var recentSpreads = candles.TakeLast(Math.Min(24, candles.Count)).Select(c => c.Spread).ToList();
         var trendFactor = 1.0;
         if (recentSpreads.Count >= 3)
@@ -170,13 +180,12 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             var meanSpread = recentSpreads.Average();
             if (meanSpread > 0)
             {
-                // Normalize slope relative to mean spread, scale to ±0.3 range
                 var normalizedSlope = (slope / meanSpread) * recentSpreads.Count;
                 trendFactor = Math.Clamp(1.0 + normalizedSlope * 0.3, 0.7, 1.3);
             }
         }
 
-        return (percentileScore * 0.4) + (profitableFraction * 0.4) + ((trendFactor - 0.7) / 0.6 * 0.2);
+        return (percentileScore * 0.35) + (profitableFraction * 0.35) + ((trendFactor - 0.7) / 0.6 * 0.30);
     }
 
     /// <summary>
@@ -261,7 +270,8 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             }
         }
 
-        return (deviationRisk * 0.4) + (narrowingRisk * 0.35) + (volatilityRisk * 0.25);
+        // Deviation is the strongest signal for actual manipulation; volatility is natural for high-spread items
+        return (deviationRisk * 0.50) + (narrowingRisk * 0.35) + (volatilityRisk * 0.15);
     }
 
     /// <summary>

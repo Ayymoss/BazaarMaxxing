@@ -241,6 +241,18 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
             // Load initial 200 candles (more data loads lazily when user pans left)
             var ohlcData = await OhlcRepository.GetCandlesAsync(Product.ItemId, Interval, limit: 200);
 
+            Console.WriteLine($"[PriceGraph DEBUG] GetCandlesAsync({Product.ItemId}, {Interval}, 200) returned {ohlcData.Count} candles");
+            if (ohlcData.Count > 0)
+            {
+                var first = ohlcData[0];
+                var last = ohlcData[^1];
+                Console.WriteLine($"[PriceGraph DEBUG] Range: {first.Time:O} → {last.Time:O}");
+                Console.WriteLine($"[PriceGraph DEBUG] First: O={first.Open} H={first.High} L={first.Low} C={first.Close} AskC={first.AskClose}");
+                Console.WriteLine($"[PriceGraph DEBUG] Last:  O={last.Open} H={last.High} L={last.Low} C={last.Close} AskC={last.AskClose}");
+                var flatCount = ohlcData.Count(c => c.Open == c.High && c.High == c.Low && c.Low == c.Close);
+                Console.WriteLine($"[PriceGraph DEBUG] Flat OHLC candles: {flatCount} of {ohlcData.Count}");
+            }
+
             if (ohlcData.Count == 0)
             {
                 return;

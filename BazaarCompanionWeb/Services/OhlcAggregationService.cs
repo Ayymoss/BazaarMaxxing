@@ -1,6 +1,8 @@
+using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Utilities;
+using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Services;
 
@@ -12,6 +14,7 @@ public class OhlcAggregationService(
     private static readonly TimeSpan TickRetention = TimeSpan.FromDays(7);
     private static readonly TimeSpan VacuumInterval = TimeSpan.FromHours(24);
     private bool _historySeeded;
+    private bool _flatCandlesRepaired;
     private DateTime _lastVacuumTime = DateTime.MinValue;
 
     protected override async Task ExecuteAsync(CancellationToken stoppingToken)
@@ -31,6 +34,12 @@ public class OhlcAggregationService(
                 {
                     await SeedHistoryAsync(ohlcRepository, productRepository, stoppingToken);
                     _historySeeded = true;
+                }
+
+                if (!_flatCandlesRepaired)
+                {
+                    await RepairFlatDailyCandlesAsync(stoppingToken);
+                    _flatCandlesRepaired = true;
                 }
 
                 await AggregateAllCandlesAsync(ohlcRepository, stoppingToken);
@@ -170,5 +179,86 @@ public class OhlcAggregationService(
         ];
 
         await ohlcRepository.SaveCandlesAsync(candles, ct);
+    }
+
+    /// <summary>
+    /// One-time repair: find flat daily candles (O==H==L==C, from snapshot seeding) and rebuild
+    /// them from existing hourly candles which have proper OHLC data.
+    /// </summary>
+    private async Task RepairFlatDailyCandlesAsync(CancellationToken ct)
+    {
+        logger.LogInformation("Checking for flat daily candles to repair from hourly data...");
+
+        using var scope = scopeFactory.CreateScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DataContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        // Find flat daily candles (O==H==L==C means they came from single-value snapshot seeding)
+        var flatDailyCandles = await context.OhlcCandles
+            .Where(c => c.Interval == CandleInterval.OneDay
+                        && c.Open == c.High && c.High == c.Low && c.Low == c.Close)
+            .ToListAsync(ct);
+
+        if (flatDailyCandles.Count == 0)
+        {
+            logger.LogInformation("No flat daily candles found, nothing to repair");
+            return;
+        }
+
+        logger.LogInformation("Found {Count} flat daily candles to repair", flatDailyCandles.Count);
+
+        // Group by product to batch the hourly lookups
+        var byProduct = flatDailyCandles.GroupBy(c => c.ProductKey).ToList();
+        var repairedCount = 0;
+
+        foreach (var group in byProduct)
+        {
+            var productKey = group.Key;
+            var flatCandles = group.ToList();
+
+            // Get all hourly candles for this product
+            var hourlyCandles = await context.OhlcCandles
+                .AsNoTracking()
+                .Where(c => c.ProductKey == productKey && c.Interval == CandleInterval.OneHour)
+                .OrderBy(c => c.PeriodStart)
+                .ToListAsync(ct);
+
+            if (hourlyCandles.Count == 0) continue;
+
+            // Group hourly candles by day
+            var hourlyByDay = hourlyCandles
+                .GroupBy(c => c.PeriodStart.Date)
+                .ToDictionary(g => g.Key, g => g.OrderBy(c => c.PeriodStart).ToList());
+
+            foreach (var flatCandle in flatCandles)
+            {
+                var day = flatCandle.PeriodStart.Date;
+                if (!hourlyByDay.TryGetValue(day, out var dayHourly) || dayHourly.Count == 0)
+                    continue;
+
+                // Rebuild OHLC from hourly candles
+                flatCandle.Open = dayHourly.First().Open;
+                flatCandle.High = dayHourly.Max(h => h.High);
+                flatCandle.Low = dayHourly.Min(h => h.Low);
+                flatCandle.Close = dayHourly.Last().Close;
+                flatCandle.Volume = dayHourly.Sum(h => h.Volume);
+                flatCandle.AskClose = dayHourly.Last().AskClose;
+
+                var spreads = dayHourly.Where(h => h.Spread > 0).Select(h => h.Spread).ToList();
+                flatCandle.Spread = spreads.Count > 0 ? spreads.Average() : 0;
+
+                repairedCount++;
+            }
+        }
+
+        if (repairedCount > 0)
+        {
+            await context.SaveChangesAsync(ct);
+            logger.LogInformation("Repaired {Count} flat daily candles from hourly data", repairedCount);
+        }
+        else
+        {
+            logger.LogInformation("No hourly data available to repair flat daily candles");
+        }
     }
 }

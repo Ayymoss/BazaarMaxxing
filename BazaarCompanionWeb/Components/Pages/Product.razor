@@ -150,9 +150,9 @@
                 <TradingDesk Product="ProductData" BidAverage="history.Bid" AskAverage="history.Ask"/>
 
                 <div class="grid grid-cols-3 gap-3">
-                    <ValueCard Title="7d Bid Vol" Value="@ProductData.BidWeekVolume.ToString("N0")" ValueCss="text-slate-400"/>
-                    <ValueCard Title="7d Vol" Value="@ProductData.OrderMetaTotalWeekVolume.ToString("N0")" ValueCss="text-slate-300"/>
-                    <ValueCard Title="7d Ask Vol" Value="@ProductData.AskWeekVolume.ToString("N0")" ValueCss="text-slate-400"/>
+                    <ValueCard Title="7d Bid Vol" Value="@ProductData.BidWeekVolume.ToString("N0")" Subtitle="@($"~{(ProductData.BidWeekVolume / 168.0).ToCompactString()}/hr")" ValueCss="text-slate-400"/>
+                    <ValueCard Title="7d Vol" Value="@ProductData.OrderMetaTotalWeekVolume.ToString("N0")" Subtitle="@($"~{(ProductData.OrderMetaTotalWeekVolume / 168.0).ToCompactString()}/hr")" ValueCss="text-slate-300"/>
+                    <ValueCard Title="7d Ask Vol" Value="@ProductData.AskWeekVolume.ToString("N0")" Subtitle="@($"~{(ProductData.AskWeekVolume / 168.0).ToCompactString()}/hr")" ValueCss="text-slate-400"/>
                 </div>
             </div>
 

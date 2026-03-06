@@ -40,11 +40,24 @@ public static class ApiEndpoints
                 // Load historical data before the specified timestamp
                 var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
                 candles = await ohlcRepository.GetCandlesBeforeAsync(productKey, candleInterval, beforeTime, dataLimit, ct);
+                Console.WriteLine($"[Chart API DEBUG] GetCandlesBeforeAsync({productKey}, {candleInterval}, before={beforeTime:O}, limit={dataLimit}) → {candles.Count} candles");
             }
             else
             {
                 // Initial load - get most recent candles
                 candles = await ohlcRepository.GetCandlesAsync(productKey, candleInterval, dataLimit, ct);
+                Console.WriteLine($"[Chart API DEBUG] GetCandlesAsync({productKey}, {candleInterval}, limit={dataLimit}) → {candles.Count} candles");
+            }
+
+            if (candles.Count > 0)
+            {
+                var first = candles[0];
+                var last = candles[^1];
+                Console.WriteLine($"[Chart API DEBUG] Range: {first.Time:O} → {last.Time:O}");
+                Console.WriteLine($"[Chart API DEBUG] First: O={first.Open} H={first.High} L={first.Low} C={first.Close} AskC={first.AskClose}");
+                Console.WriteLine($"[Chart API DEBUG] Last:  O={last.Open} H={last.High} L={last.Low} C={last.Close} AskC={last.AskClose}");
+                var flatCount = candles.Count(c => c.Open == c.High && c.High == c.Low && c.Low == c.Close);
+                Console.WriteLine($"[Chart API DEBUG] Flat OHLC: {flatCount} of {candles.Count}");
             }
 
             // Return in KLineChart format (timestamp in milliseconds)
