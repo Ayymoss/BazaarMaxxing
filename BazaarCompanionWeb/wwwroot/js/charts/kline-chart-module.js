@@ -41,7 +41,6 @@ function registerAskLineIndicator(klinecharts) {
             { key: 'askClose', title: 'ASK: ', type: 'line' }
         ],
         calc: (kLineDataList) => {
-            console.log('[KLineChart DEBUG] ASK_LINE calc() called with', kLineDataList.length, 'data points');
             return kLineDataList.map(kLineData => ({
                 // Return null when askClose is missing/zero - this creates gaps in the line for old data
                 askClose: (kLineData.askClose && kLineData.askClose !== 0) ? kLineData.askClose : null
@@ -59,7 +58,6 @@ function registerAskLineIndicator(klinecharts) {
     });
 
     askLineIndicatorRegistered = true;
-    console.log('[KLineChart DEBUG] ASK_LINE indicator registered globally');
 }
 
 // Dark theme styles matching your existing theme
@@ -338,25 +336,6 @@ export async function createKLineChart(containerId, data, options = {}) {
                 askClose: item.askClose // No fallback - null/0 means no ASK data
             }));
 
-            // === DEBUG: Log initial data from Blazor ===
-            console.log(`[KLineChart DEBUG] Initial data from Blazor: ${formattedData.length} bars, interval=${interval}m`);
-            if (formattedData.length > 0) {
-                const first = formattedData[0];
-                const last = formattedData[formattedData.length - 1];
-                console.log(`[KLineChart DEBUG] Initial range: ${new Date(first.timestamp).toISOString()} → ${new Date(last.timestamp).toISOString()}`);
-                console.log('[KLineChart DEBUG] First bar:', JSON.stringify(first));
-                console.log('[KLineChart DEBUG] Last bar:', JSON.stringify(last));
-                // Check for flat OHLC (O==H==L==C)
-                const flatBars = formattedData.filter(d => d.open === d.high && d.high === d.low && d.low === d.close);
-                console.log(`[KLineChart DEBUG] Flat OHLC bars (O==H==L==C): ${flatBars.length} of ${formattedData.length}`);
-                if (flatBars.length > 0) {
-                    console.log('[KLineChart DEBUG] Sample flat bar:', JSON.stringify(flatBars[0]));
-                }
-                // Check askClose coverage
-                const withAsk = formattedData.filter(d => d.askClose && d.askClose !== 0);
-                console.log(`[KLineChart DEBUG] Bars with askClose data: ${withAsk.length} of ${formattedData.length}`);
-            }
-
             // Cache the data before setting data loader
             chartDataCache[containerId] = formattedData;
 
@@ -367,22 +346,18 @@ export async function createKLineChart(containerId, data, options = {}) {
             // callback(data[], more) where more = { backward?: bool, forward?: bool } or bool
             chart.setDataLoader({
                 getBars: async ({ type, timestamp, callback }) => {
-                    console.log(`[KLineChart DEBUG] getBars called: type=${type}, timestamp=${timestamp} (${timestamp ? new Date(timestamp).toISOString() : 'null'})`);
-
                     // INIT: Return the full cached dataset
                     if (!type || type === 'init') {
                         const cached = chartDataCache[containerId] || formattedData;
                         const meta = chartMetadata[containerId];
                         const hasMore = meta?.hasMoreHistory ?? true;
                         if (meta) meta.initComplete = true;
-                        console.log(`[KLineChart DEBUG] [INIT] Returning ${cached.length} bars, hasMoreBackward=${hasMore}`);
                         callback(cached, { backward: hasMore, forward: false });
                         return;
                     }
 
                     // FORWARD: No future candles — real-time comes via subscribeBar
                     if (type === 'forward') {
-                        console.log('[KLineChart DEBUG] [FORWARD] No future data, returning empty');
                         callback([], { backward: false, forward: false });
                         return;
                     }
@@ -391,19 +366,16 @@ export async function createKLineChart(containerId, data, options = {}) {
                     const meta = chartMetadata[containerId];
 
                     if (!meta?.initComplete) {
-                        console.log('[KLineChart DEBUG] [BACKWARD] Skipping — init not complete');
                         callback([], { backward: true, forward: false });
                         return;
                     }
 
                     if (!meta?.productKey || !meta.hasMoreHistory) {
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Skipping — productKey=${meta?.productKey}, hasMoreHistory=${meta?.hasMoreHistory}`);
                         callback([], { backward: false, forward: false });
                         return;
                     }
 
                     if (loadingState[containerId]) {
-                        console.log('[KLineChart DEBUG] [BACKWARD] Skipping — already loading');
                         callback([], { backward: true, forward: false });
                         return;
                     }
@@ -411,14 +383,10 @@ export async function createKLineChart(containerId, data, options = {}) {
                     loadingState[containerId] = true;
 
                     try {
-                        // Use the timestamp KLineChart gives us (earliest visible bar)
-                        // Fall back to our cache's earliest entry
                         const cache = chartDataCache[containerId];
                         const beforeTs = timestamp || (cache?.length > 0 ? cache[0].timestamp : null);
-                        console.log(`[KLineChart DEBUG] [BACKWARD] beforeTs=${beforeTs} (${beforeTs ? new Date(beforeTs).toISOString() : 'null'}), cache size=${cache?.length || 0}`);
 
                         if (!beforeTs) {
-                            console.log('[KLineChart DEBUG] [BACKWARD] No beforeTs available, returning empty');
                             callback([], { backward: false, forward: false });
                             return;
                         }
@@ -426,7 +394,6 @@ export async function createKLineChart(containerId, data, options = {}) {
                         const url = meta.productKey?.startsWith('index:')
                             ? `/api/chart/index/${encodeURIComponent(meta.productKey.slice(6))}/${meta.interval}?before=${beforeTs}&limit=200`
                             : `/api/chart/${encodeURIComponent(meta.productKey)}/${meta.interval}?before=${beforeTs}&limit=200`;
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Fetching: ${url}`);
                         const response = await fetch(url);
 
                         if (!response.ok) {
@@ -434,27 +401,12 @@ export async function createKLineChart(containerId, data, options = {}) {
                         }
 
                         const historicalData = await response.json();
-                        console.log(`[KLineChart DEBUG] [BACKWARD] API returned ${historicalData?.length || 0} bars`);
 
                         if (!historicalData || historicalData.length === 0) {
                             meta.hasMoreHistory = false;
-                            console.log('[KLineChart DEBUG] [BACKWARD] No more history available');
                             callback([], { backward: false, forward: false });
                             return;
                         }
-
-                        // Log the received data details
-                        const firstBar = historicalData[0];
-                        const lastBar = historicalData[historicalData.length - 1];
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Received range: ${new Date(firstBar.timestamp).toISOString()} → ${new Date(lastBar.timestamp).toISOString()}`);
-                        console.log('[KLineChart DEBUG] [BACKWARD] First bar:', JSON.stringify(firstBar));
-                        console.log('[KLineChart DEBUG] [BACKWARD] Last bar:', JSON.stringify(lastBar));
-                        // Check for flat OHLC in backward data
-                        const flatBars = historicalData.filter(d => d.open === d.high && d.high === d.low && d.low === d.close);
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Flat OHLC bars: ${flatBars.length} of ${historicalData.length}`);
-                        // Check askClose coverage
-                        const withAsk = historicalData.filter(d => d.askClose && d.askClose !== 0);
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Bars with askClose: ${withAsk.length} of ${historicalData.length}`);
 
                         const hasMoreHistory = historicalData.length >= 200;
                         meta.hasMoreHistory = hasMoreHistory;
@@ -462,12 +414,10 @@ export async function createKLineChart(containerId, data, options = {}) {
                         // Prepend to our local cache for tick merging
                         if (cache) {
                             chartDataCache[containerId] = [...historicalData, ...cache];
-                            console.log(`[KLineChart DEBUG] [BACKWARD] Cache updated: ${chartDataCache[containerId].length} total bars`);
                         }
 
                         // Pass historical data directly to the callback
                         // KLineChart will prepend it to its internal data list
-                        console.log(`[KLineChart DEBUG] [BACKWARD] Passing ${historicalData.length} bars to callback, hasMore=${hasMoreHistory}`);
                         callback(historicalData, { backward: hasMoreHistory, forward: false });
 
                     } catch (error) {
@@ -491,19 +441,11 @@ export async function createKLineChart(containerId, data, options = {}) {
         // Add the ASK_LINE indicator to the candle pane as an overlay
         // Per KLineChart docs: custom indicators must use registerIndicator first, then createIndicator by name
         try {
-            // Debug: Check if askClose data exists in the cache
-            const cachedData = chartDataCache[containerId];
-            if (cachedData && cachedData.length > 0) {
-                console.log('[KLineChart DEBUG] Sample data point:', cachedData[cachedData.length - 1]);
-                console.log('[KLineChart DEBUG] askClose values present:', cachedData.filter(d => d.askClose && d.askClose !== d.close).length, 'of', cachedData.length);
-            }
-
             // Register the custom indicator globally first (only once)
             registerAskLineIndicator(klinecharts);
 
             // Now create it on the chart by name
             const askIndicatorId = chart.createIndicator('ASK_LINE', true, { id: 'candle_pane' });
-            console.log('[KLineChart DEBUG] createIndicator returned:', askIndicatorId);
 
             if (askIndicatorId) {
                 indicatorPanes[containerId]['ASK_LINE'] = {
@@ -512,7 +454,7 @@ export async function createKLineChart(containerId, data, options = {}) {
                 };
             }
         } catch (e) {
-            console.error('[KLineChart DEBUG] Error adding ASK_LINE indicator:', e);
+            console.warn('[KLineChart] Error adding ASK_LINE indicator:', e);
         }
 
         return chart;
