@@ -4,7 +4,7 @@
         <TargetFramework>net10.0</TargetFramework>
         <Nullable>enable</Nullable>
         <ImplicitUsings>enable</ImplicitUsings>
-        <Version>2026.03.06.07</Version>
+        <Version>2026.03.06.11</Version>
         <DockerDefaultTargetOS>Linux</DockerDefaultTargetOS>
         <UserSecretsId>bazaarcompanion-web</UserSecretsId>
     </PropertyGroup>

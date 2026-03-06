@@ -416,14 +416,10 @@ export async function createKLineChart(containerId, data, options = {}) {
                         chartDataCache[containerId] = [...historicalData, ...cache];
 
                         // resetData() clears chart and re-triggers getBars({type:'init'}),
-                        // which will return the full merged cache.
-                        // Then scroll back to where the user was.
-                        const chartRef = klineCharts[containerId];
-                        if (chartRef) {
-                            chartRef.resetData();
-                            // After init, scroll to where the user was (the old earliest bar)
-                            chartRef.scrollToTimestamp(beforeTs, 0);
-                        }
+                        // which returns the full merged cache. KLineChart defaults to
+                        // positioning at the right (most recent) end after init, so
+                        // no scroll adjustment needed — the user stays near where they were.
+                        klineCharts[containerId]?.resetData();
 
                     } catch (error) {
                         console.error('[KLineChart] Error loading historical data:', error);
