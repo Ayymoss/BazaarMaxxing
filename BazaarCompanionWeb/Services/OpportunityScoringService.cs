@@ -3,7 +3,7 @@ using BazaarCompanionWeb.Interfaces;
 
 namespace BazaarCompanionWeb.Services;
 
-public class OpportunityScoringService(ILogger<OpportunityScoringService> logger) : IOpportunityScoringService
+public sealed partial class OpportunityScoringService(ILogger<OpportunityScoringService> logger) : IOpportunityScoringService
 {
     private const int MinCandlesForAnalysis = 6;
 
@@ -23,10 +23,15 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     private const double TargetFillHours = 2.0; // Target fill window
     private const double ThroughputFraction = 0.10; // Consume ≤10% of hourly throughput
 
-    // Z-score normalization constants (kept from original)
+    // Z-score normalization constants
     private const double ZScoreBase = 2.0;
     private const double ZScoreScale = 1.5;
     private const int MinSamplesForZScore = 10;
+
+    // Bid overpricing penalty thresholds
+    private const double BidOverpricingSafeRatio = 0.95; // Below 95% of avg ask = safe
+    private const double BidOverpricingMaxRatio = 1.10; // Above 110% of avg ask = max penalty
+    private const double BidOverpricingMaxPenalty = 0.60; // Maximum 60% score reduction
 
     public IReadOnlyList<ScoringResult> CalculateScoresBatch(
         IReadOnlyList<ScoringProductInput> products,
@@ -59,40 +64,47 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
 
             if (candles.Count < MinCandlesForAnalysis)
             {
-                // Simplified fallback: just profit magnitude with basic volume check
                 rawScores[i] = CalculateSimplifiedScore(p);
-                logger.LogDebug("Insufficient candles ({Candles}/{Target}) for {ProductKey}, using simplified scoring",
-                    candles.Count, MinCandlesForAnalysis, p.ProductKey);
+                LogInsufficientCandles(candles.Count, MinCandlesForAnalysis, p.ProductKey);
                 continue;
             }
 
+            // Pre-compute candle-derived aggregates once, consumed by multiple scoring methods
+            var stats = CandleStats.Compute(candles);
+
             // Calculate each component
-            var spreadPersistence = CalculateSpreadPersistence(p.AskPrice - p.BidPrice, p.BidPrice, candles);
+            var spreadPersistence = CalculateSpreadPersistence(p.AskPrice - p.BidPrice, candles, stats);
             var executionConfidence = CalculateExecutionConfidence(p);
-            var bagRisk = CalculateBagRisk(p.BidPrice, candles);
+            var bagRisk = CalculateBagRisk(p.BidPrice, stats);
             var profitMagnitude = CalculateProfitMagnitude(p.BidPrice, p.AskPrice);
 
             spreadPersistences[i] = spreadPersistence;
             executionConfidences[i] = executionConfidence;
             bagRisks[i] = bagRisk;
 
-            // Calculate price deviation for display
-            var prices = candles.Select(cc => cc.Close).ToList();
-            var mean = prices.Average();
-            deviationPercents[i] = mean > 0 ? ((p.BidPrice - mean) / mean) * 100 : 0;
+            // Price deviation for display
+            deviationPercents[i] = stats.MeanClose > 0
+                ? ((p.BidPrice - stats.MeanClose) / stats.MeanClose) * 100
+                : 0;
 
             // Composite raw score — weighted geometric mean so one weak component doesn't zero everything
             // Weights: profitMagnitude 35%, executionConfidence 30%, spreadPersistence 20%, safety 15%
             var safety = 1.0 - bagRisk;
-            rawScores[i] = Math.Pow(Math.Max(0.001, profitMagnitude), 0.35)
-                         * Math.Pow(Math.Max(0.001, executionConfidence), 0.30)
-                         * Math.Pow(Math.Max(0.001, spreadPersistence), 0.20)
-                         * Math.Pow(Math.Max(0.001, safety), 0.15);
+            var compositeScore = Math.Pow(Math.Max(0.001, profitMagnitude), 0.35)
+                               * Math.Pow(Math.Max(0.001, executionConfidence), 0.30)
+                               * Math.Pow(Math.Max(0.001, spreadPersistence), 0.20)
+                               * Math.Pow(Math.Max(0.001, safety), 0.15);
+
+            // Bid overpricing penalty — deprioritize items where bid is above weekly avg ask
+            var overpricingPenalty = CalculateBidOverpricingPenalty(p.BidPrice, stats.MeanAskClose);
+            compositeScore *= 1.0 - (overpricingPenalty * BidOverpricingMaxPenalty);
+
+            rawScores[i] = compositeScore;
 
             // Trade recommendation (only for products with meaningful scores)
             if (rawScores[i] > 0)
             {
-                recommendations[i] = CalculateRecommendation(p, candles, spreadPersistence, executionConfidence, bagRisk);
+                recommendations[i] = CalculateRecommendation(p, stats, spreadPersistence, executionConfidence, bagRisk);
             }
         }
 
@@ -126,7 +138,7 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
         if (p.AskMovingWeek < MinAskWeeklyVolume)
             return true;
 
-        // Net profit after tax must be at least $100
+        // Net profit after tax must be at least 100 coins
         var netProfit = (p.AskPrice * (1.0 - BazaarTaxRate)) - p.BidPrice;
         if (netProfit < MinNetProfitAfterTax)
             return true;
@@ -144,25 +156,40 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     }
 
     /// <summary>
+    /// Bid Overpricing Penalty (0–1): How far above the weekly average ask is the current bid?
+    /// Items where bid > avg ask have a high probability of buying at a spike price.
+    /// </summary>
+    private static double CalculateBidOverpricingPenalty(double currentBid, double meanAskClose)
+    {
+        if (meanAskClose <= 0) return 0;
+
+        var ratio = currentBid / meanAskClose;
+
+        return ratio switch
+        {
+            <= BidOverpricingSafeRatio => 0,
+            >= BidOverpricingMaxRatio => 1.0,
+            _ => (ratio - BidOverpricingSafeRatio) / (BidOverpricingMaxRatio - BidOverpricingSafeRatio)
+        };
+    }
+
+    /// <summary>
     /// Spread Persistence (0–1): Is this spread stable or a transient spike?
     /// Uses OHLC Spread field (historical hourly bid-ask spread).
     /// </summary>
-    private static double CalculateSpreadPersistence(double currentSpread, double bidPrice, List<OhlcDataPoint> candles)
+    private static double CalculateSpreadPersistence(double currentSpread, List<OhlcDataPoint> candles, in CandleStats stats)
     {
-        var historicalSpreads = candles.Select(c => c.Spread).Where(s => s > 0).OrderBy(s => s).ToList();
-        if (historicalSpreads.Count == 0) return 0.5;
+        if (stats.SortedSpreads.Count == 0) return 0.5;
 
         // 1. Percentile score (35%): current spread vs 7-day distribution
-        // We only penalize if spread is BELOW the 25th percentile (collapsed/unusable).
-        // Spreads at or above the median are fine — we want profitable spreads.
-        var belowCount = historicalSpreads.Count(s => s <= currentSpread);
-        var percentileRank = (double)belowCount / historicalSpreads.Count;
+        // Only penalize if spread is BELOW the 25th percentile (collapsed/unusable).
+        var belowCount = stats.SortedSpreads.Count(s => s <= currentSpread);
+        var percentileRank = (double)belowCount / stats.SortedSpreads.Count;
         var percentileScore = percentileRank < 0.25
             ? percentileRank / 0.25 // Linear ramp from 0→1 for bottom quartile
             : 1.0; // At or above 25th percentile = full score
 
         // 2. Profitable candle fraction (35%): what % of candles had profitable spread after tax?
-        // Use a softer threshold (25% of MinNetProfitAfterTax) so most historical candles aren't rejected
         var softProfitThreshold = MinNetProfitAfterTax * 0.25;
         var profitableCount = candles.Count(c =>
         {
@@ -172,15 +199,14 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
         var profitableFraction = (double)profitableCount / candles.Count;
 
         // 3. Spread trend (30%): slope of last 24 candle spreads — positive trend is good
-        var recentSpreads = candles.TakeLast(Math.Min(24, candles.Count)).Select(c => c.Spread).ToList();
         var trendFactor = 1.0;
-        if (recentSpreads.Count >= 3)
+        if (stats.RecentSpreads.Count >= 3)
         {
-            var slope = LinearRegressionSlope(recentSpreads);
-            var meanSpread = recentSpreads.Average();
+            var slope = LinearRegressionSlope(stats.RecentSpreads);
+            var meanSpread = stats.RecentSpreads.Average();
             if (meanSpread > 0)
             {
-                var normalizedSlope = (slope / meanSpread) * recentSpreads.Count;
+                var normalizedSlope = (slope / meanSpread) * stats.RecentSpreads.Count;
                 trendFactor = Math.Clamp(1.0 + normalizedSlope * 0.3, 0.7, 1.3);
             }
         }
@@ -214,9 +240,9 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
                 : Math.Sqrt(Math.Clamp((balanceRatio - 0.3) / 0.7, 0, 1));
         }
 
-        // 3. Competition score (15%): fewer orders = faster fills
+        // 3. Competition score (15%): fewer orders = faster fills (steeper curve for meaningful differentiation)
         var totalOrders = p.BidOrders + p.AskOrders;
-        var competitionScore = 1.0 / (1.0 + Math.Log10(1 + totalOrders) * 0.1);
+        var competitionScore = 1.0 / (1.0 + Math.Log10(1 + totalOrders) * 0.3);
 
         return (throughputScore * 0.5) + (balanceScore * 0.35) + (competitionScore * 0.15);
     }
@@ -225,42 +251,39 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     /// Bag Risk (0–1): Probability of being stuck with inventory.
     /// Replaces separate ManipulationScore.
     /// </summary>
-    private static double CalculateBagRisk(double currentBid, List<OhlcDataPoint> candles)
+    private static double CalculateBagRisk(double currentBid, in CandleStats stats)
     {
-        var prices = candles.Select(c => c.Close).ToList();
-        if (prices.Count < 2) return 0.5;
+        if (stats.Closes.Count < 2) return 0.5;
 
-        var mean = prices.Average();
-        var stdDev = StdDev(prices);
-        if (stdDev < mean * 0.001) stdDev = mean * 0.001;
+        var stdDev = stats.CloseStdDev < stats.MeanClose * 0.001 ? stats.MeanClose * 0.001 : stats.CloseStdDev;
 
-        // 1. Price deviation risk (40%): z-score of current bid vs 7-day mean
-        var zScore = Math.Abs((currentBid - mean) / stdDev);
-        var deviationRisk = Math.Min(1.0, zScore / 4.0);
+        // 1. Price deviation risk (50%): asymmetric z-score — upward deviation is 1.5× more dangerous
+        var rawZ = (currentBid - stats.MeanClose) / stdDev;
+        var effectiveZ = rawZ > 0 ? rawZ * 1.5 : Math.Abs(rawZ);
+        var deviationRisk = Math.Min(1.0, effectiveZ / 4.0);
 
         // 2. Spread narrowing risk (35%): are spreads getting smaller?
-        var recentSpreads = candles.TakeLast(Math.Min(24, candles.Count)).Select(c => c.Spread).ToList();
         double narrowingRisk = 0;
-        if (recentSpreads.Count >= 3)
+        if (stats.RecentSpreads.Count >= 3)
         {
-            var slope = LinearRegressionSlope(recentSpreads);
-            var meanSpread = recentSpreads.Average();
+            var slope = LinearRegressionSlope(stats.RecentSpreads);
+            var meanSpread = stats.RecentSpreads.Average();
             if (slope < 0 && meanSpread > 0)
             {
                 // Negative slope = narrowing. Normalize by mean spread and time window.
-                narrowingRisk = Math.Min(1.0, Math.Abs(slope) / meanSpread * recentSpreads.Count);
+                narrowingRisk = Math.Min(1.0, Math.Abs(slope) / meanSpread * stats.RecentSpreads.Count);
             }
         }
 
-        // 3. Volatility risk (25%): high recent volatility = unpredictable fills
+        // 3. Volatility risk (15%): high recent volatility = unpredictable fills
         double volatilityRisk = 0;
-        if (prices.Count >= 3)
+        if (stats.Closes.Count >= 3)
         {
-            var returns = new List<double>();
-            for (var i = 1; i < prices.Count; i++)
+            List<double> returns = [];
+            for (var i = 1; i < stats.Closes.Count; i++)
             {
-                if (prices[i - 1] > 0)
-                    returns.Add((prices[i] - prices[i - 1]) / prices[i - 1]);
+                if (stats.Closes[i - 1] > 0)
+                    returns.Add((stats.Closes[i] - stats.Closes[i - 1]) / stats.Closes[i - 1]);
             }
 
             if (returns.Count > 0)
@@ -270,7 +293,7 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
             }
         }
 
-        // Deviation is the strongest signal for actual manipulation; volatility is natural for high-spread items
+        // Deviation is the strongest signal for actual manipulation
         return (deviationRisk * 0.50) + (narrowingRisk * 0.35) + (volatilityRisk * 0.15);
     }
 
@@ -280,8 +303,7 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     private static double CalculateProfitMagnitude(double bidPrice, double askPrice)
     {
         var netProfit = (askPrice * (1.0 - BazaarTaxRate)) - bidPrice;
-        if (netProfit <= 0) return 0;
-        return Math.Log10(1.0 + netProfit);
+        return netProfit <= 0 ? 0 : Math.Log10(1.0 + netProfit);
     }
 
     /// <summary>
@@ -306,7 +328,7 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
     /// </summary>
     private static TradeRecommendation? CalculateRecommendation(
         ScoringProductInput p,
-        List<OhlcDataPoint> candles,
+        in CandleStats stats,
         double spreadPersistence,
         double executionConfidence,
         double bagRisk)
@@ -317,16 +339,14 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
         if (bidHourlyThroughput <= 0 || askHourlyThroughput <= 0) return null;
 
         // Suggested Bid Price: penny ahead of best bid, capped at 75th percentile of last 24h closes
-        var recentCloses = candles.TakeLast(Math.Min(24, candles.Count)).Select(c => c.Close).OrderBy(x => x).ToList();
-        var p75Bid = recentCloses.Count > 0
-            ? recentCloses[(int)(recentCloses.Count * 0.75)]
+        var p75Bid = stats.RecentCloses.Count > 0
+            ? stats.RecentCloses[(int)(stats.RecentCloses.Count * 0.75)]
             : p.BidPrice;
         var suggestedBidPrice = Math.Min(p.BidPrice + 0.1, p75Bid);
 
         // Suggested Ask Price: penny below best ask, floored at 25th percentile of last 24h ask closes
-        var recentAskCloses = candles.TakeLast(Math.Min(24, candles.Count)).Select(c => c.AskClose).OrderBy(x => x).ToList();
-        var p25Ask = recentAskCloses.Count > 0
-            ? recentAskCloses[(int)(recentAskCloses.Count * 0.25)]
+        var p25Ask = stats.RecentAskCloses.Count > 0
+            ? stats.RecentAskCloses[(int)(stats.RecentAskCloses.Count * 0.25)]
             : p.AskPrice;
         var suggestedAskPrice = Math.Max(p.AskPrice - 0.1, p25Ask);
 
@@ -428,4 +448,54 @@ public class OpportunityScoringService(ILogger<OpportunityScoringService> logger
 
         return (n * sumXy - sumX * sumY) / denominator;
     }
+
+    /// <summary>
+    /// Pre-computed candle-derived aggregates to avoid redundant iterations.
+    /// </summary>
+    private readonly struct CandleStats
+    {
+        public required List<double> Closes { get; init; }
+        public required double MeanClose { get; init; }
+        public required double CloseStdDev { get; init; }
+        public required double MeanAskClose { get; init; }
+        public required List<double> SortedSpreads { get; init; }
+        public required List<double> RecentSpreads { get; init; }
+        public required List<double> RecentCloses { get; init; }
+        public required List<double> RecentAskCloses { get; init; }
+
+        public static CandleStats Compute(List<OhlcDataPoint> candles)
+        {
+            var closes = candles.Select(c => c.Close).ToList();
+            var meanClose = closes.Average();
+            var closeStdDev = StdDev(closes);
+
+            var askCloses = candles.Select(c => c.AskClose).ToList();
+            var meanAskClose = askCloses.Count > 0 ? askCloses.Average() : 0;
+
+            var sortedSpreads = candles.Select(c => c.Spread).Where(s => s > 0).OrderBy(s => s).ToList();
+
+            var recentCount = Math.Min(24, candles.Count);
+            var recentCandles = candles.TakeLast(recentCount);
+
+            List<double> recentSpreads = [..recentCandles.Select(c => c.Spread)];
+            List<double> recentCloses = [..recentCandles.Select(c => c.Close).OrderBy(x => x)];
+            List<double> recentAskCloses = [..recentCandles.Select(c => c.AskClose).OrderBy(x => x)];
+
+            return new CandleStats
+            {
+                Closes = closes,
+                MeanClose = meanClose,
+                CloseStdDev = closeStdDev,
+                MeanAskClose = meanAskClose,
+                SortedSpreads = sortedSpreads,
+                RecentSpreads = recentSpreads,
+                RecentCloses = recentCloses,
+                RecentAskCloses = recentAskCloses
+            };
+        }
+    }
+
+    [LoggerMessage(Level = LogLevel.Debug,
+        Message = "Insufficient candles ({Candles}/{Target}) for {ProductKey}, using simplified scoring")]
+    private partial void LogInsufficientCandles(int candles, int target, string productKey);
 }

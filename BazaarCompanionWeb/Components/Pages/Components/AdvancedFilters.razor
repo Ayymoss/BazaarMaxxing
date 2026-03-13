@@ -35,7 +35,7 @@
                         <label class="flex items-center gap-1.5 cursor-pointer group">
                             <input type="checkbox" 
                                    checked="@isSelected"
-                                   @onchange="@(e => ToggleTier(tier, e.Value is bool b && b))"
+                                   @onchange="@((ChangeEventArgs e) => ToggleTier(tier, e.Value is bool b && b))"
                                    class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
                             <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors" 
                                   style="@($"color: {tier.ProductTierColor()}")">
@@ -72,7 +72,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Price</label>
                     <input type="number" 
                            value="@Filters.MinPrice" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinPrice = val; } else { Filters.MinPrice = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinPrice = val; } else { Filters.MinPrice = null; } OnFiltersChanged(); })"
                            placeholder="Min"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -81,7 +81,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Price</label>
                     <input type="number" 
                            value="@Filters.MaxPrice" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxPrice = val; } else { Filters.MaxPrice = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxPrice = val; } else { Filters.MaxPrice = null; } OnFiltersChanged(); })"
                            placeholder="Max"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -94,7 +94,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Spread</label>
                     <input type="number" 
                            value="@Filters.MinSpread" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinSpread = val; } else { Filters.MinSpread = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinSpread = val; } else { Filters.MinSpread = null; } OnFiltersChanged(); })"
                            placeholder="Min"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -103,7 +103,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Spread</label>
                     <input type="number" 
                            value="@Filters.MaxSpread" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxSpread = val; } else { Filters.MaxSpread = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxSpread = val; } else { Filters.MaxSpread = null; } OnFiltersChanged(); })"
                            placeholder="Max"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -116,7 +116,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Volume</label>
                     <input type="number" 
                            value="@Filters.MinVolume" 
-                           @oninput="@(e => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MinVolume = val; } else { Filters.MinVolume = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MinVolume = val; } else { Filters.MinVolume = null; } OnFiltersChanged(); })"
                            placeholder="Min"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                 </div>
@@ -124,7 +124,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Volume</label>
                     <input type="number" 
                            value="@Filters.MaxVolume" 
-                           @oninput="@(e => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxVolume = val; } else { Filters.MaxVolume = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (long.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxVolume = val; } else { Filters.MaxVolume = null; } OnFiltersChanged(); })"
                            placeholder="Max"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
                 </div>
@@ -136,7 +136,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Opportunity Score</label>
                     <input type="number" 
                            value="@Filters.MinOpportunityScore" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinOpportunityScore = val; } else { Filters.MinOpportunityScore = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinOpportunityScore = val; } else { Filters.MinOpportunityScore = null; } OnFiltersChanged(); })"
                            placeholder="Min"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -145,7 +145,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Opportunity Score</label>
                     <input type="number" 
                            value="@Filters.MaxOpportunityScore" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxOpportunityScore = val; } else { Filters.MaxOpportunityScore = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxOpportunityScore = val; } else { Filters.MaxOpportunityScore = null; } OnFiltersChanged(); })"
                            placeholder="Max"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -158,7 +158,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Min Profit Multiplier</label>
                     <input type="number" 
                            value="@Filters.MinProfitMultiplier" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinProfitMultiplier = val; } else { Filters.MinProfitMultiplier = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MinProfitMultiplier = val; } else { Filters.MinProfitMultiplier = null; } OnFiltersChanged(); })"
                            placeholder="Min"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
@@ -167,7 +167,7 @@
                     <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Max Profit Multiplier</label>
                     <input type="number" 
                            value="@Filters.MaxProfitMultiplier" 
-                           @oninput="@(e => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxProfitMultiplier = val; } else { Filters.MaxProfitMultiplier = null; } OnFiltersChanged(); })"
+                           @oninput="@((ChangeEventArgs e) => { if (double.TryParse(e.Value?.ToString(), out var val)) { Filters.MaxProfitMultiplier = val; } else { Filters.MaxProfitMultiplier = null; } OnFiltersChanged(); })"
                            placeholder="Max"
                            step="0.1"
                            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500" />
