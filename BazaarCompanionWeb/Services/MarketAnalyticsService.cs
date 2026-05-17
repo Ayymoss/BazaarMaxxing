@@ -314,67 +314,6 @@ public class MarketAnalyticsService(
             .ToList();
     }
 
-    public async Task<MarketHeatmapData> GetMarketHeatmapAsync(CancellationToken ct = default)
-    {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
-        
-        await using var context = await contextFactory.CreateDbContextAsync(ct);
-
-        var products = await context.Products
-            .Include(p => p.Meta)
-            .AsNoTracking()
-            .Where(p => p.Meta.TotalWeekVolume > 0)
-            .ToListAsync(ct);
-
-        var points = new List<HeatmapPoint>();
-        var volatilities = new List<double>();
-        var volumes = new List<double>();
-
-        foreach (var product in products)
-        {
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 48, // 48 hours for volatility
-                ct);
-
-            if (candles.Count < 6) continue;
-
-            var volatility = CalculateVolatility(candles);
-            var volume = product.Meta.TotalWeekVolume;
-
-            volatilities.Add(volatility);
-            volumes.Add(volume);
-
-            points.Add(new HeatmapPoint
-            {
-                ProductKey = product.ProductKey,
-                ProductName = product.FriendlyName,
-                Volatility = volatility,
-                Volume = volume,
-                OpportunityScore = product.Meta.FlipOpportunityScore
-            });
-        }
-
-        var maxVolatility = volatilities.Any() ? volatilities.Max() : 1;
-        var maxVolume = volumes.Any() ? volumes.Max() : 1;
-
-        // Normalize X and Y coordinates (0-1)
-        foreach (var point in points)
-        {
-            point.X = maxVolatility > 0 ? point.Volatility / maxVolatility : 0;
-            point.Y = maxVolume > 0 ? point.Volume / maxVolume : 0;
-        }
-
-        return new MarketHeatmapData
-        {
-            Points = points,
-            MaxVolatility = maxVolatility,
-            MaxVolume = maxVolume
-        };
-    }
-
     private async Task<VolumeTrends> CalculateVolumeTrendsAsync(DataContext context, CancellationToken ct)
     {
         var now = DateTime.UtcNow;
@@ -486,30 +425,6 @@ public class MarketAnalyticsService(
         return "Neutral";
     }
 
-    private double CalculateVolatility(List<OhlcDataPoint> candles)
-    {
-        if (candles.Count < 2) return 0;
-
-        var returns = new List<double>();
-        for (int i = 1; i < candles.Count; i++)
-        {
-            var prevClose = candles[i - 1].Close;
-            if (prevClose > 0)
-            {
-                var returnValue = (candles[i].Close - prevClose) / prevClose;
-                returns.Add(returnValue);
-            }
-        }
-
-        if (!returns.Any()) return 0;
-
-        var meanReturn = returns.Average();
-        var variance = returns.Sum(r => Math.Pow(r - meanReturn, 2)) / returns.Count;
-        var stdDev = Math.Sqrt(variance);
-
-        var meanPrice = candles.Average(c => c.Close);
-        return stdDev * meanPrice;
-    }
 }
 
 // Extension method for standard deviation

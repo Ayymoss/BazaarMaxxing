@@ -6,9 +6,9 @@ using BazaarCompanionWeb.Models;
 namespace BazaarCompanionWeb.Services.Ingestion;
 
 /// <summary>
-/// Singleton RAM store for Bazaar ingestion. Holds latest product state, latest order books,
-/// per-product tick ring buffers, and cached scores. Replaces BazaarRunCache + acts as the
-/// source feed for FlushService.
+/// Singleton RAM store for Bazaar ingestion. Holds latest product state, per-product tick
+/// ring buffers, and cached scores. Replaces BazaarRunCache + acts as the source feed for
+/// FlushService.
 ///
 /// Crash-loss is accepted: there is no WAL. New polls overwrite RAM; flushes drain deltas
 /// to the DB every ~10 min.
@@ -21,7 +21,6 @@ public sealed class BazaarSnapshotStore
 
     private readonly ConcurrentDictionary<string, EFProduct> _latestProducts = new();
     private readonly ConcurrentDictionary<string, ProductState> _latestState = new();
-    private readonly ConcurrentDictionary<string, OrderBookSnapshot> _latestOrderBooks = new();
     private readonly ConcurrentDictionary<string, RingBuffer<TickSample>> _ticks = new();
     private readonly ConcurrentDictionary<string, CachedScores> _scores = new();
 
@@ -68,12 +67,6 @@ public sealed class BazaarSnapshotStore
 
                 _latestState[key] = newState;
                 _latestProducts[key] = efProduct;
-
-                _latestOrderBooks[key] = new OrderBookSnapshot(
-                    key,
-                    product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
-                    product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList(),
-                    timestamp);
 
                 if (stateChanged)
                 {
@@ -137,14 +130,13 @@ public sealed class BazaarSnapshotStore
         lock (_diffLock)
         {
             if (_dirtySinceFlush.IsEmpty)
-                return new SnapshotDrainResult([], [], []);
+                return new SnapshotDrainResult([], []);
 
             var dirtyKeys = _dirtySinceFlush.Keys.ToList();
             _dirtySinceFlush.Clear();
 
             var products = new List<EFProduct>(dirtyKeys.Count);
             var ticks = new List<EFPriceTick>(dirtyKeys.Count);
-            var books = new List<OrderBookSnapshot>(dirtyKeys.Count);
 
             foreach (var key in dirtyKeys)
             {
@@ -168,12 +160,9 @@ public sealed class BazaarSnapshotStore
                         });
                     }
                 }
-
-                if (_latestOrderBooks.TryGetValue(key, out var book))
-                    books.Add(book);
             }
 
-            return new SnapshotDrainResult(products, ticks, books);
+            return new SnapshotDrainResult(products, ticks);
         }
     }
 

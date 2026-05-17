@@ -28,16 +28,12 @@ public class ScheduledTaskRunner(IServiceProvider serviceProvider, ILogger<Sched
             var hyPixelService = scope.ServiceProvider.GetRequiredService<HyPixelService>();
             try
             {
-                logger.LogInformation("[SCHEDULED - STARTING] Scheduled action");
-
-                logger.LogInformation("Populating products");
+                // HyPixelService logs its own per-poll summary; the scheduler frame just guards the call.
                 await hyPixelService.FetchDataAsync(_cancellationTokenSource.Token);
-
-                logger.LogInformation("[SCHEDULED - FINISHED] Scheduled action");
             }
             catch (Exception e)
             {
-                logger.LogError(e, "Error executing scheduled action");
+                logger.LogError(e, "Error executing scheduled poll");
             }
         }, _cancellationTokenSource.Token);
     }

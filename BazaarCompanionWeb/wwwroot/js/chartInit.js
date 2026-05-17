@@ -3,7 +3,6 @@ import {
     createComparisonChart as scCreateComparisonChart,
     createDepthChart as scCreateDepthChart
 } from './charts/specialized-chart-module.js';
-import { renderHeatmap as hmRenderHeatmap } from './charts/heatmap-module.js';
 
 // KLineChart imports
 import {
@@ -27,6 +26,3 @@ export const updateKLineChartWithTick = klUpdateKLineChartWithTick;
 export const disposeKLineChart = klDisposeKLineChart;
 export const toggleKLineIndicator = klToggleIndicator;
 export const resizeKLineChart = klResizeKLineChart;
-
-// Attach to window where explicitly required by current implementation
-window.renderHeatmap = hmRenderHeatmap;

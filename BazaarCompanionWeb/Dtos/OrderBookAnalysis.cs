@@ -96,8 +96,3 @@ public sealed record OrderBookAnalysisResult(
     List<DepthChartPoint> DepthChart,
     DateTime CalculatedAt
 );
-
-/// <summary>
-/// Heatmap data point for order book visualization over time.
-/// </summary>
-public sealed record HeatmapDataPoint(DateTime Time, double Price, int Volume);

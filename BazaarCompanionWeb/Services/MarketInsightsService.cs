@@ -82,18 +82,11 @@ public sealed partial class MarketInsightsService(
                 .ToListAsync(ct);
 
             var productKeys = products.Select(p => p.ProductKey).ToList();
-            var candleFetchSw = System.Diagnostics.Stopwatch.StartNew();
             // 48h covers all downstream consumers — surges/spreads/firesales/movers gate on >=24 candles.
             // Was 168h (7d), tripling DB rows for no signal benefit on these short-window heuristics.
             const int hourlyLookback = 48;
             var candles15m = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.FifteenMinute, 2, ct);
             var candles1h = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.OneHour, hourlyLookback, ct);
-            candleFetchSw.Stop();
-            logger.LogInformation(
-                "MarketInsights candle fetch: {FetchMs}ms, {Products} products → {Rows15m} 15m rows + {Rows1h} 1h rows",
-                candleFetchSw.ElapsedMilliseconds, productKeys.Count,
-                candles15m.Values.Sum(v => v.Count),
-                candles1h.Values.Sum(v => v.Count));
 
             var hotProducts = CalculateHotProducts(products, candles15m, now, _previousHotProductKeys);
             var volumeSurges = CalculateVolumeSurges(products, candles1h, now);
@@ -119,15 +112,11 @@ public sealed partial class MarketInsightsService(
             );
             _lastRefreshAt = now;
             refreshSw.Stop();
-            logger.LogInformation("MarketInsights refresh total: {RefreshMs}ms ({Products} products)",
-                refreshSw.ElapsedMilliseconds, products.Count);
-
-            LogInsightsRefreshed(
-                hotProducts.Count,
-                volumeSurges.Count,
-                spreadOpportunities.Count,
-                fireSales.Count,
-                gainers.Count + losers.Count);
+            // Single summary line per refresh — every ~5 min, useful long-term signal.
+            logger.LogInformation(
+                "MarketInsights refresh: {RefreshMs}ms, {Products} products, {Hot} hot, {Surges} surges, {Spreads} spreads, {Fires} fires, {Movers} movers",
+                refreshSw.ElapsedMilliseconds, products.Count,
+                hotProducts.Count, volumeSurges.Count, spreadOpportunities.Count, fireSales.Count, gainers.Count + losers.Count);
         }
         catch (Exception ex)
         {
@@ -418,11 +407,6 @@ public sealed partial class MarketInsightsService(
     // Source-generated logging
     [LoggerMessage(Level = LogLevel.Debug, Message = "Insights refresh skipped - calculation already in progress")]
     private partial void LogRefreshSkipped();
-
-    [LoggerMessage(Level = LogLevel.Information,
-        Message =
-            "Market insights refreshed: {HotCount} hot, {SurgeCount} surges, {SpreadCount} spreads, {FireCount} fire sales, {MoverCount} movers")]
-    private partial void LogInsightsRefreshed(int hotCount, int surgeCount, int spreadCount, int fireCount, int moverCount);
 
     [LoggerMessage(Level = LogLevel.Error, Message = "Error refreshing market insights")]
     private partial void LogRefreshError(Exception ex);

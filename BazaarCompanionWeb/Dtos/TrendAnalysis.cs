@@ -14,21 +14,3 @@ public class ProductTrend
     public double PriceChange24h { get; set; }
     public double PriceChange7d { get; set; }
 }
-
-public class MarketHeatmapData
-{
-    public List<HeatmapPoint> Points { get; set; } = new();
-    public double MaxVolatility { get; set; }
-    public double MaxVolume { get; set; }
-}
-
-public class HeatmapPoint
-{
-    public string ProductKey { get; set; } = string.Empty;
-    public string ProductName { get; set; } = string.Empty;
-    public double Volatility { get; set; }
-    public double Volume { get; set; }
-    public double OpportunityScore { get; set; }
-    public double X { get; set; } // Normalized volatility (0-1)
-    public double Y { get; set; } // Normalized volume (0-1)
-}

@@ -35,16 +35,10 @@ public class HyPixelService(
         var bazaarResponse = await hyPixelApi.GetBazaarAsync();
         var itemResponse = await hyPixelApi.GetItemsAsync();
         apiSw.Stop();
-        logger.LogInformation("HyPixel API fetch: {ApiMs}ms, {Products} products in response",
-            apiSw.ElapsedMilliseconds, bazaarResponse.Products?.Count ?? 0);
 
-        var buildSw = System.Diagnostics.Stopwatch.StartNew();
         var (products, changedKeys) = await BuildProductDataAsync(bazaarResponse, itemResponse, cancellationToken);
         var productList = products.ToList();
         var mappedProducts = productList.Select(x => x.Map()).ToList();
-        buildSw.Stop();
-        logger.LogInformation("BuildProductData: {BuildMs}ms, {Total} built, {Changed} changed",
-            buildSw.ElapsedMilliseconds, productList.Count, changedKeys.Count);
 
         var stateByProduct = productList.ToDictionary(p => p.ItemId, p => new ProductState(
             p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, (long)p.Bid.WeekVolume, (long)p.Ask.WeekVolume,
@@ -56,11 +50,7 @@ public class HyPixelService(
                 ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
                 ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
         // Splat into RAM store. Flusher (FlushService) drains every ~10min and writes to DB.
-        var ingestSw = System.Diagnostics.Stopwatch.StartNew();
-        var storeChanged = snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow);
-        ingestSw.Stop();
-        logger.LogInformation("SnapshotStore ingest: {IngestMs}ms, {Total} products, {Changed} dirty",
-            ingestSw.ElapsedMilliseconds, productList.Count, storeChanged.Count);
+        snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow);
 
         // Compute LTP estimates for ALL products (not just changed — volume can shift without price changing)
         var ltpByProduct = new Dictionary<string, double?>();
@@ -72,15 +62,10 @@ public class HyPixelService(
 
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
 
-        var insightsSw = System.Diagnostics.Stopwatch.StartNew();
         await marketInsightsService.RefreshInsightsAsync(cancellationToken);
-        insightsSw.Stop();
-        logger.LogInformation("MarketInsights refresh call: {InsightsMs}ms (may be cached/throttled)",
-            insightsSw.ElapsedMilliseconds);
 
         var changedSet = changedKeys.ToHashSet();
         var broadcastItems = productList.Zip(mappedProducts).Where(z => changedSet.Contains(z.First.ItemId)).ToList();
-        var broadcastSw = System.Diagnostics.Stopwatch.StartNew();
         await Parallel.ForEachAsync(
             broadcastItems,
             new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = cancellationToken },
@@ -132,10 +117,13 @@ public class HyPixelService(
                     efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
                 await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, ct);
             });
-        broadcastSw.Stop();
         totalSw.Stop();
-        logger.LogInformation("SignalR broadcast: {BroadcastMs}ms to {Count} clients. Poll total {TotalMs}ms",
-            broadcastSw.ElapsedMilliseconds, broadcastItems.Count, totalSw.ElapsedMilliseconds);
+
+        // One line per poll covering API + build + scoring + ingest + broadcast.
+        logger.LogInformation(
+            "Poll: total={TotalMs}ms api={ApiMs}ms changed={Changed}/{Total} broadcast={BroadcastCount}",
+            totalSw.ElapsedMilliseconds, apiSw.ElapsedMilliseconds,
+            changedKeys.Count, productList.Count, broadcastItems.Count);
     }
 
     private async Task<(IEnumerable<ProductData> Products, IReadOnlyList<string> ChangedKeys)> BuildProductDataAsync(
@@ -171,13 +159,8 @@ public class HyPixelService(
             // 48h gives ~48 hourly samples — well above MinCandlesForAnalysis (6) and MinSamplesForZScore (10).
             // Was 168h (7d); the longer window didn't materially improve statistics but tripled DB load.
             const int lookbackHours = 48;
-            var candleSw = System.Diagnostics.Stopwatch.StartNew();
             var candlesByProduct =
                 await ohlcRepository.GetCandlesBulkAsync(changedKeys, CandleInterval.OneHour, lookbackHours, cancellationToken);
-            candleSw.Stop();
-            var candleRows = candlesByProduct.Values.Sum(v => v.Count);
-            logger.LogInformation("Scoring candle bulk fetch: {CandleMs}ms, {Products} products × {Hours}h = {Rows} rows",
-                candleSw.ElapsedMilliseconds, changedKeys.Count, lookbackHours, candleRows);
 
             var changedInputs = changedKeys.Select(key =>
             {
@@ -192,11 +175,7 @@ public class HyPixelService(
                     b.Ticker.TotalBidVolume, b.Ticker.TotalAskVolume);
             }).ToList();
 
-            var scoringSw = System.Diagnostics.Stopwatch.StartNew();
             scoringResults = opportunityScoringService.CalculateScoresBatch(changedInputs, candlesByProduct);
-            scoringSw.Stop();
-            logger.LogInformation("Opportunity scoring: {ScoringMs}ms for {Count} products",
-                scoringSw.ElapsedMilliseconds, changedInputs.Count);
         }
 
         var changedKeyToIndex = changedKeys.Select((key, idx) => (key, idx)).ToDictionary(x => x.key, x => x.idx);

@@ -201,8 +201,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             await transaction.RollbackAsync(cancellationToken);
         }
         sw.Stop();
-        logger.LogInformation("ProductRepository.UpdateOrAddProductsAsync: {ElapsedMs}ms, {Total} products",
-            sw.ElapsedMilliseconds, products.Count);
+        if (sw.ElapsedMilliseconds > 2000)
+            logger.LogWarning("Slow ProductRepository upsert: {ElapsedMs}ms, {Total} products",
+                sw.ElapsedMilliseconds, products.Count);
     }
 
     public async Task<List<Order>> GetOrderBookAsync(int marketDataId, CancellationToken cancellationToken)

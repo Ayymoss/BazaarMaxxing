@@ -11,7 +11,6 @@ public partial class MarketDashboard
     private MarketMetrics? _metrics;
     private Dtos.CorrelationMatrix? _correlationMatrix;
     private List<ProductTrend> _trendingProducts = new();
-    private MarketHeatmapData? _heatmapData;
     private DateTime? _lastUpdate;
 
     protected override async Task OnInitializedAsync()
@@ -29,7 +28,6 @@ public partial class MarketDashboard
             _metrics = await MarketAnalyticsService.GetMarketMetricsAsync();
             _correlationMatrix = await MarketAnalyticsService.GetCorrelationMatrixAsync();
             _trendingProducts = await MarketAnalyticsService.GetTrendingProductsAsync(10);
-            _heatmapData = await MarketAnalyticsService.GetMarketHeatmapAsync();
             _lastUpdate = DateTime.Now;
         }
         catch (Exception ex)

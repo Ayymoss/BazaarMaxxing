@@ -66,48 +66,8 @@
         }
     </div>
 
-    <!-- Market Heatmap -->
-    @if (HeatmapData != null && HeatmapData.Points.Any())
-    {
-        <div class="rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl p-4">
-            <h3 class="text-lg font-bold text-white flex items-center gap-2 mb-4">
-                <i class="ph ph-grid-four text-purple-400"></i>
-                Market Heatmap
-            </h3>
-            <div class="text-xs text-slate-400 mb-3">
-                Volatility (X-axis) vs Volume (Y-axis). Color intensity = Opportunity Score.
-            </div>
-            
-            <div class="relative w-full h-96 border border-slate-700/50 rounded-lg bg-slate-900/50 overflow-hidden">
-                @foreach (var point in HeatmapData.Points)
-                {
-                    var colorIntensity = Math.Min(1.0, point.OpportunityScore / 10.0);
-                    var color = $"rgba(59, 130, 246, {colorIntensity})"; // Blue with intensity based on opportunity score
-                    
-                    <div class="absolute rounded-sm group cursor-pointer hover:ring-2 hover:ring-blue-500/50 transition-all"
-                         style="left: @(point.X * 100)%; bottom: @(point.Y * 100)%; width: 8px; height: 8px; background-color: @color;"
-                         title="@($"{point.ProductName}: Vol={point.Volatility:P2}, Vol={point.Volume:N0}, Score={point.OpportunityScore:P2}")">
-                        <div class="absolute bottom-full left-1/2 transform -translate-x-1/2 mb-1 px-2 py-1 bg-slate-800 text-xs text-white rounded opacity-0 group-hover:opacity-100 pointer-events-none whitespace-nowrap z-10">
-                            @point.ProductName
-                        </div>
-                    </div>
-                }
-                
-                <!-- Axis labels -->
-                <div class="absolute bottom-0 left-0 right-0 flex justify-between px-2 text-[10px] text-slate-500">
-                    <span>Low Volatility</span>
-                    <span>High Volatility</span>
-                </div>
-                <div class="absolute top-0 bottom-0 left-0 flex flex-col justify-between py-2 text-[10px] text-slate-500 writing-vertical-rl">
-                    <span>Low Volume</span>
-                    <span>High Volume</span>
-                </div>
-            </div>
-        </div>
-    }
 </div>
 
 @code {
     [Parameter] public List<ProductTrend> TrendingProducts { get; set; } = new();
-    [Parameter] public MarketHeatmapData? HeatmapData { get; set; }
 }

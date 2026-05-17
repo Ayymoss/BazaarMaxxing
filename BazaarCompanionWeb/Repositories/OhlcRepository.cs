@@ -38,8 +38,9 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
 
         await importer.CompleteAsync(ct);
         sw.Stop();
-        logger.LogInformation("OhlcRepository.CopyTicksAsync (binary COPY): {ElapsedMs}ms, {Rows} rows",
-            sw.ElapsedMilliseconds, ticks.Count);
+        if (sw.ElapsedMilliseconds > 1000)
+            logger.LogWarning("Slow CopyTicksAsync: {ElapsedMs}ms, {Rows} rows",
+                sw.ElapsedMilliseconds, ticks.Count);
     }
 
     public async Task<List<OhlcDataPoint>> GetCandlesAsync(
@@ -103,10 +104,11 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
         }
 
         sw.Stop();
-        if (sw.ElapsedMilliseconds > 50 || totalRows > 5000)
-            logger.LogInformation(
-                "OhlcRepository.GetCandlesBulkAsync: {ElapsedMs}ms, {Products} keys, interval={Interval}, limit={Limit}, {Rows} rows",
-                sw.ElapsedMilliseconds, productKeys.Count, interval, limitPerProduct, totalRows);
+        // Warn-level only on outliers — successful queries are tracked at the calling layer.
+        if (sw.ElapsedMilliseconds > 2000)
+            logger.LogWarning(
+                "Slow GetCandlesBulkAsync: {ElapsedMs}ms, {Products} keys, interval={Interval}, {Rows} rows",
+                sw.ElapsedMilliseconds, productKeys.Count, interval, totalRows);
 
         return result;
     }
@@ -166,9 +168,10 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
             .ToListAsync(ct);
 
         sw.Stop();
-        logger.LogInformation(
-            "OhlcRepository.GetTicksForAggregationBulkAsync: {ElapsedMs}ms, {Products} keys, since={Since:O}, {Ticks} ticks",
-            sw.ElapsedMilliseconds, productKeys.Count, since, ticks.Count);
+        if (sw.ElapsedMilliseconds > 2000)
+            logger.LogWarning(
+                "Slow GetTicksForAggregationBulkAsync: {ElapsedMs}ms, {Products} keys, since={Since:O}, {Ticks} ticks",
+                sw.ElapsedMilliseconds, productKeys.Count, since, ticks.Count);
 
         return ticks.GroupBy(t => t.ProductKey).ToDictionary(g => g.Key, g => g.ToList());
     }
@@ -230,8 +233,9 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
         }
 
         sw.Stop();
-        logger.LogInformation("OhlcRepository.SaveCandlesAsync: {ElapsedMs}ms, {Rows} candles upserted",
-            sw.ElapsedMilliseconds, candleList.Count);
+        if (sw.ElapsedMilliseconds > 5000)
+            logger.LogWarning("Slow SaveCandlesAsync: {ElapsedMs}ms, {Rows} candles upserted",
+                sw.ElapsedMilliseconds, candleList.Count);
     }
 
     public async Task<DateTime?> GetLatestCandleTimeAsync(

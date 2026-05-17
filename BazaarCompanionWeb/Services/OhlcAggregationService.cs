@@ -50,8 +50,8 @@ public class OhlcAggregationService(
                 await ohlcRepository.PruneOldCandlesAsync(stoppingToken);
                 await productRepository.DeleteStaleProductsAsync(staleAfterDays: 2, stoppingToken);
                 pruneSw.Stop();
-                logger.LogInformation("Prune cycle: {PruneMs}ms (ticks + candles + stale products)",
-                    pruneSw.ElapsedMilliseconds);
+                if (pruneSw.ElapsedMilliseconds > 5000)
+                    logger.LogWarning("Slow prune cycle: {PruneMs}ms", pruneSw.ElapsedMilliseconds);
                 
                 // Run VACUUM once per day to reclaim disk space
                 if (DateTime.UtcNow - _lastVacuumTime > VacuumInterval)
@@ -136,8 +136,6 @@ public class OhlcAggregationService(
         var productKeys = await ohlcRepository.GetAllProductKeysAsync(ct);
         var states = await ohlcRepository.GetAggregationStatesAsync(ct);
         var now = DateTime.UtcNow;
-        logger.LogInformation("Aggregation cycle start: {Products} products, {States} existing watermarks",
-            productKeys.Count, states.Count);
 
         // Compute the earliest watermark across short-interval (product, interval) pairs.
         // MIN gives us a single cutoff that covers all of them in one tick fetch.
@@ -164,12 +162,8 @@ public class OhlcAggregationService(
         // Clamp: never pull further back than retention.
         if (sinceCutoff < now - TickRetention) sinceCutoff = now - TickRetention;
 
-        var tickFetchSw = System.Diagnostics.Stopwatch.StartNew();
         var ticksByProduct = await ohlcRepository.GetTicksForAggregationBulkAsync(productKeys, sinceCutoff, ct);
-        tickFetchSw.Stop();
         var totalTicks = ticksByProduct.Values.Sum(v => v.Count);
-        logger.LogInformation("Aggregation tick fetch: {FetchMs}ms, {Ticks} ticks since {Cutoff:O}",
-            tickFetchSw.ElapsedMilliseconds, totalTicks, sinceCutoff);
 
         var newStates = new System.Collections.Concurrent.ConcurrentBag<EFOhlcAggregationState>();
 
@@ -188,19 +182,15 @@ public class OhlcAggregationService(
             });
 
         if (!newStates.IsEmpty)
-        {
-            var upsertSw = System.Diagnostics.Stopwatch.StartNew();
             await ohlcRepository.UpsertAggregationStatesAsync(newStates.ToList(), ct);
-            upsertSw.Stop();
-            logger.LogInformation("Aggregation watermark upsert: {UpsertMs}ms, {Count} states",
-                upsertSw.ElapsedMilliseconds, newStates.Count);
-        }
 
         // Build long-interval candles (1d from 1h, 1w from 1d) without touching the tick table.
         await BuildLongIntervalCandlesAsync(ct);
 
         sw.Stop();
-        logger.LogInformation("Aggregation cycle done: {TotalMs}ms total", sw.ElapsedMilliseconds);
+        logger.LogInformation(
+            "Aggregation: {TotalMs}ms — {Ticks} ticks since {Cutoff:HH:mm}, {States} watermarks",
+            sw.ElapsedMilliseconds, totalTicks, sinceCutoff, newStates.Count);
     }
 
     /// <summary>
@@ -284,9 +274,10 @@ public class OhlcAggregationService(
         if (weekCandles.Count > 0) await ohlcRepository.SaveCandlesAsync(weekCandles, ct);
 
         sw.Stop();
-        logger.LogInformation(
-            "Long-interval rebuild: {ElapsedMs}ms — {Days} daily candles from {Hourly} hourly rows, {Weeks} weekly candles from {Daily} daily rows",
-            sw.ElapsedMilliseconds, dayCandles.Count, hourly.Count, weekCandles.Count, daily.Count);
+        if (sw.ElapsedMilliseconds > 3000)
+            logger.LogWarning(
+                "Slow long-interval rebuild: {ElapsedMs}ms — {Days} daily, {Weeks} weekly",
+                sw.ElapsedMilliseconds, dayCandles.Count, weekCandles.Count);
     }
 
     private static DateTime StartOfIsoWeek(DateTime date)
