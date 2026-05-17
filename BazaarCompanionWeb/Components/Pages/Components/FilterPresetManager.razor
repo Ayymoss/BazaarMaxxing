@@ -33,8 +33,10 @@
                         @preset.Name
                     </button>
                     <button @onclick="@(async () => await DeletePreset(preset.Name))"
+                            aria-label="@($"Delete preset {preset.Name}")"
+                            title="@($"Delete preset {preset.Name}")"
                             class="text-slate-500 hover:text-red-400 transition-colors">
-                        <i class="ph ph-x text-[10px]"></i>
+                        <i class="ph ph-x text-[10px]" aria-hidden="true"></i>
                     </button>
                 </div>
             }

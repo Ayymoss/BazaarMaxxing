@@ -1,0 +1,57 @@
+@*
+    Unified loading placeholder. Replaces ad-hoc spinners/progress bars sprinkled
+    across pages. Picks a shape via Variant; falls back to a generic indeterminate bar.
+
+    Variants:
+      - Bar        — thin indeterminate progress bar + caption (default)
+      - Card       — pulsing card-sized block
+      - Inline     — small inline spinner for buttons / status chips
+      - Page       — full-page bar with caption, vertically centered
+*@
+
+@switch (Variant)
+{
+    case "Card":
+        <div class="card animate-pulse" style="@($"min-height: {MinHeight}px;")">
+            <div class="p-4 flex flex-col gap-3">
+                <div class="h-3 w-2/3 rounded bg-slate-800"></div>
+                <div class="h-3 w-1/2 rounded bg-slate-800"></div>
+                <div class="h-3 w-3/4 rounded bg-slate-800"></div>
+            </div>
+        </div>
+        break;
+
+    case "Inline":
+        <span class="inline-flex items-center gap-1.5 text-xs text-slate-400" role="status" aria-live="polite">
+            <i class="ph ph-circle-notch animate-spin" aria-hidden="true"></i>
+            @Caption
+        </span>
+        break;
+
+    case "Page":
+        <div class="flex flex-col items-center justify-center py-20" role="status" aria-live="polite">
+            <div class="h-1 w-32 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-blue-500"></div>
+            </div>
+            <p class="mt-3 text-xs text-slate-500 animate-pulse">@Caption</p>
+        </div>
+        break;
+
+    default: // "Bar"
+        <div class="flex flex-col items-center justify-center py-6" role="status" aria-live="polite">
+            <div class="h-1 w-24 overflow-hidden rounded-full bg-slate-800">
+                <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-blue-500"></div>
+            </div>
+            @if (!string.IsNullOrEmpty(Caption))
+            {
+                <p class="mt-2 text-[11px] text-slate-500">@Caption</p>
+            }
+        </div>
+        break;
+}
+
+@code {
+    [Parameter] public string Variant { get; set; } = "Bar";
+    [Parameter] public string Caption { get; set; } = "Loading...";
+    [Parameter] public int MinHeight { get; set; } = 120;
+}

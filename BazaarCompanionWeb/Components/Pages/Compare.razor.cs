@@ -13,6 +13,7 @@ public partial class Compare : IAsyncDisposable
     [Inject] private ComparisonStateService ComparisonState { get; set; } = null!;
     [Inject] private IOhlcRepository OhlcRepository { get; set; } = null!;
     [Inject] private IProductRepository ProductRepository { get; set; } = null!;
+    [Inject] private ProductDataCache ProductDataCache { get; set; } = null!;
     [Inject] private IJSRuntime JS { get; set; } = null!;
     [Inject] private ILogger<Compare> Logger { get; set; } = null!;
 
@@ -75,7 +76,7 @@ public partial class Compare : IAsyncDisposable
         {
             try
             {
-                var product = await ProductRepository.GetProductAsync(productKey, default);
+                var product = await ProductDataCache.GetProductAsync(productKey);
                 if (product is not null)
                 {
                     _productData[productKey] = product;
@@ -112,7 +113,7 @@ public partial class Compare : IAsyncDisposable
             
             try
             {
-                var product = await ProductRepository.GetProductAsync(productKey, default);
+                var product = await ProductDataCache.GetProductAsync(productKey);
                 if (product is not null)
                 {
                     _productData[productKey] = product;

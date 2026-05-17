@@ -15,9 +15,11 @@
                     class="text-[10px] text-slate-500 hover:text-slate-300 transition-colors px-2 py-1 rounded hover:bg-slate-800/50">
                 Clear All
             </button>
-            <button @onclick="ToggleCollapse" 
+            <button @onclick="ToggleCollapse"
+                    aria-label="@(_collapsed ? "Expand filters" : "Collapse filters")"
+                    aria-expanded="@(!_collapsed)"
                     class="text-slate-500 hover:text-slate-300 transition-colors">
-                <i class="ph ph-@(_collapsed ? "caret-down" : "caret-up") text-sm"></i>
+                <i class="ph ph-@(_collapsed ? "caret-down" : "caret-up") text-sm" aria-hidden="true"></i>
             </button>
         </div>
     </div>

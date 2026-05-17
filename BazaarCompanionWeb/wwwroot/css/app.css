@@ -5,6 +5,115 @@ body {
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
 }
 
+/* ==========================================================================
+   Design tokens
+   Centralised values used across components. Tailwind utilities still cover
+   most styling; these tokens are for raw CSS contexts (custom shadows,
+   inline styles, etc.).
+   ========================================================================== */
+:root {
+    --mc-radius: 0.5rem;          /* rounded-lg */
+    --mc-radius-card: 0.75rem;    /* rounded-xl — canonical card radius */
+    --mc-border: rgba(51, 65, 85, 0.5);     /* slate-700/50 */
+    --mc-border-strong: rgba(51, 65, 85, 0.75);
+    --mc-bg-card: rgba(15, 23, 42, 0.6);    /* slate-900/60 */
+    --mc-bg-soft: rgba(30, 41, 59, 0.4);    /* slate-800/40 */
+}
+
+/* ==========================================================================
+   Component classes
+   Component classes for the most common card / button patterns. Use these
+   instead of repeating the 6-class Tailwind incantation everywhere. Tailwind
+   utilities can still be combined for one-offs.
+   ========================================================================== */
+
+/* Standard panel/card surface. Pair with padding utilities (.p-4 etc). */
+.card {
+    border-radius: var(--mc-radius-card);
+    border: 1px solid var(--mc-border);
+    background-color: var(--mc-bg-card);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.1);
+}
+
+/* Softer card variant — for nested sub-panels inside .card */
+.card-soft {
+    border-radius: var(--mc-radius);
+    border: 1px solid var(--mc-border);
+    background-color: var(--mc-bg-soft);
+}
+
+/* Primary action button. Used for "Refresh", "Save", confirm dialogs. */
+.btn-primary {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.5rem 0.75rem;
+    border-radius: var(--mc-radius);
+    border: 1px solid rgba(59, 130, 246, 0.5);
+    background-color: rgba(59, 130, 246, 0.15);
+    color: #93c5fd;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.15s;
+    cursor: pointer;
+}
+.btn-primary:hover { background-color: rgba(59, 130, 246, 0.25); color: white; }
+.btn-primary:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Ghost / secondary button. Pair with text size utilities. */
+.btn-ghost {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.375rem;
+    padding: 0.375rem 0.625rem;
+    border-radius: var(--mc-radius);
+    border: 1px solid var(--mc-border);
+    background-color: var(--mc-bg-soft);
+    color: #cbd5e1;
+    font-size: 0.75rem;
+    font-weight: 500;
+    transition: all 0.15s;
+    cursor: pointer;
+}
+.btn-ghost:hover { background-color: rgba(51, 65, 85, 0.6); color: white; }
+.btn-ghost:disabled { opacity: 0.5; cursor: not-allowed; }
+
+/* Icon-only button — square, no padding bleed. Always pair with aria-label. */
+.btn-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 1.75rem;
+    height: 1.75rem;
+    border-radius: 0.375rem;
+    color: #94a3b8;
+    background-color: transparent;
+    transition: all 0.15s;
+    cursor: pointer;
+}
+.btn-icon:hover { background-color: var(--mc-bg-soft); color: white; }
+
+/* Indeterminate progress bar keyframe used by LoadingSkeleton. */
+@keyframes indeterminate {
+    0%   { transform: translateX(-100%); }
+    100% { transform: translateX(100%); }
+}
+
+/* Status pill / chip. Use modifier classes for color (.badge-positive, etc). */
+.badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.125rem 0.5rem;
+    border-radius: 9999px;
+    font-size: 0.625rem;
+    font-weight: 500;
+    text-transform: uppercase;
+    letter-spacing: 0.025em;
+}
+
 /* Blazor Error UI */
 #blazor-error-ui {
     background: rgba(15, 23, 42, 0.95);

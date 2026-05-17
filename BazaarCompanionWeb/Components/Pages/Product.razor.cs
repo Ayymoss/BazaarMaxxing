@@ -1,5 +1,6 @@
 using BazaarCompanionWeb.Components.Pages.Components;
 using BazaarCompanionWeb.Components.Pages.Dialogs.Components;
+using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -7,17 +8,19 @@ using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Extensions.Options;
 using Serilog;
 
 namespace BazaarCompanionWeb.Components.Pages;
 
 public partial class Product(
-    IProductRepository productRepository,
+    ProductDataCache productDataCache,
     TimeCache timeCache,
     MarketAnalyticsService marketAnalyticsService,
     OrderBookAnalysisService orderBookAnalysisService,
     ComparisonStateService comparisonStateService,
     LastTradedPriceService lastTradedPriceService,
+    IOptions<UIConfig> uiConfig,
     NavigationManager navigationManager) : ComponentBase, IAsyncDisposable
 {
     [Parameter] public required string ProductKey { get; set; }
@@ -33,6 +36,10 @@ public partial class Product(
 
     internal CandleInterval _selectedInterval = CandleInterval.OneHour;
     private List<RelatedProduct> _relatedProducts = [];
+    private bool _relatedProductsLoaded;
+    private bool _relatedProductsFailed;
+    private bool _joinedHubGroup;
+    private bool _disposed;
 
     // Order book analysis
     private OrderBookAnalysisResult? _orderBookAnalysis;
@@ -93,18 +100,22 @@ public partial class Product(
             }
         });
 
-        // Tick every 30s to keep the humanized "Last Updated" text fresh
-        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        // Refresh the humanized "Last Updated" text on the configured cadence. Live data flows via SignalR.
+        var interval = TimeSpan.FromSeconds(uiConfig.Value.LastUpdatedRefreshSeconds);
+        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, interval, interval);
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        if (firstRender && _hubConnection is not null)
+        if (firstRender && _hubConnection is not null && !_disposed)
         {
             try
             {
                 await _hubConnection.StartAsync();
+                // Re-check disposed after async gap — user may have navigated away mid-handshake.
+                if (_disposed) return;
                 await _hubConnection.SendAsync("JoinProductGroup", ProductKey);
+                _joinedHubGroup = true;
             }
             catch (Exception ex)
             {
@@ -121,14 +132,20 @@ public partial class Product(
 
     private async Task LoadRelatedProductsAsync(CancellationToken ct = default)
     {
+        _relatedProductsFailed = false;
         try
         {
-            _relatedProducts = await marketAnalyticsService.GetRelatedProductsAsync(ProductKey, 5, ct);
-            await InvokeAsync(StateHasChanged);
+            _relatedProducts = await marketAnalyticsService.GetRelatedProductsAsync(ProductKey, uiConfig.Value.RelatedProductsLimit, ct);
+            _relatedProductsLoaded = true;
         }
         catch (Exception ex)
         {
+            _relatedProductsFailed = true;
             Log.Warning(ex, "Error loading related products for {ProductKey}", ProductKey);
+        }
+        finally
+        {
+            await InvokeAsync(StateHasChanged);
         }
     }
 
@@ -136,7 +153,7 @@ public partial class Product(
     {
         try
         {
-            _product = await productRepository.GetProductAsync(ProductKey, ct);
+            _product = await productDataCache.GetProductAsync(ProductKey, ct);
             if (_product is not null)
                 _product.EstimatedLastTradedPrice ??= lastTradedPriceService.GetEstimate(ProductKey);
             _lastServerRefresh = timeCache.LastUpdated;
@@ -203,14 +220,16 @@ public partial class Product(
 
     public async ValueTask DisposeAsync()
     {
+        _disposed = true;
         comparisonStateService.OnChange -= OnComparisonStateChanged;
-        
+
         if (_hubConnection is not null)
         {
             try
             {
-                // Only send if connection is active
-                if (_hubConnection.State == HubConnectionState.Connected)
+                // Only LeaveProductGroup if we actually Joined. Otherwise the server has no
+                // matching subscription and we'd just log a warning on the hub side.
+                if (_joinedHubGroup && _hubConnection.State == HubConnectionState.Connected)
                 {
                     await _hubConnection.SendAsync("LeaveProductGroup", ProductKey);
                 }
@@ -219,7 +238,7 @@ public partial class Product(
             {
                 Log.Warning(ex, "Error leaving product group during dispose");
             }
-            
+
             await _hubConnection.DisposeAsync();
         }
 

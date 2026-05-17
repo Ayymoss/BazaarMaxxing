@@ -136,13 +136,20 @@
                             </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/30">
-                            @foreach (var order in ProductData.BidBook)
+                            @if (ProductData.BidBook?.Any() == true)
                             {
-                                <tr class="group hover:bg-emerald-500/5 transition-colors">
-                                    <td class="px-3 py-1.5 font-mono text-emerald-400/90">@order.UnitPrice.ToString("N2")</td>
-                                    <td class="px-3 py-1.5 text-right text-slate-400">@order.Amount.ToString("N0")</td>
-                                    <td class="px-3 py-1.5 text-right text-slate-600">@order.Orders</td>
-                                </tr>
+                                @foreach (var order in ProductData.BidBook)
+                                {
+                                    <tr class="group hover:bg-emerald-500/5 transition-colors">
+                                        <td class="px-3 py-1.5 font-mono text-emerald-400/90">@order.UnitPrice.ToString("N2")</td>
+                                        <td class="px-3 py-1.5 text-right text-slate-400">@order.Amount.ToString("N0")</td>
+                                        <td class="px-3 py-1.5 text-right text-slate-600">@order.Orders</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="3"><EmptyState Icon="ph-empty" Message="No buy orders" SubMessage="No bids placed on this item"/></td></tr>
                             }
                             </tbody>
                         </table>
@@ -175,13 +182,20 @@
                             </tr>
                             </thead>
                             <tbody class="divide-y divide-slate-800/30">
-                            @foreach (var order in ProductData.AskBook)
+                            @if (ProductData.AskBook?.Any() == true)
                             {
-                                <tr class="group hover:bg-rose-500/5 transition-colors">
-                                    <td class="px-3 py-1.5 font-mono text-rose-400/90">@order.UnitPrice.ToString("N2")</td>
-                                    <td class="px-3 py-1.5 text-right text-slate-400">@order.Amount.ToString("N0")</td>
-                                    <td class="px-3 py-1.5 text-right text-slate-600">@order.Orders</td>
-                                </tr>
+                                @foreach (var order in ProductData.AskBook)
+                                {
+                                    <tr class="group hover:bg-rose-500/5 transition-colors">
+                                        <td class="px-3 py-1.5 font-mono text-rose-400/90">@order.UnitPrice.ToString("N2")</td>
+                                        <td class="px-3 py-1.5 text-right text-slate-400">@order.Amount.ToString("N0")</td>
+                                        <td class="px-3 py-1.5 text-right text-slate-600">@order.Orders</td>
+                                    </tr>
+                                }
+                            }
+                            else
+                            {
+                                <tr><td colspan="3"><EmptyState Icon="ph-empty" Message="No sell orders" SubMessage="No asks placed on this item"/></td></tr>
                             }
                             </tbody>
                         </table>
@@ -238,7 +252,15 @@
     }
 
     <!-- Related Products -->
-    @if (_relatedProducts.Any())
+    @if (_relatedProductsFailed)
+    {
+        <div class="mt-4">
+            <ErrorCallout Message="Couldn't load related products"
+                          Detail="Check service health if this persists."
+                          OnRetry="@(() => LoadRelatedProductsAsync())"/>
+        </div>
+    }
+    else if (_relatedProducts.Any())
     {
         <div class="mt-4 rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl p-5">
             <h4 class="text-sm font-bold text-white flex items-center gap-2 mb-4">

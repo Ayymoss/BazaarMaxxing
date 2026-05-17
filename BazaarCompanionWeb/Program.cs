@@ -223,6 +223,7 @@ public class Program
     {
         // Bind Indices configuration from appsettings.json
         builder.Services.Configure<List<IndexConfiguration>>(builder.Configuration.GetSection("Indices"));
+        builder.Services.Configure<UIConfig>(builder.Configuration.GetSection("UIConfig"));
 
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
@@ -240,6 +241,7 @@ public class Program
         builder.Services.AddScoped<OrderBookAnalysisService>();
         builder.Services.AddScoped<BrowserStorage>();
         builder.Services.AddSingleton<ComparisonStateService>();
+        builder.Services.AddSingleton<ProductDataCache>();
         builder.Services.AddSingleton<AboutModalService>();
         builder.Services.AddScoped<IndexAggregationService>();
 

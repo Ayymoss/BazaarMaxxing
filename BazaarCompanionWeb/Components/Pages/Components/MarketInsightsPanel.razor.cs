@@ -1,5 +1,6 @@
-﻿using BazaarCompanionWeb.Dtos;
+using BazaarCompanionWeb.Dtos;
 using Microsoft.AspNetCore.Components;
+using Microsoft.JSInterop;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
@@ -14,12 +15,28 @@ public partial class MarketInsightsPanel
     {
         await LoadInsightsAsync();
 
-        // Auto-refresh every 30 seconds
+        // Auto-refresh on the configured cadence. Skip the fetch if the browser tab is hidden —
+        // no point hammering the API/cache when the user isn't looking.
+        var interval = TimeSpan.FromSeconds(UIConfig.Value.InsightsPanelRefreshSeconds);
         _refreshTimer = new Timer(async _ =>
         {
+            if (await IsTabHiddenAsync()) return;
             await LoadInsightsAsync();
             await InvokeAsync(StateHasChanged);
-        }, null, TimeSpan.FromSeconds(30), TimeSpan.FromSeconds(30));
+        }, null, interval, interval);
+    }
+
+    private async Task<bool> IsTabHiddenAsync()
+    {
+        try
+        {
+            return await JSRuntime.InvokeAsync<bool>("eval", "document.hidden");
+        }
+        catch
+        {
+            // If JS interop fails (prerender, etc.) assume visible to keep behaviour conservative.
+            return false;
+        }
     }
 
     private async Task LoadInsightsAsync()

@@ -1,0 +1,19 @@
+@*
+    Compact empty-state placeholder. Renders an icon + short message inline.
+    Use when a list/table has no items but isn't an error.
+*@
+
+<div class="flex flex-col items-center justify-center gap-2 py-6 px-4 text-slate-500">
+    <i class="ph @Icon text-2xl text-slate-600"></i>
+    <p class="text-xs">@Message</p>
+    @if (!string.IsNullOrEmpty(SubMessage))
+    {
+        <p class="text-[10px] text-slate-600">@SubMessage</p>
+    }
+</div>
+
+@code {
+    [Parameter] public string Icon { get; set; } = "ph-tray";
+    [Parameter] public required string Message { get; set; }
+    [Parameter] public string? SubMessage { get; set; }
+}

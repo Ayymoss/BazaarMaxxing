@@ -1,6 +1,10 @@
 @namespace BazaarCompanionWeb.Components.Pages.Components
+@using BazaarCompanionWeb.Configurations
 @using BazaarCompanionWeb.Services
+@using Microsoft.Extensions.Options
 @inject MarketInsightsService InsightsService
+@inject IJSRuntime JSRuntime
+@inject IOptions<UIConfig> UIConfig
 @implements IDisposable
 
 <div class="mb-4">

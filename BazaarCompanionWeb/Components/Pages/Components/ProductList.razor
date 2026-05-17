@@ -208,8 +208,9 @@
             <div class="flex items-center rounded-md border border-slate-700 bg-slate-800 p-0.5">
                 <button @onclick="@(() => ChangePage(Math.Max(0, _currentPageIndex - 1)))"
                         disabled="@(_currentPageIndex == 0)"
+                        aria-label="Previous page"
                         class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                    <i class="ph ph-caret-left"></i>
+                    <i class="ph ph-caret-left" aria-hidden="true"></i>
                 </button>
                 <div class="h-3 w-px bg-slate-700 mx-1"></div>
                 <span class="px-2 text-[10px] font-mono text-slate-400">
@@ -218,8 +219,9 @@
                 <div class="h-3 w-px bg-slate-700 mx-1"></div>
                 <button @onclick="@(() => ChangePage(Math.Min(lastPageIndex, _currentPageIndex + 1)))"
                         disabled="@(_currentPageIndex >= lastPageIndex)"
+                        aria-label="Next page"
                         class="rounded px-2 py-1 text-[10px] font-medium text-slate-300 hover:bg-slate-700 hover:text-white disabled:opacity-30 disabled:hover:bg-transparent transition-colors">
-                    <i class="ph ph-caret-right"></i>
+                    <i class="ph ph-caret-right" aria-hidden="true"></i>
                 </button>
             </div>
 

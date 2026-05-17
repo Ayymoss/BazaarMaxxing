@@ -1,5 +1,6 @@
 using System.Globalization;
 using System.Text.Json;
+using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Models.Pagination;
@@ -8,12 +9,17 @@ using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.AspNetCore.Components.QuickGrid;
+using Microsoft.Extensions.Options;
 using SortDescriptor = BazaarCompanionWeb.Models.Pagination.SortDescriptor;
 using AppSortDirection = BazaarCompanionWeb.Enums.SortDirection;
 
 namespace BazaarCompanionWeb.Components.Pages.Components;
 
-public partial class ProductList(TimeCache timeCache, BrowserStorage browserStorage, NavigationManager navigationManager) : ComponentBase, IDisposable
+public partial class ProductList(
+    TimeCache timeCache,
+    BrowserStorage browserStorage,
+    NavigationManager navigationManager,
+    IOptions<UIConfig> uiConfig) : ComponentBase, IDisposable
 {
     [Inject] private IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery { get; set; }
 
@@ -157,8 +163,10 @@ public partial class ProductList(TimeCache timeCache, BrowserStorage browserStor
             );
         };
 
-        // Tick every 30s to keep the humanized "Last Updated" text fresh
-        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+        // Refresh the humanized "Last Updated" text on the configured cadence. SignalR delivers the data;
+        // this timer only repaints the relative-time string.
+        var interval = TimeSpan.FromSeconds(uiConfig.Value.LastUpdatedRefreshSeconds);
+        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, interval, interval);
     }
 
     private void OnSearchInput(ChangeEventArgs e)

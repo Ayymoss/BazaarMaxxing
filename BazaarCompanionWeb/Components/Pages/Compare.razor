@@ -42,8 +42,10 @@
             <div
                 class="group relative rounded-xl border border-slate-700/50 bg-slate-900/60 p-4 backdrop-blur-md transition-all hover:border-slate-600">
                 <button @onclick="@(() => RemoveProduct(productKey))"
+                        aria-label="Remove from comparison"
+                        title="Remove from comparison"
                         class="absolute top-2 right-2 p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all">
-                    <i class="ph ph-x text-sm"></i>
+                    <i class="ph ph-x text-sm" aria-hidden="true"></i>
                 </button>
 
                 @if (product is not null)
