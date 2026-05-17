@@ -73,6 +73,20 @@ public class OhlcAggregationService(
 
     private async Task SeedHistoryAsync(IOhlcRepository ohlcRepository, IProductRepository productRepository, CancellationToken ct)
     {
+        // Skip if any OneDay candle already exists. Otherwise we re-seed flat O==H==L==C every
+        // restart, overwriting the repaired values from RepairFlatDailyCandlesAsync.
+        using var scope = scopeFactory.CreateScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DataContext>>();
+        await using (var context = await contextFactory.CreateDbContextAsync(ct))
+        {
+            var anyExists = await context.OhlcCandles.AnyAsync(c => c.Interval == CandleInterval.OneDay, ct);
+            if (anyExists)
+            {
+                logger.LogInformation("Skipping daily-candle seed — table already populated");
+                return;
+            }
+        }
+
         logger.LogInformation("Seeding historical daily candles from PriceSnapshots...");
 
         var snapshots = await productRepository.GetPriceSnapshotsAsync(ct);
@@ -190,23 +204,22 @@ public class OhlcAggregationService(
     }
 
     /// <summary>
-    /// Derives OneDay candles from OneHour, and OneWeek candles from OneDay. Bounded scope:
-    /// only rebuilds the most recent days/weeks so the work is cheap and bounded by interval count,
-    /// not product count × tick density.
+    /// Derives OneDay candles from OneHour, and OneWeek candles from OneDay. Only rebuilds the
+    /// CURRENT day and CURRENT week — closed periods don't change so re-pulling them every cycle
+    /// is wasted DB load. A one-time backfill across history happens in <see cref="RepairFlatDailyCandlesAsync"/>.
     /// </summary>
     private async Task BuildLongIntervalCandlesAsync(CancellationToken ct)
     {
-        const int recentDaysToRebuild = 3;   // current + 2 prior (cheap insurance against gaps)
-        const int recentWeeksToRebuild = 2;  // current + prior
-
         var sw = System.Diagnostics.Stopwatch.StartNew();
         using var scope = scopeFactory.CreateScope();
         var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DataContext>>();
         await using var context = await contextFactory.CreateDbContextAsync(ct);
 
         var now = DateTime.UtcNow;
-        var daySince = now.Date.AddDays(-recentDaysToRebuild);
-        var weekSince = now.Date.AddDays(-recentWeeksToRebuild * 7);
+        // Today's 1d candle is "open"; yesterday's may have late-arriving hour-23 ticks aggregated post-midnight.
+        var daySince = DateTime.SpecifyKind(now.Date.AddDays(-1), DateTimeKind.Utc);
+        // Current ISO week — closed prior weeks don't move.
+        var weekSince = StartOfIsoWeek(now);
 
         // --- OneDay from OneHour ---
         var hourly = await context.OhlcCandles
@@ -292,12 +305,29 @@ public class OhlcAggregationService(
         // Watermark cutoff: from the period we last touched (re-query the current open period),
         // or 7 days back on first run.
         var cutoff = state?.LastSeenPeriodStart ?? (now - TickRetention);
+        var currentPeriodStart = now.GetPeriodStart(interval);
 
         var ticks = preloadedTicks
             .Where(t => t.Timestamp >= cutoff)
             .OrderBy(t => t.Timestamp)
             .ToList();
-        if (ticks.Count == 0) return null;
+        if (ticks.Count == 0)
+        {
+            // Quiet product: no ticks in window. Still advance watermark to the current period
+            // so this product doesn't drag the bulk-fetch MIN cutoff backward indefinitely.
+            // If a tick arrives in the current period later, the cutoff still catches it.
+            if (state == null || state.LastSeenPeriodStart < currentPeriodStart)
+            {
+                return new EFOhlcAggregationState
+                {
+                    ProductKey = productKey,
+                    Interval = interval,
+                    LastSeenPeriodStart = currentPeriodStart,
+                    UpdatedAt = now,
+                };
+            }
+            return null;
+        }
 
         var grouped = ticks.GroupBy(t => t.Timestamp.GetPeriodStart(interval)).ToList();
         if (grouped.Count == 0) return null;
