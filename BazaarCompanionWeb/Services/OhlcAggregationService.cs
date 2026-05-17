@@ -43,11 +43,15 @@ public class OhlcAggregationService(
                 }
 
                 await AggregateAllCandlesAsync(ohlcRepository, stoppingToken);
-                
+
                 // Cleanup old ticks, candles, and stale products
+                var pruneSw = System.Diagnostics.Stopwatch.StartNew();
                 await ohlcRepository.PruneOldTicksAsync(TickRetention, stoppingToken);
                 await ohlcRepository.PruneOldCandlesAsync(stoppingToken);
                 await productRepository.DeleteStaleProductsAsync(staleAfterDays: 2, stoppingToken);
+                pruneSw.Stop();
+                logger.LogInformation("Prune cycle: {PruneMs}ms (ticks + candles + stale products)",
+                    pruneSw.ElapsedMilliseconds);
                 
                 // Run VACUUM once per day to reclaim disk space
                 if (DateTime.UtcNow - _lastVacuumTime > VacuumInterval)
@@ -99,9 +103,12 @@ public class OhlcAggregationService(
     /// </summary>
     private async Task AggregateAllCandlesAsync(IOhlcRepository ohlcRepository, CancellationToken ct)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         var productKeys = await ohlcRepository.GetAllProductKeysAsync(ct);
         var states = await ohlcRepository.GetAggregationStatesAsync(ct);
         var now = DateTime.UtcNow;
+        logger.LogInformation("Aggregation cycle start: {Products} products, {States} existing watermarks",
+            productKeys.Count, states.Count);
 
         var intervals = Enum.GetValues<CandleInterval>();
 
@@ -116,7 +123,13 @@ public class OhlcAggregationService(
         // sinceCutoff floor at now - retention to avoid pulling beyond what we keep.
         if (sinceCutoff < now - TickRetention) sinceCutoff = now - TickRetention;
 
+        var tickFetchSw = System.Diagnostics.Stopwatch.StartNew();
         var ticksByProduct = await ohlcRepository.GetTicksForAggregationBulkAsync(productKeys, sinceCutoff, ct);
+        tickFetchSw.Stop();
+        var totalTicks = ticksByProduct.Values.Sum(v => v.Count);
+        logger.LogInformation("Aggregation tick fetch: {FetchMs}ms, {Ticks} ticks since {Cutoff:O}",
+            tickFetchSw.ElapsedMilliseconds, totalTicks, sinceCutoff);
+
         var newStates = new System.Collections.Concurrent.ConcurrentBag<EFOhlcAggregationState>();
 
         await Parallel.ForEachAsync(
@@ -134,7 +147,16 @@ public class OhlcAggregationService(
             });
 
         if (!newStates.IsEmpty)
+        {
+            var upsertSw = System.Diagnostics.Stopwatch.StartNew();
             await ohlcRepository.UpsertAggregationStatesAsync(newStates.ToList(), ct);
+            upsertSw.Stop();
+            logger.LogInformation("Aggregation watermark upsert: {UpsertMs}ms, {Count} states",
+                upsertSw.ElapsedMilliseconds, newStates.Count);
+        }
+
+        sw.Stop();
+        logger.LogInformation("Aggregation cycle done: {TotalMs}ms total", sw.ElapsedMilliseconds);
     }
 
     private async Task<EFOhlcAggregationState?> AggregateIntervalAsync(

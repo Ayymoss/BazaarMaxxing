@@ -65,6 +65,8 @@ public sealed partial class MarketInsightsService(
             if (_cachedInsights is not null && DateTime.UtcNow - _lastRefreshAt < RefreshThrottle)
                 return;
 
+            var refreshSw = System.Diagnostics.Stopwatch.StartNew();
+
             await using var scope = scopeFactory.CreateAsyncScope();
             var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
 
@@ -80,8 +82,15 @@ public sealed partial class MarketInsightsService(
                 .ToListAsync(ct);
 
             var productKeys = products.Select(p => p.ProductKey).ToList();
+            var candleFetchSw = System.Diagnostics.Stopwatch.StartNew();
             var candles15m = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.FifteenMinute, 2, ct);
             var candles1h = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.OneHour, 168, ct);
+            candleFetchSw.Stop();
+            logger.LogInformation(
+                "MarketInsights candle fetch: {FetchMs}ms, {Products} products → {Rows15m} 15m rows + {Rows1h} 1h rows",
+                candleFetchSw.ElapsedMilliseconds, productKeys.Count,
+                candles15m.Values.Sum(v => v.Count),
+                candles1h.Values.Sum(v => v.Count));
 
             var hotProducts = CalculateHotProducts(products, candles15m, now, _previousHotProductKeys);
             var volumeSurges = CalculateVolumeSurges(products, candles1h, now);
@@ -106,6 +115,9 @@ public sealed partial class MarketInsightsService(
                 newCount
             );
             _lastRefreshAt = now;
+            refreshSw.Stop();
+            logger.LogInformation("MarketInsights refresh total: {RefreshMs}ms ({Products} products)",
+                refreshSw.ElapsedMilliseconds, products.Count);
 
             LogInsightsRefreshed(
                 hotProducts.Count,

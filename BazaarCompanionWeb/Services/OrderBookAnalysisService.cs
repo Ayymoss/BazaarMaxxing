@@ -310,27 +310,43 @@ public sealed partial class OrderBookAnalysisService(
     {
         if (items.Count == 0) return;
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         const int chunkSize = 500;
         var now = DateTime.UtcNow;
+        var buildElapsedMs = 0L;
+        var dbElapsedMs = 0L;
+        var totalRows = 0;
 
         for (var i = 0; i < items.Count; i += chunkSize)
         {
             var chunk = items.Skip(i).Take(chunkSize).ToList();
             var allSnapshots = new List<EFOrderBookSnapshot>();
 
+            var buildSw = System.Diagnostics.Stopwatch.StartNew();
             foreach (var (productKey, bidBook, askBook) in chunk)
             {
                 var snapshots = BuildSnapshotEntities(productKey, bidBook, askBook, now);
                 allSnapshots.AddRange(snapshots);
             }
+            buildSw.Stop();
+            buildElapsedMs += buildSw.ElapsedMilliseconds;
 
             if (allSnapshots.Count > 0)
             {
+                var dbSw = System.Diagnostics.Stopwatch.StartNew();
                 await using var context = await contextFactory.CreateDbContextAsync(ct);
                 await context.OrderBookSnapshots.AddRangeAsync(allSnapshots, ct);
                 await context.SaveChangesAsync(ct);
+                dbSw.Stop();
+                dbElapsedMs += dbSw.ElapsedMilliseconds;
+                totalRows += allSnapshots.Count;
             }
         }
+
+        sw.Stop();
+        logger.LogInformation(
+            "OrderBookAnalysisService.StoreSnapshotsBatchAsync: {TotalMs}ms total ({BuildMs}ms build + {DbMs}ms DB), {Products} products → {Rows} rows",
+            sw.ElapsedMilliseconds, buildElapsedMs, dbElapsedMs, items.Count, totalRows);
     }
 
     private static List<EFOrderBookSnapshot> BuildSnapshotEntities(string productKey, List<Order> bidBook, List<Order> askBook, DateTime now)

@@ -12,6 +12,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
 {
     public async Task UpdateOrAddProductsAsync(List<EFProduct> products, CancellationToken cancellationToken)
     {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var existingProductNames = await context.Products
@@ -191,10 +192,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
                 }
             }
 
-            logger.LogInformation("Saving changes...");
             await context.SaveChangesAsync(cancellationToken);
-
-            logger.LogInformation("Commiting transaction...");
             await transaction.CommitAsync(cancellationToken);
         }
         catch (Exception e)
@@ -202,6 +200,9 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             logger.LogError(e, "Failure during transaction, reverted");
             await transaction.RollbackAsync(cancellationToken);
         }
+        sw.Stop();
+        logger.LogInformation("ProductRepository.UpdateOrAddProductsAsync: {ElapsedMs}ms, {Total} products",
+            sw.ElapsedMilliseconds, products.Count);
     }
 
     public async Task<List<Order>> GetOrderBookAsync(int marketDataId, CancellationToken cancellationToken)

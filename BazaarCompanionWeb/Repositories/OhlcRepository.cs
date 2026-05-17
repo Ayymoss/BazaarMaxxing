@@ -8,12 +8,13 @@ using NpgsqlTypes;
 
 namespace BazaarCompanionWeb.Repositories;
 
-public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOhlcRepository
+public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogger<OhlcRepository> logger) : IOhlcRepository
 {
     public async Task CopyTicksAsync(IReadOnlyList<EFPriceTick> ticks, CancellationToken ct = default)
     {
         if (ticks.Count == 0) return;
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         await using var context = await contextFactory.CreateDbContextAsync(ct);
         var conn = (NpgsqlConnection)context.Database.GetDbConnection();
         if (conn.State != System.Data.ConnectionState.Open)
@@ -36,6 +37,9 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
         }
 
         await importer.CompleteAsync(ct);
+        sw.Stop();
+        logger.LogInformation("OhlcRepository.CopyTicksAsync (binary COPY): {ElapsedMs}ms, {Rows} rows",
+            sw.ElapsedMilliseconds, ticks.Count);
     }
 
     public async Task<List<OhlcDataPoint>> GetCandlesAsync(
@@ -69,6 +73,8 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
 
         const int chunkSize = 500;
         var result = new Dictionary<string, List<OhlcDataPoint>>();
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        var totalRows = 0;
 
         for (var i = 0; i < productKeys.Count; i += chunkSize)
         {
@@ -83,6 +89,8 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
                 .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })
                 .ToListAsync(ct);
 
+            totalRows += rows.Count;
+
             foreach (var group in rows.GroupBy(r => r.ProductKey))
             {
                 var candles = group
@@ -93,6 +101,12 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
                 result[group.Key] = candles;
             }
         }
+
+        sw.Stop();
+        if (sw.ElapsedMilliseconds > 50 || totalRows > 5000)
+            logger.LogInformation(
+                "OhlcRepository.GetCandlesBulkAsync: {ElapsedMs}ms, {Products} keys, interval={Interval}, limit={Limit}, {Rows} rows",
+                sw.ElapsedMilliseconds, productKeys.Count, interval, limitPerProduct, totalRows);
 
         return result;
     }
@@ -141,6 +155,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
         if (productKeys.Count == 0)
             return new Dictionary<string, List<EFPriceTick>>();
 
+        var sw = System.Diagnostics.Stopwatch.StartNew();
         await using var context = await contextFactory.CreateDbContextAsync(ct);
 
         var ticks = await context.PriceTicks
@@ -150,6 +165,11 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .ThenBy(t => t.Timestamp)
             .ToListAsync(ct);
 
+        sw.Stop();
+        logger.LogInformation(
+            "OhlcRepository.GetTicksForAggregationBulkAsync: {ElapsedMs}ms, {Products} keys, since={Since:O}, {Ticks} ticks",
+            sw.ElapsedMilliseconds, productKeys.Count, since, ticks.Count);
+
         return ticks.GroupBy(t => t.ProductKey).ToDictionary(g => g.Key, g => g.ToList());
     }
 
@@ -157,6 +177,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
     {
         var candleList = candles.ToList();
         if (candleList.Count == 0) return;
+        var sw = System.Diagnostics.Stopwatch.StartNew();
 
         // PostgreSQL timestamp with time zone requires UTC; normalize any Unspecified to UTC
         foreach (var c in candleList)
@@ -207,6 +228,10 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
 
             await context.SaveChangesAsync(ct);
         }
+
+        sw.Stop();
+        logger.LogInformation("OhlcRepository.SaveCandlesAsync: {ElapsedMs}ms, {Rows} candles upserted",
+            sw.ElapsedMilliseconds, candleList.Count);
     }
 
     public async Task<DateTime?> GetLatestCandleTimeAsync(
