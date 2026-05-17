@@ -97,9 +97,24 @@ public class OhlcAggregationService(
     }
 
     /// <summary>
+    /// Short intervals that aggregate from raw ticks. OneDay/OneWeek are derived from candles instead
+    /// (see <see cref="BuildLongIntervalCandlesAsync"/>) so we never pull a multi-day tick window.
+    /// </summary>
+    private static readonly CandleInterval[] TickAggregatedIntervals =
+    [
+        CandleInterval.FiveMinute,
+        CandleInterval.FifteenMinute,
+        CandleInterval.OneHour,
+        CandleInterval.FourHour,
+    ];
+
+    /// <summary>
     /// Incremental aggregation: for each (product, interval) watermark, query ticks at or after
     /// the watermark's <c>LastSeenPeriodStart</c>, build candles for those periods, upsert, and
     /// advance the watermark. First-run (no watermark) falls back to a 7-day lookback.
+    ///
+    /// Only short intervals (5m, 15m, 1h, 4h) pull from ticks. OneDay/OneWeek are built from
+    /// already-aggregated 1h/1d candles in <see cref="BuildLongIntervalCandlesAsync"/>.
     /// </summary>
     private async Task AggregateAllCandlesAsync(IOhlcRepository ohlcRepository, CancellationToken ct)
     {
@@ -110,17 +125,29 @@ public class OhlcAggregationService(
         logger.LogInformation("Aggregation cycle start: {Products} products, {States} existing watermarks",
             productKeys.Count, states.Count);
 
-        var intervals = Enum.GetValues<CandleInterval>();
-
-        // Compute the earliest watermark across all (product, interval) — single bulk tick load.
-        DateTime sinceCutoff = now - TickRetention;
+        // Compute the earliest watermark across short-interval (product, interval) pairs.
+        // MIN gives us a single cutoff that covers all of them in one tick fetch.
+        // If any (product, interval) is missing a watermark, we fall back to the 7-day retention floor.
+        DateTime sinceCutoff = now;
+        var anyMissingWatermark = false;
         foreach (var key in productKeys)
-        foreach (var interval in intervals)
+        foreach (var interval in TickAggregatedIntervals)
         {
-            if (states.TryGetValue((key, interval), out var s) && s.LastSeenPeriodStart < sinceCutoff)
-                sinceCutoff = s.LastSeenPeriodStart;
+            if (states.TryGetValue((key, interval), out var s))
+            {
+                if (s.LastSeenPeriodStart < sinceCutoff) sinceCutoff = s.LastSeenPeriodStart;
+            }
+            else
+            {
+                anyMissingWatermark = true;
+            }
         }
-        // sinceCutoff floor at now - retention to avoid pulling beyond what we keep.
+        if (anyMissingWatermark)
+        {
+            // At least one (product, interval) has never been aggregated — pull from retention floor.
+            sinceCutoff = now - TickRetention;
+        }
+        // Clamp: never pull further back than retention.
         if (sinceCutoff < now - TickRetention) sinceCutoff = now - TickRetention;
 
         var tickFetchSw = System.Diagnostics.Stopwatch.StartNew();
@@ -138,7 +165,7 @@ public class OhlcAggregationService(
             async (productKey, cancellationToken) =>
             {
                 var ticks = ticksByProduct.GetValueOrDefault(productKey) ?? [];
-                foreach (var interval in intervals)
+                foreach (var interval in TickAggregatedIntervals)
                 {
                     var state = states.GetValueOrDefault((productKey, interval));
                     var newState = await AggregateIntervalAsync(ohlcRepository, productKey, interval, state, ticks, now, cancellationToken);
@@ -155,8 +182,106 @@ public class OhlcAggregationService(
                 upsertSw.ElapsedMilliseconds, newStates.Count);
         }
 
+        // Build long-interval candles (1d from 1h, 1w from 1d) without touching the tick table.
+        await BuildLongIntervalCandlesAsync(ct);
+
         sw.Stop();
         logger.LogInformation("Aggregation cycle done: {TotalMs}ms total", sw.ElapsedMilliseconds);
+    }
+
+    /// <summary>
+    /// Derives OneDay candles from OneHour, and OneWeek candles from OneDay. Bounded scope:
+    /// only rebuilds the most recent days/weeks so the work is cheap and bounded by interval count,
+    /// not product count × tick density.
+    /// </summary>
+    private async Task BuildLongIntervalCandlesAsync(CancellationToken ct)
+    {
+        const int recentDaysToRebuild = 3;   // current + 2 prior (cheap insurance against gaps)
+        const int recentWeeksToRebuild = 2;  // current + prior
+
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        using var scope = scopeFactory.CreateScope();
+        var contextFactory = scope.ServiceProvider.GetRequiredService<IDbContextFactory<DataContext>>();
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        var now = DateTime.UtcNow;
+        var daySince = now.Date.AddDays(-recentDaysToRebuild);
+        var weekSince = now.Date.AddDays(-recentWeeksToRebuild * 7);
+
+        // --- OneDay from OneHour ---
+        var hourly = await context.OhlcCandles
+            .AsNoTracking()
+            .Where(c => c.Interval == CandleInterval.OneHour && c.PeriodStart >= daySince)
+            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })
+            .ToListAsync(ct);
+
+        var dayCandles = hourly
+            .GroupBy(h => new { h.ProductKey, Day = h.PeriodStart.Date })
+            .Select(g =>
+            {
+                var ordered = g.OrderBy(h => h.PeriodStart).ToList();
+                var spreads = ordered.Where(h => h.Spread > 0).Select(h => h.Spread).ToList();
+                return new EFOhlcCandle
+                {
+                    ProductKey = g.Key.ProductKey,
+                    Interval = CandleInterval.OneDay,
+                    PeriodStart = DateTime.SpecifyKind(g.Key.Day, DateTimeKind.Utc),
+                    Open = ordered.First().Open,
+                    High = ordered.Max(h => h.High),
+                    Low = ordered.Min(h => h.Low),
+                    Close = ordered.Last().Close,
+                    AskClose = ordered.Last().AskClose,
+                    Volume = ordered.Sum(h => h.Volume),
+                    Spread = spreads.Count > 0 ? spreads.Average() : 0,
+                };
+            })
+            .ToList();
+
+        // --- OneWeek from OneDay ---
+        var daily = await context.OhlcCandles
+            .AsNoTracking()
+            .Where(c => c.Interval == CandleInterval.OneDay && c.PeriodStart >= weekSince)
+            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })
+            .ToListAsync(ct);
+
+        var weekCandles = daily
+            .GroupBy(d => new { d.ProductKey, WeekStart = StartOfIsoWeek(d.PeriodStart) })
+            .Select(g =>
+            {
+                var ordered = g.OrderBy(d => d.PeriodStart).ToList();
+                var spreads = ordered.Where(d => d.Spread > 0).Select(d => d.Spread).ToList();
+                return new EFOhlcCandle
+                {
+                    ProductKey = g.Key.ProductKey,
+                    Interval = CandleInterval.OneWeek,
+                    PeriodStart = g.Key.WeekStart,
+                    Open = ordered.First().Open,
+                    High = ordered.Max(d => d.High),
+                    Low = ordered.Min(d => d.Low),
+                    Close = ordered.Last().Close,
+                    AskClose = ordered.Last().AskClose,
+                    Volume = ordered.Sum(d => d.Volume),
+                    Spread = spreads.Count > 0 ? spreads.Average() : 0,
+                };
+            })
+            .ToList();
+
+        var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
+        if (dayCandles.Count > 0) await ohlcRepository.SaveCandlesAsync(dayCandles, ct);
+        if (weekCandles.Count > 0) await ohlcRepository.SaveCandlesAsync(weekCandles, ct);
+
+        sw.Stop();
+        logger.LogInformation(
+            "Long-interval rebuild: {ElapsedMs}ms — {Days} daily candles from {Hourly} hourly rows, {Weeks} weekly candles from {Daily} daily rows",
+            sw.ElapsedMilliseconds, dayCandles.Count, hourly.Count, weekCandles.Count, daily.Count);
+    }
+
+    private static DateTime StartOfIsoWeek(DateTime date)
+    {
+        // ISO week starts on Monday. DayOfWeek: Sun=0, Mon=1 … Sat=6.
+        var dayOfWeek = (int)date.DayOfWeek;
+        var offset = dayOfWeek == 0 ? 6 : dayOfWeek - 1; // Sunday → -6, Monday → 0
+        return DateTime.SpecifyKind(date.Date.AddDays(-offset), DateTimeKind.Utc);
     }
 
     private async Task<EFOhlcAggregationState?> AggregateIntervalAsync(

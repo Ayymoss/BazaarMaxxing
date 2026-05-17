@@ -83,8 +83,11 @@ public sealed partial class MarketInsightsService(
 
             var productKeys = products.Select(p => p.ProductKey).ToList();
             var candleFetchSw = System.Diagnostics.Stopwatch.StartNew();
+            // 48h covers all downstream consumers — surges/spreads/firesales/movers gate on >=24 candles.
+            // Was 168h (7d), tripling DB rows for no signal benefit on these short-window heuristics.
+            const int hourlyLookback = 48;
             var candles15m = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.FifteenMinute, 2, ct);
-            var candles1h = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.OneHour, 168, ct);
+            var candles1h = await ohlcRepository.GetCandlesBulkAsync(productKeys, CandleInterval.OneHour, hourlyLookback, ct);
             candleFetchSw.Stop();
             logger.LogInformation(
                 "MarketInsights candle fetch: {FetchMs}ms, {Products} products → {Rows15m} 15m rows + {Rows1h} 1h rows",

@@ -168,7 +168,9 @@ public class HyPixelService(
         }
         else
         {
-            const int lookbackHours = 7 * 24;
+            // 48h gives ~48 hourly samples — well above MinCandlesForAnalysis (6) and MinSamplesForZScore (10).
+            // Was 168h (7d); the longer window didn't materially improve statistics but tripled DB load.
+            const int lookbackHours = 48;
             var candleSw = System.Diagnostics.Stopwatch.StartNew();
             var candlesByProduct =
                 await ohlcRepository.GetCandlesBulkAsync(changedKeys, CandleInterval.OneHour, lookbackHours, cancellationToken);
