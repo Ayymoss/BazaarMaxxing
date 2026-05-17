@@ -311,64 +311,66 @@ public class OhlcAggregationService(
             .Where(t => t.Timestamp >= cutoff)
             .OrderBy(t => t.Timestamp)
             .ToList();
-        if (ticks.Count == 0)
+
+        if (ticks.Count > 0)
         {
-            // Quiet product: no ticks in window. Still advance watermark to the current period
-            // so this product doesn't drag the bulk-fetch MIN cutoff backward indefinitely.
-            // If a tick arrives in the current period later, the cutoff still catches it.
-            if (state == null || state.LastSeenPeriodStart < currentPeriodStart)
+            var grouped = ticks.GroupBy(t => t.Timestamp.GetPeriodStart(interval)).ToList();
+            if (grouped.Count > 0)
             {
-                return new EFOhlcAggregationState
+                var candles = grouped.Select(g =>
                 {
-                    ProductKey = productKey,
-                    Interval = interval,
-                    LastSeenPeriodStart = currentPeriodStart,
-                    UpdatedAt = now,
-                };
+                    var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
+                    var totalVolume = orderedTicks.Sum(t => t.BidVolume + t.AskVolume);
+
+                    var spreads = orderedTicks
+                        .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
+                        .Select(t => t.AskPrice - t.BidPrice)
+                        .Where(s => s > 0)
+                        .ToList();
+                    var avgSpread = spreads.Count > 0 ? spreads.Average() : 0;
+
+                    return new EFOhlcCandle
+                    {
+                        ProductKey = productKey,
+                        Interval = interval,
+                        PeriodStart = g.Key,
+                        Open = orderedTicks.First().BidPrice,
+                        High = orderedTicks.Max(t => t.BidPrice),
+                        Low = orderedTicks.Min(t => t.BidPrice),
+                        Close = orderedTicks.Last().BidPrice,
+                        AskClose = orderedTicks.Last().AskPrice,
+                        Volume = totalVolume,
+                        Spread = avgSpread,
+                    };
+                }).ToList();
+
+                await ohlcRepository.SaveCandlesAsync(candles, ct);
             }
-            return null;
         }
 
-        var grouped = ticks.GroupBy(t => t.Timestamp.GetPeriodStart(interval)).ToList();
-        if (grouped.Count == 0) return null;
-
-        var candles = grouped.Select(g =>
+        // Always advance watermark to currentPeriodStart (when greater than stored), regardless of
+        // whether ticks were found this cycle. Without this, products that went quiet *after* a
+        // prior cycle stay stuck on an old watermark because every cycle re-fetches their old ticks
+        // and re-sets the watermark to the same old maxPeriod. Result: MIN cutoff never advances
+        // and the bulk tick fetch keeps pulling days of data.
+        //
+        // Setting watermark = currentPeriodStart is safe because:
+        //   1. The current open period gets re-aggregated next cycle (cutoff = currentPeriodStart,
+        //      so ticks >= currentPeriodStart are fetched). SaveCandlesAsync upserts → idempotent.
+        //   2. For active products, maxPeriod == currentPeriodStart anyway (their latest tick is in
+        //      the open period), so this matches the prior behaviour.
+        //   3. For quiet products, watermark advances unconditionally → MIN cutoff progresses.
+        if (state == null || state.LastSeenPeriodStart < currentPeriodStart)
         {
-            var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
-            var totalVolume = orderedTicks.Sum(t => t.BidVolume + t.AskVolume);
-
-            var spreads = orderedTicks
-                .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
-                .Select(t => t.AskPrice - t.BidPrice)
-                .Where(s => s > 0)
-                .ToList();
-            var avgSpread = spreads.Count > 0 ? spreads.Average() : 0;
-
-            return new EFOhlcCandle
+            return new EFOhlcAggregationState
             {
                 ProductKey = productKey,
                 Interval = interval,
-                PeriodStart = g.Key,
-                Open = orderedTicks.First().BidPrice,
-                High = orderedTicks.Max(t => t.BidPrice),
-                Low = orderedTicks.Min(t => t.BidPrice),
-                Close = orderedTicks.Last().BidPrice,
-                AskClose = orderedTicks.Last().AskPrice,
-                Volume = totalVolume,
-                Spread = avgSpread,
+                LastSeenPeriodStart = currentPeriodStart,
+                UpdatedAt = now,
             };
-        }).ToList();
-
-        await ohlcRepository.SaveCandlesAsync(candles, ct);
-
-        var maxPeriod = grouped.Max(g => g.Key);
-        return new EFOhlcAggregationState
-        {
-            ProductKey = productKey,
-            Interval = interval,
-            LastSeenPeriodStart = maxPeriod,
-            UpdatedAt = now,
-        };
+        }
+        return null;
     }
 
     /// <summary>
