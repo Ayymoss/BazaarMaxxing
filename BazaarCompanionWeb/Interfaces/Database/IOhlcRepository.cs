@@ -5,7 +5,11 @@ namespace BazaarCompanionWeb.Interfaces.Database;
 
 public interface IOhlcRepository
 {
-    Task RecordTicksAsync(IEnumerable<(string ProductKey, double BidPrice, double AskPrice, long BidVolume, long AskVolume)> ticks, CancellationToken ct = default);
+    /// <summary>
+    /// Bulk inserts pre-built EFPriceTick rows via Npgsql binary COPY. Drops EF change-tracking
+    /// overhead and is ~10-50x faster than AddRange+SaveChanges for large batches.
+    /// </summary>
+    Task CopyTicksAsync(IReadOnlyList<EFPriceTick> ticks, CancellationToken ct = default);
     Task<List<OhlcDataPoint>> GetCandlesAsync(string productKey, CandleInterval interval, int limit = 100, CancellationToken ct = default);
 
     /// <summary>
@@ -26,6 +30,16 @@ public interface IOhlcRepository
     Task<IReadOnlyDictionary<string, List<EFPriceTick>>> GetTicksForAggregationBulkAsync(IReadOnlyList<string> productKeys, DateTime since, CancellationToken ct = default);
     Task SaveCandlesAsync(IEnumerable<EFOhlcCandle> candles, CancellationToken ct = default);
     Task<DateTime?> GetLatestCandleTimeAsync(string productKey, CandleInterval interval, CancellationToken ct = default);
+
+    /// <summary>
+    /// Loads all watermarks for incremental aggregation. Returns dictionary keyed by (ProductKey, Interval).
+    /// </summary>
+    Task<IReadOnlyDictionary<(string, CandleInterval), EFOhlcAggregationState>> GetAggregationStatesAsync(CancellationToken ct = default);
+
+    /// <summary>
+    /// Bulk upserts watermarks. Existing rows are updated; new ones inserted.
+    /// </summary>
+    Task UpsertAggregationStatesAsync(IReadOnlyList<EFOhlcAggregationState> states, CancellationToken ct = default);
     Task<List<string>> GetAllProductKeysAsync(CancellationToken ct = default);
     Task PruneOldTicksAsync(TimeSpan retention, CancellationToken ct = default);
     Task PruneOldCandlesAsync(CancellationToken ct = default);

@@ -12,6 +12,7 @@ using BazaarCompanionWeb.Models.Pagination.MetaPaginations;
 using BazaarCompanionWeb.Queries;
 using BazaarCompanionWeb.Repositories;
 using BazaarCompanionWeb.Services;
+using BazaarCompanionWeb.Services.Ingestion;
 using BazaarCompanionWeb.Utilities;
 using BazaarCompanionWeb.Hubs;
 using BazaarCompanionWeb.Middleware;
@@ -226,7 +227,7 @@ public class Program
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
         builder.Services.AddSingleton<LiveCandleTracker>();
-        builder.Services.AddSingleton<IBazaarRunCache, BazaarRunCache>();
+        builder.Services.AddSingleton<BazaarSnapshotStore>();
         builder.Services.AddSingleton<LastTradedPriceService>();
 
         builder.Services.AddScoped<HyPixelService>();
@@ -243,5 +244,6 @@ public class Program
         builder.Services.AddScoped<IndexAggregationService>();
 
         builder.Services.AddHostedService<OhlcAggregationService>();
+        builder.Services.AddHostedService<FlushService>();
     }
 }

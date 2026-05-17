@@ -3,33 +3,39 @@ using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
 using Microsoft.EntityFrameworkCore;
+using Npgsql;
+using NpgsqlTypes;
 
 namespace BazaarCompanionWeb.Repositories;
 
 public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOhlcRepository
 {
-    public async Task RecordTicksAsync(
-        IEnumerable<(string ProductKey, double BidPrice, double AskPrice, long BidVolume, long AskVolume)> ticks,
-        CancellationToken ct = default)
+    public async Task CopyTicksAsync(IReadOnlyList<EFPriceTick> ticks, CancellationToken ct = default)
     {
+        if (ticks.Count == 0) return;
+
         await using var context = await contextFactory.CreateDbContextAsync(ct);
-        var timestamp = DateTime.UtcNow;
+        var conn = (NpgsqlConnection)context.Database.GetDbConnection();
+        if (conn.State != System.Data.ConnectionState.Open)
+            await conn.OpenAsync(ct);
 
-        List<EFPriceTick> entities =
-        [
-            ..ticks.Select(t => new EFPriceTick
-            {
-                ProductKey = t.ProductKey,
-                BidPrice = t.BidPrice,
-                AskPrice = t.AskPrice,
-                Timestamp = timestamp,
-                BidVolume = t.BidVolume,
-                AskVolume = t.AskVolume
-            })
-        ];
+        await using var importer = await conn.BeginBinaryImportAsync(
+            "COPY \"EFPriceTicks\" (\"ProductKey\", \"BidPrice\", \"AskPrice\", \"Timestamp\", \"BidVolume\", \"AskVolume\") FROM STDIN (FORMAT BINARY)",
+            ct);
 
-        await context.PriceTicks.AddRangeAsync(entities, ct);
-        await context.SaveChangesAsync(ct);
+        foreach (var t in ticks)
+        {
+            await importer.StartRowAsync(ct);
+            await importer.WriteAsync(t.ProductKey, NpgsqlDbType.Varchar, ct);
+            await importer.WriteAsync(t.BidPrice, NpgsqlDbType.Double, ct);
+            await importer.WriteAsync(t.AskPrice, NpgsqlDbType.Double, ct);
+            var ts = t.Timestamp.Kind == DateTimeKind.Utc ? t.Timestamp : DateTime.SpecifyKind(t.Timestamp, DateTimeKind.Utc);
+            await importer.WriteAsync(ts, NpgsqlDbType.TimestampTz, ct);
+            await importer.WriteAsync(t.BidVolume, NpgsqlDbType.Bigint, ct);
+            await importer.WriteAsync(t.AskVolume, NpgsqlDbType.Bigint, ct);
+        }
+
+        await importer.CompleteAsync(ct);
     }
 
     public async Task<List<OhlcDataPoint>> GetCandlesAsync(
@@ -216,6 +222,53 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory) : IOh
             .OrderByDescending(c => c.PeriodStart)
             .Select(c => (DateTime?)c.PeriodStart)
             .FirstOrDefaultAsync(ct);
+    }
+
+    public async Task<IReadOnlyDictionary<(string, CandleInterval), EFOhlcAggregationState>> GetAggregationStatesAsync(CancellationToken ct = default)
+    {
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var rows = await context.OhlcAggregationStates.AsNoTracking().ToListAsync(ct);
+        return rows.ToDictionary(s => (s.ProductKey, s.Interval));
+    }
+
+    public async Task UpsertAggregationStatesAsync(IReadOnlyList<EFOhlcAggregationState> states, CancellationToken ct = default)
+    {
+        if (states.Count == 0) return;
+
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var keys = states.Select(s => (s.ProductKey, s.Interval)).ToHashSet();
+        var existing = await context.OhlcAggregationStates
+            .Where(s => states.Select(x => x.ProductKey).Contains(s.ProductKey))
+            .ToListAsync(ct);
+        var existingByKey = existing.ToDictionary(s => (s.ProductKey, s.Interval));
+
+        foreach (var incoming in states)
+        {
+            var ts = incoming.LastSeenPeriodStart.Kind == DateTimeKind.Utc
+                ? incoming.LastSeenPeriodStart
+                : DateTime.SpecifyKind(incoming.LastSeenPeriodStart, DateTimeKind.Utc);
+            var updatedAt = incoming.UpdatedAt.Kind == DateTimeKind.Utc
+                ? incoming.UpdatedAt
+                : DateTime.SpecifyKind(incoming.UpdatedAt, DateTimeKind.Utc);
+
+            if (existingByKey.TryGetValue((incoming.ProductKey, incoming.Interval), out var current))
+            {
+                current.LastSeenPeriodStart = ts;
+                current.UpdatedAt = updatedAt;
+            }
+            else
+            {
+                await context.OhlcAggregationStates.AddAsync(new EFOhlcAggregationState
+                {
+                    ProductKey = incoming.ProductKey,
+                    Interval = incoming.Interval,
+                    LastSeenPeriodStart = ts,
+                    UpdatedAt = updatedAt,
+                }, ct);
+            }
+        }
+
+        await context.SaveChangesAsync(ct);
     }
 
     public async Task<List<string>> GetAllProductKeysAsync(CancellationToken ct = default)

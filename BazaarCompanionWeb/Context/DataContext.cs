@@ -11,6 +11,7 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
     public DbSet<EFProduct> Products { get; set; }
     public DbSet<EFMarketData> MarketData { get; set; }
     public DbSet<EFOrderBookSnapshot> OrderBookSnapshots { get; set; }
+    public DbSet<EFOhlcAggregationState> OhlcAggregationStates { get; set; }
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -19,6 +20,7 @@ public class DataContext(DbContextOptions<DataContext> options) : DbContext(opti
         modelBuilder.Entity<EFPriceSnapshot>().ToTable("EFPriceSnapshots");
         modelBuilder.Entity<EFPriceTick>().ToTable("EFPriceTicks");
         modelBuilder.Entity<EFOhlcCandle>().ToTable("EFOhlcCandles");
+        modelBuilder.Entity<EFOhlcAggregationState>().ToTable("EFOhlcAggregationStates");
 
         modelBuilder.Entity<EFMarketData>(x =>
         {

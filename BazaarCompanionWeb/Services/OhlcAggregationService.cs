@@ -92,12 +92,32 @@ public class OhlcAggregationService(
         logger.LogInformation("Seeded {Count} daily candles", candles.Count);
     }
 
+    /// <summary>
+    /// Incremental aggregation: for each (product, interval) watermark, query ticks at or after
+    /// the watermark's <c>LastSeenPeriodStart</c>, build candles for those periods, upsert, and
+    /// advance the watermark. First-run (no watermark) falls back to a 7-day lookback.
+    /// </summary>
     private async Task AggregateAllCandlesAsync(IOhlcRepository ohlcRepository, CancellationToken ct)
     {
         var productKeys = await ohlcRepository.GetAllProductKeysAsync(ct);
+        var states = await ohlcRepository.GetAggregationStatesAsync(ct);
         var now = DateTime.UtcNow;
-        var since = now - TickRetention;
-        var ticksByProduct = await ohlcRepository.GetTicksForAggregationBulkAsync(productKeys, since, ct);
+
+        var intervals = Enum.GetValues<CandleInterval>();
+
+        // Compute the earliest watermark across all (product, interval) — single bulk tick load.
+        DateTime sinceCutoff = now - TickRetention;
+        foreach (var key in productKeys)
+        foreach (var interval in intervals)
+        {
+            if (states.TryGetValue((key, interval), out var s) && s.LastSeenPeriodStart < sinceCutoff)
+                sinceCutoff = s.LastSeenPeriodStart;
+        }
+        // sinceCutoff floor at now - retention to avoid pulling beyond what we keep.
+        if (sinceCutoff < now - TickRetention) sinceCutoff = now - TickRetention;
+
+        var ticksByProduct = await ohlcRepository.GetTicksForAggregationBulkAsync(productKeys, sinceCutoff, ct);
+        var newStates = new System.Collections.Concurrent.ConcurrentBag<EFOhlcAggregationState>();
 
         await Parallel.ForEachAsync(
             productKeys,
@@ -105,80 +125,73 @@ public class OhlcAggregationService(
             async (productKey, cancellationToken) =>
             {
                 var ticks = ticksByProduct.GetValueOrDefault(productKey) ?? [];
-                foreach (var interval in Enum.GetValues<CandleInterval>())
+                foreach (var interval in intervals)
                 {
-                    await AggregateIntervalAsync(ohlcRepository, productKey, interval, cancellationToken, ticks);
+                    var state = states.GetValueOrDefault((productKey, interval));
+                    var newState = await AggregateIntervalAsync(ohlcRepository, productKey, interval, state, ticks, now, cancellationToken);
+                    if (newState is not null) newStates.Add(newState);
                 }
             });
+
+        if (!newStates.IsEmpty)
+            await ohlcRepository.UpsertAggregationStatesAsync(newStates.ToList(), ct);
     }
 
-    private async Task AggregateIntervalAsync(IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
-        CancellationToken ct, List<EFPriceTick>? preloadedTicks = null)
+    private async Task<EFOhlcAggregationState?> AggregateIntervalAsync(
+        IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
+        EFOhlcAggregationState? state, List<EFPriceTick> preloadedTicks, DateTime now,
+        CancellationToken ct)
     {
-        var now = DateTime.UtcNow;
+        // Watermark cutoff: from the period we last touched (re-query the current open period),
+        // or 7 days back on first run.
+        var cutoff = state?.LastSeenPeriodStart ?? (now - TickRetention);
 
-        DateTime lookbackStart;
-        if (interval is CandleInterval.OneDay or CandleInterval.OneWeek)
-            lookbackStart = now - TickRetention;
-        else
-        {
-            var latestCandle = await ohlcRepository.GetLatestCandleTimeAsync(productKey, interval, ct);
-            lookbackStart = latestCandle ?? now.AddDays(-7);
-        }
-
-        List<EFPriceTick> ticks;
-        if (preloadedTicks is { Count: > 0 })
-        {
-            ticks = preloadedTicks.Where(t => t.Timestamp >= lookbackStart).OrderBy(t => t.Timestamp).ToList();
-        }
-        else
-        {
-            ticks = await ohlcRepository.GetTicksForAggregationAsync(productKey, lookbackStart, ct);
-        }
-
-        if (ticks.Count is 0) return;
-
-        // Group ticks into period buckets
-        var grouped = ticks
-            .GroupBy(t => t.Timestamp.GetPeriodStart(interval))
+        var ticks = preloadedTicks
+            .Where(t => t.Timestamp >= cutoff)
+            .OrderBy(t => t.Timestamp)
             .ToList();
+        if (ticks.Count == 0) return null;
 
-        if (grouped.Count is 0) return;
+        var grouped = ticks.GroupBy(t => t.Timestamp.GetPeriodStart(interval)).ToList();
+        if (grouped.Count == 0) return null;
 
-        List<EFOhlcCandle> candles =
-        [
-            ..grouped.Select(g =>
+        var candles = grouped.Select(g =>
+        {
+            var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
+            var totalVolume = orderedTicks.Sum(t => t.BidVolume + t.AskVolume);
+
+            var spreads = orderedTicks
+                .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
+                .Select(t => t.AskPrice - t.BidPrice)
+                .Where(s => s > 0)
+                .ToList();
+            var avgSpread = spreads.Count > 0 ? spreads.Average() : 0;
+
+            return new EFOhlcCandle
             {
-                var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
-                var totalVolume = orderedTicks
-                    .Sum(t => t.BidVolume + t.AskVolume);
-
-                // Calculate average spread (AskPrice - BidPrice) for the period
-                // Ask (Seller's Price) is typically higher than Bid (Buyer's Price)
-                var spreads = orderedTicks
-                    .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
-                    .Select(t => t.AskPrice - t.BidPrice)
-                    .Where(s => s > 0)
-                    .ToList();
-                var avgSpread = spreads.Count > 0 ? spreads.Average() : (double?)null;
-
-                return new EFOhlcCandle
-                {
-                    ProductKey = productKey,
-                    Interval = interval,
-                    PeriodStart = g.Key,
-                    Open = orderedTicks.First().BidPrice,
-                    High = orderedTicks.Max(t => t.BidPrice),
-                    Low = orderedTicks.Min(t => t.BidPrice),
-                    Close = orderedTicks.Last().BidPrice,
-                    AskClose = orderedTicks.Last().AskPrice,
-                    Volume = totalVolume,
-                    Spread = avgSpread ?? 0
-                };
-            })
-        ];
+                ProductKey = productKey,
+                Interval = interval,
+                PeriodStart = g.Key,
+                Open = orderedTicks.First().BidPrice,
+                High = orderedTicks.Max(t => t.BidPrice),
+                Low = orderedTicks.Min(t => t.BidPrice),
+                Close = orderedTicks.Last().BidPrice,
+                AskClose = orderedTicks.Last().AskPrice,
+                Volume = totalVolume,
+                Spread = avgSpread,
+            };
+        }).ToList();
 
         await ohlcRepository.SaveCandlesAsync(candles, ct);
+
+        var maxPeriod = grouped.Max(g => g.Key);
+        return new EFOhlcAggregationState
+        {
+            ProductKey = productKey,
+            Interval = interval,
+            LastSeenPeriodStart = maxPeriod,
+            UpdatedAt = now,
+        };
     }
 
     /// <summary>

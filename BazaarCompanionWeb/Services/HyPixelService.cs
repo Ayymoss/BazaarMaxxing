@@ -8,6 +8,7 @@ using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Models.Api.Bazaar;
 using BazaarCompanionWeb.Models.Api.Items;
+using BazaarCompanionWeb.Services.Ingestion;
 using BazaarCompanionWeb.Utilities;
 using Humanizer;
 using Item = BazaarCompanionWeb.Models.Item;
@@ -16,15 +17,13 @@ namespace BazaarCompanionWeb.Services;
 
 public class HyPixelService(
     IHyPixelApi hyPixelApi,
-    IProductRepository productRepository,
     IOhlcRepository ohlcRepository,
     IOpportunityScoringService opportunityScoringService,
     MarketInsightsService marketInsightsService,
-    OrderBookAnalysisService orderBookAnalysisService,
     IHubContext<ProductHub> hubContext,
     TimeCache timeCache,
     LiveCandleTracker liveCandleTracker,
-    IBazaarRunCache bazaarRunCache,
+    BazaarSnapshotStore snapshotStore,
     LastTradedPriceService lastTradedPriceService,
     ILogger<HyPixelService> logger)
 {
@@ -45,7 +44,9 @@ public class HyPixelService(
                 ef.Meta.SuggestedBidVolume.Value, ef.Meta.SuggestedBidPrice ?? 0, ef.Meta.SuggestedAskPrice ?? 0,
                 ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
                 ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
-        bazaarRunCache.Update(stateByProduct, scoresByProduct);
+        // Splat into RAM store. Flusher (FlushService) drains every ~10min and writes to DB.
+        var storeChanged = snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow);
+        logger.LogDebug("SnapshotStore: ingested {Total} products, {Changed} marked dirty", productList.Count, storeChanged.Count);
 
         // Compute LTP estimates for ALL products (not just changed — volume can shift without price changing)
         var ltpByProduct = new Dictionary<string, double?>();
@@ -55,34 +56,11 @@ public class HyPixelService(
                 p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, p.Bid.CurrentVolume, p.Ask.CurrentVolume);
         }
 
-        await productRepository.UpdateOrAddProductsAsync(mappedProducts, cancellationToken);
-
-        var ticks = productList.Select(p => (
-            p.ItemId,
-            p.Bid.OrderPrice,
-            p.Ask.OrderPrice,
-            (long)p.Bid.CurrentVolume,
-            (long)p.Ask.CurrentVolume
-        ));
-        await ohlcRepository.RecordTicksAsync(ticks, cancellationToken);
-
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
 
         await marketInsightsService.RefreshInsightsAsync(cancellationToken);
 
         var changedSet = changedKeys.ToHashSet();
-        var snapshotItems = productList.Zip(mappedProducts)
-            .Where(z => changedSet.Contains(z.First.ItemId))
-            .Select(z =>
-            {
-                var (product, efProduct) = z;
-                var bidBook = product.Bid.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList();
-                var askBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList();
-                return (efProduct.ProductKey, bidBook, askBook);
-            }).ToList();
-        if (snapshotItems.Count > 0)
-            await orderBookAnalysisService.StoreSnapshotsBatchAsync(snapshotItems, cancellationToken);
-
         var broadcastItems = productList.Zip(mappedProducts).Where(z => changedSet.Contains(z.First.ItemId)).ToList();
         await Parallel.ForEachAsync(
             broadcastItems,
@@ -156,7 +134,7 @@ public class HyPixelService(
                 b.Ticker.TotalBidVolume, b.Ticker.TotalAskVolume);
         });
 
-        var changedKeys = bazaarRunCache.GetChangedProductKeys(currentState);
+        var changedKeys = snapshotStore.DetectChanges(currentState);
         logger.LogDebug("Detected {ChangedCount} changed products out of {TotalCount} total products", changedKeys.Count, bazaarList.Count);
 
         IReadOnlyList<ScoringResult> scoringResults;
@@ -242,7 +220,7 @@ public class HyPixelService(
             }
             else
             {
-                var cached = bazaarRunCache.GetCachedScores(bazaar.ProductId);
+                var cached = snapshotStore.GetCachedScores(bazaar.ProductId);
                 if (cached is not null)
                 {
                     flipScore = cached.FlipOpportunityScore;

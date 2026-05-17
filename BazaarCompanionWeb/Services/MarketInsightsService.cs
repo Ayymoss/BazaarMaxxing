@@ -25,7 +25,9 @@ public sealed partial class MarketInsightsService(
     private const int MaxInsightsPerCategory = 10;
 
     // Cache infrastructure
+    private static readonly TimeSpan RefreshThrottle = TimeSpan.FromMinutes(5);
     private MarketInsights? _cachedInsights;
+    private DateTime _lastRefreshAt = DateTime.MinValue;
     private readonly HashSet<string> _previousHotProductKeys = [];
     private readonly SemaphoreSlim _calculationLock = new(1, 1);
 
@@ -46,6 +48,11 @@ public sealed partial class MarketInsightsService(
     /// </summary>
     public async Task RefreshInsightsAsync(CancellationToken ct = default)
     {
+        // Throttle: insights recompute is expensive (full product load + candles for 1600+ keys).
+        // Poll cadence is ~1min but the underlying signals don't change meaningfully sub-minute.
+        if (_cachedInsights is not null && DateTime.UtcNow - _lastRefreshAt < RefreshThrottle)
+            return;
+
         if (!await _calculationLock.WaitAsync(TimeSpan.FromSeconds(5), ct))
         {
             LogRefreshSkipped();
@@ -54,6 +61,10 @@ public sealed partial class MarketInsightsService(
 
         try
         {
+            // Re-check under lock — another caller may have refreshed while we waited.
+            if (_cachedInsights is not null && DateTime.UtcNow - _lastRefreshAt < RefreshThrottle)
+                return;
+
             await using var scope = scopeFactory.CreateAsyncScope();
             var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
 
@@ -94,6 +105,7 @@ public sealed partial class MarketInsightsService(
                 now,
                 newCount
             );
+            _lastRefreshAt = now;
 
             LogInsightsRefreshed(
                 hotProducts.Count,
