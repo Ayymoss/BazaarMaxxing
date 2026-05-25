@@ -72,6 +72,20 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
         if (productKeys.Count == 0)
             return new Dictionary<string, List<OhlcDataPoint>>();
 
+        // Push a time cutoff into the SQL WHERE so we don't pull the entire history per product
+        // and then trim client-side. 2x safety margin covers gaps / carry-forward candles.
+        var intervalSpan = interval switch
+        {
+            CandleInterval.FiveMinute => TimeSpan.FromMinutes(5),
+            CandleInterval.FifteenMinute => TimeSpan.FromMinutes(15),
+            CandleInterval.OneHour => TimeSpan.FromHours(1),
+            CandleInterval.FourHour => TimeSpan.FromHours(4),
+            CandleInterval.OneDay => TimeSpan.FromDays(1),
+            CandleInterval.OneWeek => TimeSpan.FromDays(7),
+            _ => TimeSpan.FromHours(1)
+        };
+        var cutoff = DateTime.UtcNow - TimeSpan.FromTicks(intervalSpan.Ticks * limitPerProduct * 2);
+
         const int chunkSize = 500;
         var result = new Dictionary<string, List<OhlcDataPoint>>();
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -84,7 +98,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
 
             var rows = await context.OhlcCandles
                 .AsNoTracking()
-                .Where(c => chunk.Contains(c.ProductKey) && c.Interval == interval)
+                .Where(c => chunk.Contains(c.ProductKey) && c.Interval == interval && c.PeriodStart >= cutoff)
                 .OrderBy(c => c.ProductKey)
                 .ThenByDescending(c => c.PeriodStart)
                 .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })

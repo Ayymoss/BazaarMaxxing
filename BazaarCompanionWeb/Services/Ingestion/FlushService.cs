@@ -58,11 +58,13 @@ public sealed class FlushService(
         var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
         var productRepository = scope.ServiceProvider.GetRequiredService<IProductRepository>();
 
-        if (snapshot.ChangedTicks.Count > 0)
-            await ohlcRepository.CopyTicksAsync(snapshot.ChangedTicks, ct);
-
+        // Products must be upserted before ticks to satisfy FK_EFPriceTicks_EFProducts_ProductKey
+        // when a brand-new product key appears in this flush window.
         if (snapshot.ChangedProducts.Count > 0)
             await productRepository.UpdateOrAddProductsAsync(snapshot.ChangedProducts.ToList(), ct);
+
+        if (snapshot.ChangedTicks.Count > 0)
+            await ohlcRepository.CopyTicksAsync(snapshot.ChangedTicks, ct);
 
         sw.Stop();
         logger.LogInformation(

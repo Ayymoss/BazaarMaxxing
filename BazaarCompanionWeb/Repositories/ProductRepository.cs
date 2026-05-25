@@ -93,8 +93,6 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
             .Where(x => incomingKeys.Contains(x.ProductKey))
             .ToListAsync(cancellationToken);
 
-        logger.LogInformation("Starting transaction...");
-
         await using var transaction = await context.Database.BeginTransactionAsync(cancellationToken);
         try
         {
@@ -199,6 +197,7 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
         {
             logger.LogError(e, "Failure during transaction, reverted");
             await transaction.RollbackAsync(cancellationToken);
+            throw;
         }
         sw.Stop();
         if (sw.ElapsedMilliseconds > 2000)
