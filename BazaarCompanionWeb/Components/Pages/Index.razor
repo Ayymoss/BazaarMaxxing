@@ -1,61 +1,27 @@
 @page "/index/{IndexSlug}"
+@using BazaarCompanionWeb.Components.Pages.Components
 @using BazaarCompanionWeb.Components.Pages.Dialogs.Components
 @using BazaarCompanionWeb.Utilities
 @rendermode InteractiveServer
 
 <PageTitle>@(_index?.Name ?? "Loading...") | Bazaar Maxxing</PageTitle>
-<div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
-    <!-- Hero Section -->
-    <div class="relative overflow-hidden rounded-3xl border border-slate-800/60 bg-slate-950 px-8 py-10 shadow-2xl">
-        <div class="absolute -right-20 -top-20 h-64 w-64 rounded-full bg-blue-500/10 blur-[120px]"></div>
-        <div class="absolute -left-20 -bottom-20 h-64 w-64 rounded-full bg-purple-500/10 blur-[120px]"></div>
-
-        <div class="relative z-10 flex flex-col md:flex-row md:items-end justify-between gap-8">
-            <div class="flex items-center gap-6">
-                <div class="relative">
-                    <div class="absolute -inset-1 rounded-2xl bg-gradient-to-br from-blue-600 to-purple-600 opacity-50 blur"></div>
-                    <div class="relative p-4 rounded-2xl bg-slate-900 border border-white/10 shadow-inner">
-                        <i class="ph ph-chart-pie-slice text-4xl text-blue-400"></i>
-                    </div>
-                </div>
-                <div>
-                    <div class="flex items-center gap-2">
-                        <span class="flex h-2 w-2">
-                            <span class="animate-ping absolute inline-flex h-2 w-2 rounded-full bg-emerald-400 opacity-75"></span>
-                            <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
-                        </span>
-                        <span class="text-[10px] font-black uppercase tracking-[0.2em] text-emerald-500/80">Live Aggregate</span>
-                    </div>
-                    <h1 class="mt-1 text-4xl font-black tracking-tight text-white uppercase italic">
-                        @_index?.Name
-                    </h1>
-                    <div class="mt-2 flex items-center gap-4 text-xs text-slate-500">
-                        <span class="flex items-center gap-1.5 font-medium">
-                            <i class="ph ph-cube text-blue-500/70"></i>
-                            @_underlyingProducts.Count Component Products
-                        </span>
-                        <div class="h-1 w-1 rounded-full bg-slate-700"></div>
-                        <span class="flex items-center gap-1.5 font-medium">
-                            <i class="ph ph-scales text-purple-500/70"></i>
-                            Equally Weighted
-                        </span>
-                    </div>
-                </div>
+<div class="flex flex-col gap-3 w-full max-w-[1920px] mx-auto">
+    <PageHeader BackHref="/" Title="@(_index?.Name ?? "Index")" Icon="ph-chart-pie-slice">
+        <Status>
+            <div class="flex items-center gap-3 font-mono text-[11px] text-slate-500">
+                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>Live Aggregate</span>
+                <span>@_underlyingProducts.Count components · equal-weighted</span>
             </div>
-
-            <div class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-white/5 border border-white/10 backdrop-blur-sm">
-                <div class="flex flex-col items-end">
-                    <span class="text-[10px] font-bold text-slate-500 uppercase">Index Identifier</span>
-                    <span class="text-xs font-mono text-blue-400">@IndexSlug</span>
-                </div>
-            </div>
-        </div>
-    </div>
+        </Status>
+        <Actions>
+            <span class="rounded border border-[#2a2f38] bg-[#101216] px-2.5 py-1 font-mono text-[11px] text-slate-300">@IndexSlug</span>
+        </Actions>
+    </PageHeader>
 
     @if (_loading)
     {
         <div class="flex flex-col items-center justify-center py-32">
-            <div class="mb-4 text-blue-500">
+            <div class="mb-4 text-[#e64653]">
                 <svg class="h-8 w-8 animate-spin" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" fill="none"></circle>
                     <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
@@ -66,35 +32,32 @@
     }
     else if (_index is null)
     {
-        <div class="flex flex-col items-center justify-center py-32 rounded-3xl border border-rose-500/20 bg-rose-500/5">
-            <i class="ph ph-warning-circle text-5xl text-rose-500 mb-4"></i>
-            <h2 class="text-xl font-bold text-white">Index Expansion Failed</h2>
-            <p class="mt-2 text-sm text-slate-400 text-center max-w-xs">
+        <div class="flex flex-col items-center justify-center py-32 rounded-md border border-[#2a2f38] bg-[#1a1d23]">
+            <i class="ph ph-warning-circle text-5xl text-[#f6465d] mb-4"></i>
+            <h2 class="text-xl font-semibold text-white">Index Expansion Failed</h2>
+            <p class="mt-2 text-sm text-slate-500 text-center max-w-xs">
                 The index identifier "@IndexSlug" could not be resolved.
             </p>
-            <a href="/indices" class="mt-6 px-6 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-white text-sm font-bold transition-all border border-slate-700">
-                Return to Explorer
+            <a href="/" class="mt-6 px-6 py-2.5 rounded-md bg-[#e64653] hover:bg-[#f25c68] text-white text-sm font-semibold transition-colors">
+                Return to Markets
             </a>
         </div>
     }
     else
     {
-        <!-- Chart Section with Background Glow -->
-        <div class="relative group">
-            <div class="absolute -inset-4 z-0 bg-blue-500/5 blur-[100px] opacity-0 group-hover:opacity-100 transition-opacity duration-1000"></div>
-            <div class="relative z-10 w-full rounded-xl overflow-hidden border border-slate-800/60 shadow-2xl">
-                <IndexPriceGraph IndexSlug="@IndexSlug" IndexName="@_index.Name" Interval="@_selectedInterval" IntervalChanged="@OnIntervalChangedAsync"/>
-            </div>
+        <!-- Chart Section -->
+        <div class="w-full rounded-md overflow-hidden border border-[#2a2f38]">
+            <IndexPriceGraph IndexSlug="@IndexSlug" IndexName="@_index.Name" Interval="@_selectedInterval" IntervalChanged="@OnIntervalChangedAsync"/>
         </div>
 
         <!-- Underlying Products Dashboard -->
-        <div class="rounded-3xl border border-slate-800/60 bg-slate-900/40 p-8 shadow-xl backdrop-blur-md">
+        <div class="rounded-md border border-[#2a2f38] bg-[#1a1d23] p-8">
             <div class="flex flex-col md:flex-row md:items-center justify-between gap-6 mb-8">
                 <div>
-                    <h2 class="text-2xl font-black text-white uppercase italic tracking-tight">Index Constituents</h2>
+                    <h2 class="text-xl font-semibold text-white tracking-tight">Index Constituents</h2>
                     <p class="text-sm text-slate-500 mt-1">Direct access to the underlying market sectors.</p>
                 </div>
-                <div class="flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-500/10 border border-blue-500/20 text-blue-400 font-bold text-xs uppercase tracking-widest">
+                <div class="flex items-center gap-2 px-4 py-2 rounded-md bg-[#101216] border border-[#2a2f38] text-slate-300 font-semibold text-xs uppercase tracking-widest">
                     <i class="ph ph-arrows-merge"></i>
                     Intersection Aggregated
                 </div>
@@ -104,51 +67,46 @@
                 @foreach (var product in _underlyingProducts)
                 {
                     <a href="/product/@product.ProductKey"
-                       class="group relative overflow-hidden rounded-2xl border border-slate-800/60 bg-slate-950/40 p-5 transition-all duration-300 hover:border-blue-500/40 hover:bg-slate-900/40 hover:-translate-y-1">
-                        
-                        <!-- Mini Card Glow -->
-                        <div class="absolute -inset-1 z-0 bg-gradient-to-br from-blue-500/10 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-
-                        <div class="relative z-10">
+                       class="group rounded-md border border-[#2a2f38] bg-[#1a1d23] p-5 transition-colors hover:border-[#e64653]/40 hover:bg-white/[0.02]">
+                        <div>
                             <div class="flex items-center gap-4">
-                                <div class="relative">
-                                    <div class="absolute -inset-1 rounded-lg bg-blue-500/20 blur-sm opacity-0 group-hover:opacity-100 transition-opacity"></div>
-                                    <MinecraftHead SkinUrl="@product.SkinUrl" Size="40" Class="rounded-lg border border-white/5 relative" Tier="@product.ProductTier" />
+                                <div>
+                                    <MinecraftHead SkinUrl="@product.SkinUrl" Size="40" Class="rounded-md border border-[#2a2f38]" Tier="@product.ProductTier" />
                                 </div>
                                 <div class="flex-1 min-w-0">
-                                    <h4 class="text-sm font-bold text-slate-200 truncate group-hover:text-white transition-colors">
+                                    <h4 class="text-sm font-semibold text-slate-200 truncate group-hover:text-white transition-colors">
                                         @product.FriendlyName
                                     </h4>
                                     <div class="mt-1 flex flex-wrap items-center gap-x-3 gap-y-0.5">
-                                        <span class="text-[10px] font-bold text-slate-600 uppercase">Mid</span>
-                                        <span class="text-[10px] font-mono font-bold text-blue-400">@product.CurrentPrice.ToString("N1")</span>
-                                        <span class="text-slate-700">·</span>
-                                        <span class="text-[10px] font-bold text-slate-600 uppercase">7d Vol</span>
-                                        <span class="text-[10px] font-mono font-bold text-slate-400">@product.WeekVolume.ToString("N0")</span>
+                                        <span class="text-[10px] font-semibold text-slate-500 uppercase">Mid</span>
+                                        <span class="text-[10px] font-mono font-semibold text-slate-200">@product.CurrentPrice.ToString("N1")</span>
+                                        <span class="text-slate-500">·</span>
+                                        <span class="text-[10px] font-semibold text-slate-500 uppercase">7d Vol</span>
+                                        <span class="text-[10px] font-mono font-semibold text-slate-200">@product.WeekVolume.ToString("N0")</span>
                                     </div>
                                 </div>
                             </div>
-                            
-                            <div class="mt-4 pt-4 border-t border-slate-800/50 flex items-center justify-between">
-                                <span class="px-2 py-0.5 rounded bg-white/5 text-[9px] font-black text-slate-500 uppercase tracking-tighter">1/N Weight</span>
-                                <i class="ph ph-arrow-right text-slate-700 group-hover:text-blue-500 transition-colors"></i>
+
+                            <div class="mt-4 pt-4 border-t border-[#2a2f38] flex items-center justify-between">
+                                <span class="px-2 py-0.5 rounded bg-[#101216] text-[9px] font-semibold text-slate-500 uppercase tracking-tighter">1/N Weight</span>
+                                <i class="ph ph-arrow-right text-slate-500 group-hover:text-[#e64653] transition-colors"></i>
                             </div>
                         </div>
                     </a>
                 }
-                
+
                 @foreach (var productKey in _missingProductKeys)
                 {
-                    <div class="rounded-2xl border border-slate-900 bg-slate-950/20 p-5 grayscale opacity-40">
+                    <div class="rounded-md border border-[#2a2f38] bg-[#101216] p-5 grayscale opacity-40">
                         <div class="flex items-center gap-4">
-                            <div class="w-10 h-10 rounded-lg bg-slate-800 flex items-center justify-center">
-                                <i class="ph ph-cube text-slate-600"></i>
+                            <div class="w-10 h-10 rounded-md bg-[#101216] border border-[#2a2f38] flex items-center justify-center">
+                                <i class="ph ph-cube text-slate-500"></i>
                             </div>
                             <div>
                                 <h4 class="text-sm font-medium text-slate-500">
                                     @productKey.Replace("_", " ").ToLower().Humanize()
                                 </h4>
-                                <span class="text-[10px] font-bold text-slate-700 uppercase">Sync Pending</span>
+                                <span class="text-[10px] font-semibold text-slate-500 uppercase">Sync Pending</span>
                             </div>
                         </div>
                     </div>
@@ -156,14 +114,14 @@
             </div>
         </div>
 
-        <div class="mt-8 rounded-2xl border border-blue-500/10 bg-blue-500/5 p-6 flex flex-col md:flex-row items-center gap-6">
-            <div class="p-3 rounded-full bg-blue-500/10 text-blue-400">
+        <div class="mt-8 rounded-md border border-[#2a2f38] bg-[#1a1d23] p-6 flex flex-col md:flex-row items-center gap-6">
+            <div class="p-3 rounded-md bg-[#101216] text-[#e64653]">
                 <i class="ph ph-info text-2xl"></i>
             </div>
             <div>
-                <h4 class="text-white font-bold text-sm">Normalization Methodology</h4>
+                <h4 class="text-white font-semibold text-sm">Normalization Methodology</h4>
                 <p class="text-xs text-slate-500 mt-1 leading-relaxed">
-                    This index represents a <span class="text-blue-400 font-bold">normalized equal-weighted average</span> of its constituents. 
+                    This index represents a <span class="text-slate-200 font-semibold">normalized equal-weighted average</span> of its constituents.
                     Calculated by resetting each product to 100 on the first joint data point, ensuring low-price and high-price items move the scale proportionally.
                 </p>
             </div>

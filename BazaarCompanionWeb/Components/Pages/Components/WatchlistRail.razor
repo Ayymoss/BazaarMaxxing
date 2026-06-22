@@ -1,0 +1,70 @@
+@using BazaarCompanionWeb.Dtos
+@using BazaarCompanionWeb.Interfaces
+@using BazaarCompanionWeb.Models.Pagination
+@using BazaarCompanionWeb.Models.Pagination.MetaPaginations
+@using BazaarCompanionWeb.Utilities
+@inject IResourceQueryHelper<ProductPagination, ProductDataInfo> ProductQuery
+@inject NavigationManager Nav
+
+<div class="phdr"><span>Watchlist</span><i class="ph ph-list"></i></div>
+<div class="flex items-center justify-between border-b border-[#2a2f38] px-3 py-1.5 text-[10px] uppercase tracking-wide text-slate-500">
+    <span>Instrument</span><span>Last</span>
+</div>
+<div class="flex-1 overflow-auto no-scrollbar">
+    @foreach (var p in _items)
+    {
+        var here = p.ItemId == CurrentKey;
+        var dev = p.PriceDeviationPercent;
+        var up = dev >= 0;
+        <div class="wl @(here ? "on" : "")" @onclick="() => Go(p.ItemId)">
+            <span class="inline-block h-4 w-[3px] flex-none rounded-sm" style="background: @p.ItemTier.ProductTierColor()"></span>
+            <MinecraftHead SkinUrl="@p.SkinUrl" Tier="@p.ItemTier" Size="18" Class="rounded-[3px] flex-none" />
+            <span class="flex-1 truncate text-xs text-slate-200">@p.ItemFriendlyName</span>
+            <span class="text-right">
+                <div class="font-mono text-xs text-slate-200">@p.BidUnitPrice.ToString("N1")</div>
+                @if (Math.Abs(dev) >= 0.05)
+                {
+                    <div class="font-mono text-[10px]" style="color: @(up ? "#16c784" : "#f6465d")">@(up ? "+" : "")@dev.ToString("F1")%</div>
+                }
+            </span>
+        </div>
+    }
+</div>
+
+@code {
+    [Parameter] public string? CurrentKey { get; set; }
+
+    private List<ProductDataInfo> _items = [];
+
+    protected override async Task OnInitializedAsync()
+    {
+        try
+        {
+            var query = new ProductPagination
+            {
+                Top = 50,
+                Skip = 0,
+                Search = string.Empty,
+                ToggleFilter = false,
+                UseFuzzySearch = false,
+                AdvancedFilters = new AdvancedFilterOptions(),
+                Sorts =
+                [
+                    new SortDescriptor
+                    {
+                        Property = nameof(ProductDataInfo.OrderMetaFlipOpportunityScore),
+                        SortOrder = BazaarCompanionWeb.Enums.SortDirection.Descending
+                    }
+                ],
+            };
+            var ctx = await ProductQuery.QueryResourceAsync(query, CancellationToken.None);
+            _items = ctx.Data.ToList();
+        }
+        catch
+        {
+            _items = [];
+        }
+    }
+
+    private void Go(string key) => Nav.NavigateTo($"/product/{key}");
+}

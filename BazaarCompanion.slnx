@@ -1,0 +1,7 @@
+<Solution>
+  <Folder Name="/Solution Items/">
+    <File Path=".github/workflows/docker-publish.yml" />
+    <File Path=".gitignore" />
+  </Folder>
+  <Project Path="BazaarCompanionWeb/BazaarCompanionWeb.csproj" />
+</Solution>

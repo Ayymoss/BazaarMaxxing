@@ -1,8 +1,9 @@
 /* Global Styles */
-@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap');
 
 body {
-    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+    background-color: #15171c;
 }
 
 /* ==========================================================================
@@ -12,12 +13,26 @@ body {
    inline styles, etc.).
    ========================================================================== */
 :root {
-    --mc-radius: 0.5rem;          /* rounded-lg */
-    --mc-radius-card: 0.75rem;    /* rounded-xl — canonical card radius */
-    --mc-border: rgba(51, 65, 85, 0.5);     /* slate-700/50 */
-    --mc-border-strong: rgba(51, 65, 85, 0.75);
-    --mc-bg-card: rgba(15, 23, 42, 0.6);    /* slate-900/60 */
-    --mc-bg-soft: rgba(30, 41, 59, 0.4);    /* slate-800/40 */
+    --mc-radius: 0.375rem;
+    --mc-radius-card: 0.375rem;   /* IBKR uses minimal radius */
+    /* IBKR Client Portal (dark): flat neutral charcoal, hairline gray rules */
+    --mc-border: #2a2f38;
+    --mc-border-strong: #343a44;
+    --mc-bg-card: #1a1d23;
+    --mc-bg-soft: #13151a;
+
+    --term-bg: #15171c;            /* app background */
+    --term-bar: #1b1e24;           /* top bar / chrome */
+    --term-surface: #1a1d23;       /* panel surface */
+    --term-line: #2a2f38;          /* hairline */
+    --term-line2: #23272f;         /* row divider */
+    --term-accent: #e64653;        /* IBKR red */
+    --term-accent-hover: #f25c68;
+    --term-up: #16c784;            /* data green */
+    --term-down: #f6465d;          /* data red */
+    --term-gold: #d99a00;
+    --term-text: #e6e8ec;
+    --term-muted: #9aa0aa;
 }
 
 /* ==========================================================================
@@ -32,10 +47,51 @@ body {
     border-radius: var(--mc-radius-card);
     border: 1px solid var(--mc-border);
     background-color: var(--mc-bg-card);
-    backdrop-filter: blur(12px);
-    -webkit-backdrop-filter: blur(12px);
-    box-shadow: 0 10px 15px -3px rgba(0,0,0,0.2), 0 4px 6px -4px rgba(0,0,0,0.1);
 }
+
+/* ==========================================================================
+   IBKR-style market-monitor chrome (top nav tabs, watchlist tabs, ticker)
+   ========================================================================== */
+.navtab { display: flex; align-items: center; height: 48px; padding: 0 14px; font-size: 12.5px; color: var(--term-muted); border-bottom: 2px solid transparent; transition: color .12s; }
+.navtab:hover { color: #fff; }
+.navtab.active { color: #fff; border-bottom-color: var(--term-accent); }
+
+.wtab { display: inline-flex; align-items: center; gap: 6px; padding: 9px 14px; font-size: 12.5px; font-weight: 500; color: var(--term-muted); border-bottom: 2px solid transparent; cursor: pointer; transition: color .12s; white-space: nowrap; }
+.wtab:hover { color: #fff; }
+.wtab.active { color: #fff; border-bottom-color: var(--term-accent); }
+.wtab .ct { font-size: 10px; color: var(--term-muted); font-family: 'IBM Plex Mono', monospace; }
+
+.ticker { display: flex; align-items: center; height: 30px; background: var(--mc-bg-soft); border-bottom: 1px solid var(--term-line); overflow: hidden; }
+.ticker .lbl { flex: none; display: flex; align-items: center; gap: 6px; height: 100%; padding: 0 11px; border-right: 1px solid var(--term-line); font-size: 10.5px; font-weight: 600; letter-spacing: .12em; text-transform: uppercase; color: var(--term-muted); }
+.ticker .items { display: flex; align-items: center; overflow: hidden; white-space: nowrap; }
+.tk { display: inline-flex; align-items: center; gap: 7px; padding: 0 14px; border-right: 1px solid var(--term-line2); font-size: 12px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; }
+.tk:hover { background: rgba(255, 255, 255, .04); }
+.tk .sym { color: var(--term-muted); }
+.tk .dot { width: 6px; height: 6px; border-radius: 50%; flex: none; }
+
+.no-scrollbar::-webkit-scrollbar { display: none; }
+.no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+
+/* Product workspace: panel header, watchlist rows, order-book rows, stat rows */
+.phdr { display: flex; align-items: center; justify-content: space-between; padding: 7px 11px; border-bottom: 1px solid var(--term-line); font-size: 10.5px; font-weight: 600; letter-spacing: .07em; text-transform: uppercase; color: var(--term-muted); }
+
+.wl { display: flex; align-items: center; gap: 8px; padding: 5px 10px; border-bottom: 1px solid var(--term-line2); cursor: pointer; }
+.wl:hover { background: rgba(255, 255, 255, .035); }
+.wl.on { background: rgba(230, 70, 83, .08); box-shadow: inset 2px 0 0 var(--term-accent); }
+
+.ob { display: flex; align-items: center; justify-content: space-between; position: relative; padding: 2px 11px; font-size: 11.5px; height: 21px; }
+.ob .bar { position: absolute; top: 0; bottom: 0; right: 0; opacity: .13; }
+.ob .px, .ob .qty { position: relative; z-index: 1; font-family: 'IBM Plex Mono', monospace; }
+.ob .qty { color: var(--term-muted); }
+
+.stat { display: flex; align-items: center; justify-content: space-between; padding: 7px 11px; border-bottom: 1px solid var(--term-line2); }
+.stat .k { font-size: 11px; color: var(--term-muted); }
+.stat .v { font-size: 12px; font-family: 'IBM Plex Mono', monospace; }
+
+/* Chart indicator toggle chips */
+.indchip { font-size: 11px; padding: 2px 8px; border-radius: 3px; color: var(--term-muted); border: 1px solid transparent; cursor: pointer; transition: color .12s, background .12s; }
+.indchip:hover { color: #fff; }
+.indchip.on { color: var(--term-accent-hover); background: rgba(230, 70, 83, .12); border-color: rgba(230, 70, 83, .35); }
 
 /* Softer card variant — for nested sub-panels inside .card */
 .card-soft {
@@ -149,31 +205,29 @@ body {
     background: rgba(71, 85, 105, 0.7);
 }
 
-/* QuickGrid Theme Overrides */
+/* QuickGrid Theme Overrides — institutional data table */
 table[theme] {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0;
-    font-family: 'Inter', sans-serif;
-    font-size: 0.875rem;
-    color: #cbd5e1;
+    font-family: 'IBM Plex Sans', sans-serif;
+    font-size: 0.8125rem;
+    color: var(--term-text);
 }
 
 /* Header Cells */
 table[theme] th {
-    background-color: rgba(15, 23, 42, 0.4);
-    color: #94a3b8;
-    font-weight: 500;
+    background-color: #13151a;
+    color: var(--term-muted);
+    font-weight: 600;
     text-transform: uppercase;
-    font-size: 0.75rem;
-    letter-spacing: 0.05em;
-    padding: 0.5rem 0.75rem;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.5);
+    font-size: 0.6875rem;
+    letter-spacing: 0.08em;
+    padding: 0.5rem 0.875rem;
+    border-bottom: 1px solid var(--mc-border-strong);
     position: sticky;
     top: 0;
     z-index: 10;
-    backdrop-filter: blur(8px);
-    -webkit-backdrop-filter: blur(8px);
 
     /* Ensure content stays on one line */
     white-space: nowrap;
@@ -188,18 +242,26 @@ table[theme] th > * {
 
 /* Body Cells */
 table[theme] td {
-    padding: 0.35rem 0.75rem;
-    border-bottom: 1px solid rgba(51, 65, 85, 0.2);
-    transition: color 0.2s;
+    padding: 0.4rem 0.875rem;
+    border-bottom: 1px solid rgba(148, 163, 184, 0.06);
+    transition: color 0.15s;
+}
+
+/* Numeric/data columns: mono, tabular figures for clean financial alignment */
+table[theme] td:not(:first-child) {
+    font-family: 'IBM Plex Mono', monospace;
+    font-variant-numeric: tabular-nums;
+    font-size: 0.78125rem;
 }
 
 /* Row Hover Effects */
 table[theme] tbody tr {
-    transition: background-color 0.2s;
+    transition: background-color 0.12s;
 }
 
 table[theme] tbody tr:hover {
-    background-color: rgba(30, 41, 59, 0.4);
+    background-color: rgba(255, 255, 255, 0.035);
+    box-shadow: inset 2px 0 0 0 var(--term-accent);
 }
 
 /* Hide empty rows - rows with all empty cells */
@@ -240,7 +302,7 @@ table[theme] th .col-options-button {
 
 table[theme] th[aria-sort="ascending"]::after {
     content: " ↑";
-    color: #60a5fa;
+    color: var(--term-accent);
     display: inline-block;
     vertical-align: middle;
     margin-left: 4px;
@@ -248,7 +310,7 @@ table[theme] th[aria-sort="ascending"]::after {
 
 table[theme] th[aria-sort="descending"]::after {
     content: " ↓";
-    color: #60a5fa;
+    color: var(--term-accent);
     display: inline-block;
     vertical-align: middle;
     margin-left: 4px;
@@ -401,4 +463,43 @@ table[theme] th[aria-sort="descending"]::after {
     100% {
         top: 0; left: 0; width: 60px; height: 60px; opacity: 0;
     }
+}
+
+/* ---- Lightweight Charts OHLC legend ---- */
+.ohlc-legend {
+    position: absolute;
+    top: 8px;
+    left: 12px;
+    z-index: 5;
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
+    pointer-events: none;
+    padding: 5px 10px;
+    border-radius: 6px;
+    background: rgba(26, 29, 35, 0.8);
+    border: 1px solid #2a2f38;
+    backdrop-filter: blur(4px);
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: #cbd5e1;
+    max-width: calc(100% - 24px);
+}
+
+.ohlc-legend:empty {
+    display: none;
+}
+
+.ohlc-legend .ohlc-lg-ohlc b {
+    font-weight: 600;
+    margin: 0 5px 0 1px;
+}
+
+.ohlc-legend .ohlc-lg-item i {
+    font-style: normal;
+    opacity: 0.75;
+    margin-right: 4px;
+    font-size: 10px;
+    letter-spacing: 0.04em;
 }

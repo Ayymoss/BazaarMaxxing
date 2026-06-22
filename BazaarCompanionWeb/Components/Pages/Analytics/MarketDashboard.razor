@@ -1,69 +1,61 @@
 @page "/analytics"
 @using BazaarCompanionWeb.Components.Pages.Analytics
+@using BazaarCompanionWeb.Components.Pages.Components
 @using BazaarCompanionWeb.Dtos
-@using CorrelationMatrixDto = BazaarCompanionWeb.Dtos.CorrelationMatrix
 @using BazaarCompanionWeb.Services
 @rendermode InteractiveServer
 
-<PageTitle>Market Analytics - Bazaar Maxxing</PageTitle>
+<PageTitle>Market Analytics · Bazaar Maxxing</PageTitle>
 
-<div class="flex flex-col gap-4 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
-    <!-- Header -->
-    <div class="flex flex-col gap-3 rounded-xl border border-slate-700/50 bg-slate-900/60 px-4 py-3 shadow-lg backdrop-blur-xl">
-        <div class="flex items-center gap-3 flex-wrap">
-            <h1 class="text-2xl font-bold tracking-tight text-white">
-                <span class="bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">Market Analytics Dashboard</span>
-            </h1>
-            <div class="h-6 w-px bg-slate-700"></div>
-            <div class="flex items-center gap-1.5 text-xs font-medium text-slate-400">
-                <span class="flex h-2 w-2 rounded-full @(_lastUpdate is null ? "bg-slate-600" : "bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.5)]")"></span>
-                @if (_lastUpdate is not null)
-                {
-                    <span>Updated @_lastUpdate.Value.Humanize()</span>
-                }
-                else
-                {
-                    <span>Loading...</span>
-                }
+<div class="mx-auto flex w-full max-w-[1920px] flex-col gap-3">
+    <PageHeader Title="Market Analytics" Icon="ph-chart-bar">
+        <Status>
+            <div class="flex items-center gap-1.5 font-mono text-[11px] text-slate-500">
+                <span class="h-1.5 w-1.5 rounded-full @(_lastUpdate is null ? "bg-slate-600" : "bg-emerald-500")"></span>
+                @(_lastUpdate is null ? "Loading…" : $"Updated {_lastUpdate.Value.Humanize()}")
             </div>
+        </Status>
+        <Actions>
+            <label class="flex cursor-pointer select-none items-center gap-1.5 text-xs text-slate-400">
+                <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshToggled"
+                       class="h-3.5 w-3.5 rounded border-[#2a2f38] bg-[#101216] text-[#e64653] focus:ring-1 focus:ring-[#e64653]"/>
+                Auto-refresh
+            </label>
+            <button @onclick="LoadDataAsync" disabled="@Loading" aria-label="Refresh analytics"
+                    class="flex items-center gap-1.5 rounded border border-[#2a2f38] bg-[#101216] px-3 py-1.5 text-xs font-medium text-slate-300 transition-colors hover:text-white disabled:opacity-50">
+                <i class="ph @(Loading ? "ph-circle-notch animate-spin" : "ph-arrow-clockwise")"></i> Refresh
+            </button>
+        </Actions>
+    </PageHeader>
 
-            <div class="ml-auto flex items-center gap-2">
-                <label class="flex items-center gap-1.5 text-xs text-slate-400 cursor-pointer select-none">
-                    <input type="checkbox" @bind="_autoRefresh" @bind:after="OnAutoRefreshToggled"
-                           class="h-3.5 w-3.5 rounded border-slate-600 bg-slate-800 text-blue-500 focus:ring-1 focus:ring-blue-500 focus:ring-offset-0"/>
-                    Auto-refresh (5m)
-                </label>
-                <button @onclick="LoadDataAsync"
-                        disabled="@_loading"
-                        aria-label="Refresh analytics now"
-                        class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-slate-700/50 bg-slate-800/40 hover:bg-slate-800/60 hover:border-slate-600 text-xs font-medium text-slate-300 hover:text-white transition-colors disabled:opacity-50 disabled:cursor-not-allowed">
-                    <i class="ph @(_loading ? "ph-circle-notch animate-spin" : "ph-arrow-clockwise")"></i>
-                    Refresh
-                </button>
-            </div>
-        </div>
-    </div>
-
-    @if (_loading)
+    <!-- Market metrics -->
+    @if (_metrics is not null)
     {
-        <BazaarCompanionWeb.Components.Pages.Components.LoadingSkeleton Variant="Page" Caption="Loading market analytics..." />
-    }
-    else
-    {
-        <!-- Market Metrics Panel -->
         <MarketMetricsPanel Metrics="@_metrics" />
-
-        <!-- Main Content Grid -->
-        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <!-- Correlation Matrix -->
-            <div class="lg:col-span-1">
-                <Components.Pages.Analytics.CorrelationMatrix CorrelationData="@_correlationMatrix" />
-            </div>
-
-            <!-- Trend Analysis -->
-            <div class="lg:col-span-1">
-                <TrendAnalysis TrendingProducts="@_trendingProducts" />
-            </div>
+    }
+    else if (_metricsLoading)
+    {
+        <div class="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+            @for (var i = 0; i < 6; i++)
+            {
+                <div class="h-[68px] animate-pulse rounded-md border border-[#2a2f38] bg-[#1a1d23]"></div>
+            }
         </div>
     }
+
+    <!-- Trend analysis -->
+    <div class="rounded-md border border-[#2a2f38] bg-[#1a1d23]">
+        <div class="phdr">
+            <span><i class="ph ph-trend-up mr-1.5 text-slate-500"></i>Momentum Leaders</span>
+            @if (_trendsLoading)
+            {
+                <i class="ph ph-circle-notch animate-spin text-slate-500"></i>
+            }
+            else
+            {
+                <span class="font-mono text-[11px] normal-case text-slate-500">@_trendingProducts.Count shown</span>
+            }
+        </div>
+        <TrendAnalysis TrendingProducts="@_trendingProducts" Loading="@_trendsLoading" />
+    </div>
 </div>

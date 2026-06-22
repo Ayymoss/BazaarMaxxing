@@ -1,3 +1,5 @@
+using System.Globalization;
+using System.Text;
 using BazaarCompanionWeb.Components.Pages.Components;
 using BazaarCompanionWeb.Components.Pages.Dialogs.Components;
 using BazaarCompanionWeb.Configurations;
@@ -20,6 +22,7 @@ public partial class Product(
     OrderBookAnalysisService orderBookAnalysisService,
     ComparisonStateService comparisonStateService,
     LastTradedPriceService lastTradedPriceService,
+    IOhlcRepository ohlcRepository,
     IOptions<UIConfig> uiConfig,
     NavigationManager navigationManager) : ComponentBase, IAsyncDisposable
 {
@@ -45,17 +48,49 @@ public partial class Product(
     private OrderBookAnalysisResult? _orderBookAnalysis;
     private bool _showOrderBookAnalysis;
 
+    // Recent candles for the right-panel sparkline (fills far sooner than daily PriceSnapshots)
+    private List<OhlcDataPoint> _sparkCandles = [];
+
     // Timer to refresh humanized "Last Updated" text
     private Timer? _refreshTimer;
 
     // Comparison state
     private bool _isInComparison;
 
+    // Center workspace tabs: chart | book | analysis | trade | related
+    private string _activeTab = "chart";
+    private void SetTab(string tab) => _activeTab = tab;
+
     private Task OnIntervalChangedAsync(CandleInterval interval)
     {
         _selectedInterval = interval;
         StateHasChanged();
         return Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Builds an SVG polyline (and up/down direction) for the right-panel trend.
+    /// Prefers recent OHLC candles (populate within minutes); falls back to daily price-history snapshots.
+    /// </summary>
+    private (string Points, bool Up) Sparkline(double w, double h)
+    {
+        var vals = _sparkCandles.Count >= 2
+            ? _sparkCandles.Select(c => c.Close).ToList()
+            : (_product?.PriceHistory ?? []).OrderBy(x => x.Date).Select(x => (x.Bid + x.Ask) / 2).ToList();
+        if (vals.Count < 2) return (string.Empty, true);
+
+        double min = vals.Min(), max = vals.Max(), range = max - min;
+        if (range <= 0) range = 1;
+
+        var sb = new StringBuilder();
+        for (var i = 0; i < vals.Count; i++)
+        {
+            var x = (double)i / (vals.Count - 1) * w;
+            var y = h - (vals[i] - min) / range * h;
+            sb.Append(x.ToString("0.#", CultureInfo.InvariantCulture)).Append(',')
+              .Append(y.ToString("0.#", CultureInfo.InvariantCulture)).Append(' ');
+        }
+        return (sb.ToString().Trim(), vals[^1] >= vals[0]);
     }
 
     protected override async Task OnInitializedAsync()
@@ -155,7 +190,10 @@ public partial class Product(
         {
             _product = await productDataCache.GetProductAsync(ProductKey, ct);
             if (_product is not null)
+            {
                 _product.EstimatedLastTradedPrice ??= lastTradedPriceService.GetEstimate(ProductKey);
+                _sparkCandles = await ohlcRepository.GetCandlesAsync(ProductKey, CandleInterval.OneHour, 72, ct);
+            }
             _lastServerRefresh = timeCache.LastUpdated;
 
             // Load order book analysis if we have order book data
@@ -183,10 +221,12 @@ public partial class Product(
         var bid = 0d;
         var ask = 0d;
 
-        if (_product?.PriceHistory is not null)
+        // PriceHistory can be an empty list (fresh DB, no snapshots yet) — guard before First().
+        if (_product?.PriceHistory is { Count: > 0 } history)
         {
-            bid = _product.PriceHistory.OrderByDescending(x => x.Date).First().Bid;
-            ask = _product.PriceHistory.OrderByDescending(x => x.Date).First().Ask;
+            var latest = history.OrderByDescending(x => x.Date).First();
+            bid = latest.Bid;
+            ask = latest.Ask;
         }
 
         return (bid, ask);

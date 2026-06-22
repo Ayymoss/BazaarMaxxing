@@ -1,56 +1,32 @@
 @rendermode InteractiveServer
 
-<div class="flex flex-col gap-1.5 rounded-xl border border-slate-700/50 bg-slate-900/40 p-1 shadow-inner backdrop-blur-md h-full">
-    <div class="flex items-center justify-between px-2 pt-1 pb-1 pb-0.5">
-        <h4 class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-widest text-slate-500">
-            <i class="ph ph-chart-line-up text-blue-500/80"></i> Price History
-        </h4>
+<div class="flex h-full min-h-0 flex-col bg-[#15171c]">
+    <!-- Chart toolbar: interval (time) + indicators -->
+    <div class="flex flex-wrap items-center gap-2 border-b border-[#2a2f38] bg-[#1a1d23] px-2.5 py-1.5">
         <ChartIntervalSelector SelectedInterval="Interval" OnIntervalChanged="OnIntervalChangedAsync" />
+        <div class="h-4 w-px bg-[#2a2f38]"></div>
+        <i class="ph ph-chart-line-up text-sm text-slate-500"></i>
+        <div class="flex flex-wrap items-center gap-1">
+            @foreach (var def in Defs)
+            {
+                <button type="button" class="indchip @(_enabled[def.Key] ? "on" : "")"
+                        @onclick="@(() => ToggleIndicatorAsync(def.Key, !_enabled[def.Key]))">
+                    @def.Label
+                </button>
+            }
+        </div>
     </div>
-    
-    @* KLineChart Indicator Controls *@
-    <div class="flex flex-wrap items-center gap-2 px-2 py-1.5 rounded-lg border border-slate-700/50 bg-slate-800/40">
-        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Indicators:</span>
-        
-        @* Overlay indicators (on main candle pane) *@
-        @foreach (var indicator in _overlayIndicators)
-        {
-            <label class="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" 
-                       checked="@indicator.Enabled" 
-                       @onchange="@((ChangeEventArgs e) => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
-                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-blue-500 focus:ring-blue-500 focus:ring-1" />
-                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
-            </label>
-        }
-        
-        <div class="h-4 w-px bg-slate-700"></div>
-        
-        @* Sub-pane indicators *@
-        @foreach (var indicator in _subPaneIndicators)
-        {
-            <label class="flex items-center gap-1.5 cursor-pointer group">
-                <input type="checkbox" 
-                       checked="@indicator.Enabled" 
-                       @onchange="@((ChangeEventArgs e) => ToggleIndicatorAsync(indicator, e.Value is bool b && b))"
-                       class="w-3 h-3 rounded border-slate-600 bg-slate-700 text-pink-500 focus:ring-pink-500 focus:ring-1" />
-                <span class="text-[10px] text-slate-300 group-hover:text-white transition-colors">@indicator.Label</span>
-            </label>
-        }
-    </div>
-    
-    <div class="relative w-full flex-1 min-h-[580px] overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
-        @* KLineChart container - simpler structure as it handles its own panes *@
-        <div id="chart-container-@_chartId" class="absolute inset-0 w-full h-full"></div>
-        
+
+    <div class="relative min-h-[360px] w-full flex-1 overflow-hidden">
+        <div id="@ContainerId" class="absolute inset-0 h-full w-full"></div>
+        <div id="@(ContainerId)-legend" class="ohlc-legend"></div>
+
         @if (!_chartInitialized)
         {
-            <div class="absolute inset-0 flex flex-col items-center justify-center bg-slate-900/40 backdrop-blur-[2px]">
-                <div class="p-4 rounded-full bg-slate-800/50 mb-3">
-                    <i class="ph ph-chart-line text-2xl text-slate-500"></i>
-                </div>
-                <p class="text-xs text-slate-400 font-medium tracking-wide">Insufficient chart data for this period</p>
-                <p class="text-[10px] text-slate-500 mt-1">Collecting price ticks in the background...</p>
+            <div class="absolute inset-0 flex flex-col items-center justify-center bg-[#15171c]/60">
+                <i class="ph ph-chart-line mb-2 text-2xl text-slate-600"></i>
+                <p class="font-mono text-xs text-slate-400">Insufficient chart data for this period</p>
+                <p class="mt-1 font-mono text-[10px] text-slate-600">Collecting price ticks…</p>
             </div>
         }
     </div>

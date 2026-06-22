@@ -1,3 +1,4 @@
+using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -10,7 +11,7 @@ namespace BazaarCompanionWeb.Components.Pages.Dialogs.Components;
 
 public partial class PriceGraph : ComponentBase, IAsyncDisposable
 {
-    private const string IndicatorStorageKey = "klinechart_indicators";
+    private const string IndicatorStorageKey = "lwc_indicators";
 
     [Parameter] public required ProductDataInfo Product { get; set; }
     [Parameter] public CandleInterval Interval { get; set; } = CandleInterval.OneHour;
@@ -22,71 +23,56 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
 
     private IJSObjectReference? _chartModule;
     private readonly string _chartId = Guid.NewGuid().ToString("N")[..8];
+    private string ContainerId => $"chart-container-{_chartId}";
+
     private bool _chartInitialized;
-    private bool _indicatorsApplied; // Track if initial indicators have been applied
-    private bool _indicatorsLoaded; // Track if we've loaded from localStorage
-    private bool _disposed; // Track disposal to prevent JS calls after component is disposed
+    private bool _indicatorsLoaded;
+    private bool _disposed;
     private readonly CancellationTokenSource _disposalCts = new();
 
-    // KLineChart indicator configuration
-    // Overlay indicators appear on the main candle pane
-    private readonly List<KLineIndicatorOption> _overlayIndicators =
+    // In-memory candle buffer (window + warmup) kept so live ticks can recompute indicator tail values.
+    private List<OhlcDataPoint> _candles = [];
+
+    /// <summary>Indicator definitions for the toggle UI. Overlay = drawn on the price pane.</summary>
+    private readonly record struct IndicatorDef(string Key, string Label, bool Overlay);
+
+    private static readonly IndicatorDef[] Defs =
     [
-        new("ASK_LINE", "ASK", true), // ASK price overlay - enabled by default
-        new("MA", "MA", false), // Moving Average - disabled by default (can enable)
-        new("EMA", "EMA", false), // Exponential Moving Average  
-        new("SMA", "SMA", false), // Simple Moving Average
-        new("BOLL", "BOLL", false), // Bollinger Bands
-        new("SAR", "SAR", false), // Parabolic SAR
+        new("ASK", "ASK", true),
+        new("MA", "MA 50/250", true),
+        new("BB", "BB", true),
+        new("VOL", "VOL", false),
+        new("MACD", "MACD", false),
+        new("RSI", "RSI", false),
     ];
 
-    // Sub-pane indicators appear in separate panes below the main chart
-    // VOL and MACD are added via layout, so they start enabled
-    private readonly List<KLineIndicatorOption> _subPaneIndicators =
-    [
-        new("VOL", "VOL", true), // Volume (enabled via layout)
-        new("MACD", "MACD", true), // MACD (enabled via layout)
-        new("RSI", "RSI", false), // Relative Strength Index
-        new("KDJ", "KDJ", false), // KDJ Stochastic
-        new("OBV", "OBV", false), // On-Balance Volume
-        new("ROC", "ROC", false) // Rate of Change
-    ];
-
-    /// <summary>
-    /// Represents a KLineChart indicator option
-    /// </summary>
-    private class KLineIndicatorOption(string name, string label, bool enabled, string? paneId = null)
+    private readonly Dictionary<string, bool> _enabled = new()
     {
-        public string Name { get; } = name;
-        public string Label { get; } = label;
-        public bool Enabled { get; set; } = enabled;
-        public string? PaneId { get; set; } = paneId; // null = create new pane, or specific pane ID
-    }
+        ["ASK"] = true, ["MA"] = false, ["BB"] = false, ["VOL"] = true, ["MACD"] = true, ["RSI"] = false,
+    };
 
-    /// <summary>
-    /// DTO for persisting indicator state to localStorage
-    /// </summary>
-    private record IndicatorState(Dictionary<string, bool> Indicators);
+    private sealed record IndicatorState(Dictionary<string, bool> Indicators);
+
+    private object Flags() => new
+    {
+        ask = _enabled["ASK"],
+        ma = _enabled["MA"],
+        bb = _enabled["BB"],
+        vol = _enabled["VOL"],
+        macd = _enabled["MACD"],
+        rsi = _enabled["RSI"],
+    };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
-        // ONLY initialize on first render - do NOT update chart on subsequent renders
-        // Chart updates happen via: interval change, tick updates, or indicator toggles
-        if (firstRender)
-        {
-            await InitializeChartAsync();
-        }
+        if (firstRender) await InitializeChartAsync();
     }
 
     private async Task OnIntervalChangedAsync(CandleInterval newInterval)
     {
         Interval = newInterval;
         await IntervalChanged.InvokeAsync(Interval);
-        if (_chartInitialized)
-        {
-            // Recreate chart with new interval data
-            await RecreateChartAsync();
-        }
+        if (_chartInitialized) await CreateChartAsync();
     }
 
     private async Task InitializeChartAsync()
@@ -94,10 +80,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         try
         {
             _chartModule = await JSRuntime.InvokeAsync<IJSObjectReference>("import", "./js/chartInit.js");
-
-            // Load saved indicator state from localStorage
             await LoadIndicatorStateAsync();
-
             await CreateChartAsync();
         }
         catch (JSException ex)
@@ -106,37 +89,16 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Load indicator enabled states from localStorage
-    /// </summary>
     private async Task LoadIndicatorStateAsync()
     {
         if (_indicatorsLoaded) return;
-
         try
         {
             var state = await BrowserStorage.GetAsync<IndicatorState>(IndicatorStorageKey);
             if (state?.Indicators is not null)
-            {
-                // Apply saved state to overlay indicators
-                foreach (var indicator in _overlayIndicators)
-                {
-                    if (state.Indicators.TryGetValue(indicator.Name, out var enabled))
-                    {
-                        indicator.Enabled = enabled;
-                    }
-                }
-
-                // Apply saved state to sub-pane indicators
-                foreach (var indicator in _subPaneIndicators)
-                {
-                    if (state.Indicators.TryGetValue(indicator.Name, out var enabled))
-                    {
-                        indicator.Enabled = enabled;
-                    }
-                }
-            }
-
+                foreach (var (key, enabled) in state.Indicators)
+                    if (_enabled.ContainsKey(key))
+                        _enabled[key] = enabled;
             _indicatorsLoaded = true;
         }
         catch (Exception ex)
@@ -145,26 +107,11 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Save indicator enabled states to localStorage
-    /// </summary>
     private async Task SaveIndicatorStateAsync()
     {
         try
         {
-            var indicators = new Dictionary<string, bool>();
-
-            foreach (var indicator in _overlayIndicators)
-            {
-                indicators[indicator.Name] = indicator.Enabled;
-            }
-
-            foreach (var indicator in _subPaneIndicators)
-            {
-                indicators[indicator.Name] = indicator.Enabled;
-            }
-
-            await BrowserStorage.SetAsync(IndicatorStorageKey, new IndicatorState(indicators));
+            await BrowserStorage.SetAsync(IndicatorStorageKey, new IndicatorState(new Dictionary<string, bool>(_enabled)));
         }
         catch (Exception ex)
         {
@@ -172,271 +119,125 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         }
     }
 
-    /// <summary>
-    /// Recreate the chart (used when interval changes)
-    /// </summary>
-    private async Task RecreateChartAsync()
+    private async Task CreateChartAsync()
     {
-        if (_chartModule is null) return;
-        _indicatorsApplied = false; // Reset so indicators get reapplied
-        await CreateChartAsync();
+        // Product can be null while the page is still resolving it (or when the key isn't found).
+        if (_chartModule is null || Product is null) return;
+        try
+        {
+            var candles = await OhlcRepository.GetCandlesAsync(Product.ItemId, Interval, ChartDataService.InitialBars);
+            if (candles.Count == 0)
+            {
+                _candles = [];
+                return;
+            }
+
+            // Fold the current live price into the latest (forming) candle.
+            MergeLivePrice(candles, Product.BidUnitPrice, Product.AskUnitPrice);
+            _candles = candles;
+
+            var payload = ChartDataService.Build(candles, includeAsk: true);
+            await _chartModule.InvokeVoidAsync("createOhlcChart", ContainerId, payload, new
+            {
+                productKey = Product.ItemId,
+                interval = (int)Interval,
+                flags = Flags(),
+            });
+
+            if (!_chartInitialized)
+            {
+                _chartInitialized = true;
+                StateHasChanged();
+            }
+        }
+        catch (Exception ex)
+        {
+            // Never let a chart failure tear down the Blazor circuit.
+            Console.WriteLine($"Error creating chart: {ex.Message}");
+        }
+    }
+
+    private void MergeLivePrice(List<OhlcDataPoint> candles, double bid, double ask)
+    {
+        var bucket = DateTime.UtcNow.GetPeriodStart(Interval);
+        var last = candles[^1];
+        if (last.Time == bucket)
+            candles[^1] = last with
+            {
+                High = Math.Max(last.High, bid),
+                Low = Math.Min(last.Low, bid),
+                Close = bid,
+                AskClose = ask,
+            };
+        else
+            candles.Add(new OhlcDataPoint(bucket, bid, bid, bid, bid, 0d, 0d, ask));
     }
 
     public async Task UpdateTickAsync(object tick)
     {
-        // Bail early if component is disposed or chart not ready
-        if (_disposed || _chartModule is null || !_chartInitialized) return;
-
+        if (_disposed || _chartModule is null || !_chartInitialized || _candles.Count == 0) return;
         try
         {
-            // Parse the incoming tick (which is typically a JsonElement from SignalR)
             var json = tick.ToString();
             if (string.IsNullOrEmpty(json)) return;
 
             var liveTick = JsonSerializer.Deserialize<LiveTick>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
             if (liveTick is null) return;
 
-            // ALIGN the tick time to the current interval bucket start
-            var bucketedTime = liveTick.Time.GetPeriodStart(Interval);
+            var bucket = liveTick.Time.GetPeriodStart(Interval);
+            var last = _candles[^1];
+            if (last.Time == bucket)
+                _candles[^1] = last with
+                {
+                    High = Math.Max(last.High, liveTick.High),
+                    Low = Math.Min(last.Low, liveTick.Low),
+                    Close = liveTick.Close,
+                    Volume = liveTick.Volume,
+                    AskClose = liveTick.AskClose,
+                };
+            else if (bucket > last.Time)
+                _candles.Add(new OhlcDataPoint(bucket, liveTick.Open, liveTick.High, liveTick.Low, liveTick.Close, liveTick.Volume, 0d, liveTick.AskClose));
+            else
+                return; // stale tick older than current bar
 
-            // KLineChart uses timestamp in milliseconds
-            var processedTick = new
-            {
-                time = new DateTimeOffset(bucketedTime).ToUnixTimeMilliseconds(),
-                open = liveTick.Open,
-                high = liveTick.High,
-                low = liveTick.Low,
-                close = liveTick.Close,
-                volume = liveTick.Volume,
-                askClose = liveTick.AskClose
-            };
+            TrimBuffer();
 
-            // Use KLineChart tick update - pass cancellation token to handle disposal
-            await _chartModule.InvokeVoidAsync("updateKLineChartWithTick", _disposalCts.Token, $"chart-container-{_chartId}",
-                processedTick);
+            var update = ChartDataService.LastTick(_candles, includeAsk: true);
+            await _chartModule.InvokeVoidAsync("updateOhlcTick", _disposalCts.Token, ContainerId, update);
         }
-        catch (TaskCanceledException)
-        {
-            // Expected during component disposal - silently ignore
-        }
-        catch (JSDisconnectedException)
-        {
-            // Expected when navigating away - silently ignore
-        }
+        catch (TaskCanceledException) { }
+        catch (JSDisconnectedException) { }
         catch (Exception ex)
         {
             Console.WriteLine($"Error updating tick: {ex.Message}");
         }
     }
 
-    /// <summary>
-    /// Create the KLineChart with data - called once on init and when interval changes
-    /// </summary>
-    private async Task CreateChartAsync()
+    // Keep the buffer bounded during long live sessions while retaining warmup history.
+    private void TrimBuffer()
     {
-        if (_chartModule is null) return;
-
-        try
-        {
-            // Load initial 200 candles (more data loads lazily when user pans left)
-            var ohlcData = await OhlcRepository.GetCandlesAsync(Product.ItemId, Interval, limit: 200);
-
-            if (ohlcData.Count == 0)
-            {
-                return;
-            }
-
-            // APPEND current price as the absolute latest tick
-            var bucketedTime = DateTime.UtcNow.GetPeriodStart(Interval);
-            var lastCandle = ohlcData.LastOrDefault();
-            var price = Product.BidUnitPrice;
-
-            if (lastCandle != null && lastCandle.Time == bucketedTime)
-            {
-                // Replace the last candle with updated values (records are immutable)
-                var askPrice = Product.AskUnitPrice;
-                ohlcData[^1] = lastCandle with
-                {
-                    High = Math.Max(lastCandle.High, price),
-                    Low = Math.Min(lastCandle.Low, price),
-                    Close = price,
-                    AskClose = askPrice // Update ASK price as well
-                };
-            }
-            else
-            {
-                // Add a new partial candle
-                var askPrice = Product.AskUnitPrice;
-                ohlcData.Add(new OhlcDataPoint(
-                    Time: bucketedTime,
-                    Open: price,
-                    High: price,
-                    Low: price,
-                    Close: price,
-                    Volume: 0d,
-                    Spread: 0d,
-                    AskClose: askPrice
-                ));
-            }
-
-            // KLineChart format: timestamp in milliseconds
-            var ohlcDataForKLine = ohlcData.Select(c => new
-            {
-                time = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
-                open = c.Open,
-                high = c.High,
-                low = c.Low,
-                close = c.Close,
-                volume = c.Volume,
-                askClose = c.AskClose
-            }).ToList();
-
-            // Create the KLineChart with lazy loading support
-            // Pass productKey and interval for API-based historical data loading
-            await _chartModule.InvokeVoidAsync("createKLineChart",
-                $"chart-container-{_chartId}",
-                ohlcDataForKLine,
-                new
-                {
-                    productName = Product.ItemFriendlyName,
-                    productKey = Product.ItemId,
-                    interval = (int)Interval
-                });
-
-            // Mark as initialized - do NOT call StateHasChanged here to avoid render loop
-            if (!_chartInitialized)
-            {
-                _chartInitialized = true;
-                // Only trigger one re-render to hide the loading overlay
-                StateHasChanged();
-            }
-
-            // Apply overlay indicators that are enabled (only once per chart creation)
-            if (!_indicatorsApplied)
-            {
-                await ApplyEnabledIndicatorsAsync();
-                _indicatorsApplied = true;
-            }
-        }
-        catch (JSException ex)
-        {
-            Console.WriteLine($"Error creating chart: {ex.Message}");
-        }
+        const int cap = 2000;
+        if (_candles.Count > cap) _candles.RemoveRange(0, _candles.Count - 1200);
     }
 
-    /// <summary>
-    /// Apply indicator state after chart creation
-    /// VOL and MACD are in the layout by default - need to remove them if disabled
-    /// </summary>
-    private async Task ApplyEnabledIndicatorsAsync()
-    {
-        if (_chartModule is null) return;
-
-        try
-        {
-            // Apply overlay indicators that are enabled
-            // Skip ASK_LINE here - it's added automatically after chart creation
-            // and handled via toggleIndicator when disabled
-            foreach (var indicator in _overlayIndicators.Where(i => i.Enabled && i.Name != "ASK_LINE"))
-            {
-                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                    $"chart-container-{_chartId}",
-                    indicator.Name,
-                    true,
-                    "candle_pane");
-            }
-
-            // Handle ASK_LINE specially - it's added by default in JS, so only remove if disabled
-            var askLineIndicator = _overlayIndicators.First(i => i.Name == "ASK_LINE");
-            if (!askLineIndicator.Enabled)
-            {
-                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                    $"chart-container-{_chartId}",
-                    "ASK_LINE",
-                    false,
-                    "candle_pane");
-            }
-
-            // Handle VOL and MACD - they're in the layout, so remove if disabled
-            var volIndicator = _subPaneIndicators.First(i => i.Name == "VOL");
-            if (!volIndicator.Enabled)
-            {
-                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                    $"chart-container-{_chartId}",
-                    "VOL",
-                    false,
-                    "vol_pane");
-            }
-
-            var macdIndicator = _subPaneIndicators.First(i => i.Name == "MACD");
-            if (!macdIndicator.Enabled)
-            {
-                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                    $"chart-container-{_chartId}",
-                    "MACD",
-                    false,
-                    "macd_pane");
-            }
-
-            // Apply any additional sub-pane indicators that are enabled (excluding VOL/MACD)
-            foreach (var indicator in _subPaneIndicators.Where(i => i.Enabled && i.Name != "VOL" && i.Name != "MACD"))
-            {
-                await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                    $"chart-container-{_chartId}",
-                    indicator.Name,
-                    true,
-                    indicator.PaneId ?? indicator.Name.ToLowerInvariant() + "_pane");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error applying indicators: {ex.Message}");
-        }
-    }
-
-    /// <summary>
-    /// Toggle an indicator on/off
-    /// </summary>
-    private async Task ToggleIndicatorAsync(KLineIndicatorOption indicator, bool enabled)
+    private async Task ToggleIndicatorAsync(string key, bool enabled)
     {
         if (_chartModule is null || !_chartInitialized) return;
-
-        indicator.Enabled = enabled;
-
+        _enabled[key] = enabled;
         try
         {
-            // Determine the pane ID - overlay indicators go on candle_pane, 
-            // sub-pane indicators create their own pane or use existing
-            var isOverlay = _overlayIndicators.Contains(indicator);
-            var paneId = isOverlay ? "candle_pane" : indicator.PaneId;
-
-            await _chartModule.InvokeVoidAsync("toggleKLineIndicator",
-                $"chart-container-{_chartId}",
-                indicator.Name,
-                enabled,
-                paneId ?? indicator.Name.ToLowerInvariant() + "_pane");
-
-            // Update the pane ID if we created a new one
-            if (!isOverlay && enabled && indicator.PaneId is null)
-            {
-                indicator.PaneId = indicator.Name.ToLowerInvariant() + "_pane";
-            }
-
-            // Persist indicator state to localStorage
+            await _chartModule.InvokeVoidAsync("applyOhlcConfig", ContainerId, Flags());
             await SaveIndicatorStateAsync();
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"Error toggling indicator {indicator.Name}: {ex.Message}");
+            Console.WriteLine($"Error toggling indicator {key}: {ex.Message}");
         }
     }
 
     public async ValueTask DisposeAsync()
     {
-        // Mark as disposed first to stop any pending tick updates
         _disposed = true;
-
-        // Cancel any pending JS interop calls
         await _disposalCts.CancelAsync();
         _disposalCts.Dispose();
 
@@ -444,18 +245,11 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         {
             try
             {
-                // Use KLineChart dispose
-                await _chartModule.InvokeVoidAsync("disposeKLineChart", $"chart-container-{_chartId}");
+                await _chartModule.InvokeVoidAsync("disposeOhlcChart", ContainerId);
                 await _chartModule.DisposeAsync();
             }
-            catch (JSDisconnectedException)
-            {
-                // Ignore if JS is disconnected
-            }
-            catch (TaskCanceledException)
-            {
-                // Expected during disposal
-            }
+            catch (JSDisconnectedException) { }
+            catch (TaskCanceledException) { }
         }
     }
 }

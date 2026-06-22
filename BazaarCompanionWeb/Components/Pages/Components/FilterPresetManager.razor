@@ -6,15 +6,15 @@
 
 <div class="flex flex-col gap-2">
     <div class="flex items-center justify-between">
-        <label class="text-[10px] font-semibold text-slate-400 uppercase tracking-wider">Filter Presets</label>
-        <button @onclick="ShowSaveDialog" 
-                class="text-[10px] text-blue-400 hover:text-blue-300 transition-colors px-2 py-1 rounded hover:bg-slate-800/50">
+        <label class="text-[10px] font-semibold uppercase tracking-wider text-slate-500">Filter Presets</label>
+        <button @onclick="ShowSaveDialog"
+                class="rounded px-2 py-1 text-[10px] text-[#e64653] transition-colors hover:bg-white/5 hover:text-[#f25c68]">
             <i class="ph ph-floppy-disk mr-1"></i> Save
         </button>
     </div>
 
-    <select @onchange="@(async (ChangeEventArgs e) => await LoadPreset(e))" 
-            class="text-xs bg-slate-800/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500">
+    <select @onchange="@(async (ChangeEventArgs e) => await LoadPreset(e))"
+            class="rounded border border-[#2a2f38] bg-[#101216] px-2 py-1.5 text-xs text-slate-300 focus:border-[#e64653]/60 focus:outline-none">
         <option value="">Select preset...</option>
         @foreach (var preset in _presets)
         {
@@ -24,18 +24,18 @@
 
     @if (_presets.Any())
     {
-        <div class="flex flex-wrap gap-1 mt-1">
+        <div class="mt-1 flex flex-wrap gap-1.5">
             @foreach (var preset in _presets)
             {
-                <div class="flex items-center gap-1 px-2 py-0.5 rounded bg-slate-800/40 border border-slate-700/50">
+                <div class="flex items-center gap-1.5 rounded border border-[#2a2f38] bg-[#101216] px-2 py-0.5">
                     <button @onclick="@(async () => await LoadPresetByName(preset.Name))"
-                            class="text-[10px] text-slate-300 hover:text-white transition-colors">
+                            class="text-[10px] text-slate-300 transition-colors hover:text-white">
                         @preset.Name
                     </button>
                     <button @onclick="@(async () => await DeletePreset(preset.Name))"
                             aria-label="@($"Delete preset {preset.Name}")"
                             title="@($"Delete preset {preset.Name}")"
-                            class="text-slate-500 hover:text-red-400 transition-colors">
+                            class="text-slate-500 transition-colors hover:text-[#f6465d]">
                         <i class="ph ph-x text-[10px]" aria-hidden="true"></i>
                     </button>
                 </div>
@@ -45,19 +45,19 @@
 
     @if (_showSaveDialog)
     {
-        <div class="mt-2 p-2 rounded border border-slate-700/50 bg-slate-800/40">
-            <input type="text" 
+        <div class="mt-2 rounded border border-[#2a2f38] bg-[#101216] p-2">
+            <input type="text"
                    @bind="_newPresetName"
                    @bind:event="oninput"
                    placeholder="Preset name..."
-                   class="w-full text-xs bg-slate-900/50 border border-slate-700/50 rounded px-2 py-1 text-slate-300 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 mb-2" />
+                   class="mb-2 w-full rounded border border-[#2a2f38] bg-[#15171c] px-2 py-1 text-xs text-slate-300 focus:border-[#e64653]/60 focus:outline-none"/>
             <div class="flex gap-2">
-                <button @onclick="@(async () => await SavePreset())" 
-                        class="flex-1 text-xs px-2 py-1 rounded bg-blue-600 hover:bg-blue-700 text-white transition-colors">
+                <button @onclick="@(async () => await SavePreset())"
+                        class="flex-1 rounded bg-[#e64653] px-2 py-1 text-xs font-medium text-white transition-colors hover:bg-[#f25c68]">
                     Save
                 </button>
-                <button @onclick="CancelSave" 
-                        class="flex-1 text-xs px-2 py-1 rounded bg-slate-700 hover:bg-slate-600 text-slate-300 transition-colors">
+                <button @onclick="CancelSave"
+                        class="flex-1 rounded border border-[#2a2f38] bg-[#15171c] px-2 py-1 text-xs text-slate-300 transition-colors hover:text-white">
                     Cancel
                 </button>
             </div>
