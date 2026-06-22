@@ -39,7 +39,7 @@ function baseOptions(opts) {
         },
         grid: { vertLines: { color: C.grid }, horzLines: { color: C.grid } },
         rightPriceScale: { borderColor: C.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
-        leftPriceScale: { visible: !!opts.flags.ask, borderColor: C.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
+        leftPriceScale: { visible: false, borderColor: C.border, scaleMargins: { top: 0.1, bottom: 0.1 } },
         timeScale: { borderColor: C.border, timeVisible: intraday, secondsVisible: false, rightOffset: 4 },
         crosshair: {
             mode: lc().CrosshairMode.Normal,
@@ -88,7 +88,14 @@ function build(id) {
         s.ma250 = chart.addSeries(LWC.LineSeries, lineOpts(C.ma250, { lineWidth: 2 }), 0);
     }
     if (f.ask) {
-        s.ask = chart.addSeries(LWC.LineSeries, lineOpts(C.ask, { lineWidth: 2, priceScaleId: 'left' }), 0);
+        // Ask rides the SAME 'right' scale as bid/candles so its reading is always on the bid
+        // scale. Hypixel ask = whatever a user typed, so it spikes wildly; autoscaleInfoProvider
+        // returning null excludes ask from the scale's autoscale, so only bid drives the range.
+        // Wild ask values simply fall out of view; rescaling the right axis brings them back since
+        // both lines share one coordinate system.
+        s.ask = chart.addSeries(LWC.LineSeries, lineOpts(C.ask, {
+            lineWidth: 2, priceScaleId: 'right', autoscaleInfoProvider: () => null,
+        }), 0);
     }
 
     // --- sub-panes: assigned sequentially among the enabled ones ---
