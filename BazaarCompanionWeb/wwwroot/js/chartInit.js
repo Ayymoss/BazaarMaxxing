@@ -4,25 +4,23 @@ import {
     createDepthChart as scCreateDepthChart
 } from './charts/specialized-chart-module.js';
 
-// KLineChart imports
+// OHLC price chart (Lightweight Charts v5; indicators computed server-side in C#)
 import {
-    createKLineChart as klCreateKLineChart,
-    updateKLineChart as klUpdateKLineChart,
-    updateKLineChartWithTick as klUpdateKLineChartWithTick,
-    disposeKLineChart as klDisposeKLineChart,
-    toggleIndicator as klToggleIndicator,
-    resizeKLineChart as klResizeKLineChart
-} from './charts/kline-chart-module.js';
+    createOhlcChart as ohlcCreate,
+    applyOhlcConfig as ohlcApplyConfig,
+    updateOhlcTick as ohlcUpdateTick,
+    disposeOhlcChart as ohlcDispose,
+    resizeOhlcChart as ohlcResize
+} from './charts/ohlc-chart-module.js';
 
-// Re-export for Blazor - LightweightCharts (specialized charts still in use)
+// Re-export for Blazor — specialized charts (depth / comparison)
 export const createComparisonChart = scCreateComparisonChart;
 export const createDepthChart = scCreateDepthChart;
 export const disposeChart = globalsDisposeChart;
 
-// Re-export for Blazor - KLineChart
-export const createKLineChart = klCreateKLineChart;
-export const updateKLineChart = klUpdateKLineChart;
-export const updateKLineChartWithTick = klUpdateKLineChartWithTick;
-export const disposeKLineChart = klDisposeKLineChart;
-export const toggleKLineIndicator = klToggleIndicator;
-export const resizeKLineChart = klResizeKLineChart;
+// Re-export for Blazor — OHLC price chart
+export const createOhlcChart = ohlcCreate;
+export const applyOhlcConfig = ohlcApplyConfig;
+export const updateOhlcTick = ohlcUpdateTick;
+export const disposeOhlcChart = ohlcDispose;
+export const resizeOhlcChart = ohlcResize;

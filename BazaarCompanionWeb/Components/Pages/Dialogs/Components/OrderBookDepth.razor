@@ -2,9 +2,9 @@
 @using Microsoft.JSInterop
 @implements IAsyncDisposable
 
-<div class="flex flex-col gap-3 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-md">
-    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        <i class="ph ph-chart-bar mr-1"></i> Market Depth
+<div class="flex flex-col gap-3 p-4 rounded-md border border-[#2a2f38] bg-[#1a1d23]">
+    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400">
+        <i class="ph ph-chart-bar mr-1 text-slate-500"></i> Market Depth
     </h4>
 
     @if (DepthMetrics is not null && DepthChart.Count > 0)
@@ -40,7 +40,7 @@
         </div>
 
         <!-- Depth Chart -->
-        <div class="relative w-full h-48 overflow-hidden rounded-lg bg-slate-900/50 border border-slate-800/50">
+        <div class="relative w-full h-48 overflow-hidden rounded bg-[#15171c] border border-[#2a2f38]">
             <div id="depth-chart-@_chartId" class="absolute inset-0 w-full h-full"></div>
         </div>
 

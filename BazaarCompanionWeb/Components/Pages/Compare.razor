@@ -1,38 +1,27 @@
 @page "/compare"
 @using BazaarCompanionWeb.Dtos
 @using BazaarCompanionWeb.Entities
+@using BazaarCompanionWeb.Components.Pages.Components
 @implements IAsyncDisposable
 @rendermode InteractiveServer
 
 <PageTitle>Compare Products | Bazaar Maxxing</PageTitle>
 
-<div class="flex flex-col gap-6 w-full max-w-[1920px] mx-auto animate-in fade-in slide-in-from-bottom-2 duration-500">
-    <!-- Page Header -->
-    <div class="flex items-center justify-between border-b border-slate-800/60 pb-4">
-        <div class="flex items-center gap-4">
-            <a href="/" class="group flex items-center gap-2 text-slate-400 hover:text-white transition-colors">
-                <i class="ph ph-arrow-left text-lg group-hover:-translate-x-1 transition-transform"></i>
-                <span class="text-sm font-medium">Back</span>
-            </a>
-            <div class="h-6 w-px bg-slate-700"></div>
-            <div class="flex flex-col">
-                <h1 class="text-2xl font-bold tracking-tight text-white leading-none">
-                    <i class="ph ph-git-diff text-blue-400 mr-2"></i>
-                    Compare Products
-                </h1>
-                <span class="text-xs text-slate-500 mt-1">Overlay normalized price movements</span>
-            </div>
-        </div>
-
-        @if (_productKeys.Count > 0)
-        {
-            <button @onclick="ClearAll"
-                    class="flex items-center gap-2 px-3 py-1.5 rounded-lg text-xs font-medium text-slate-400 hover:text-red-400 hover:bg-red-500/10 border border-slate-700/50 transition-all">
-                <i class="ph ph-trash"></i>
-                Clear All
-            </button>
-        }
-    </div>
+<div class="flex flex-col gap-3 w-full max-w-[1920px] mx-auto">
+    <PageHeader BackHref="/" Title="Compare Products" Icon="ph-git-diff">
+        <Status>
+            <span class="font-mono text-[11px] text-slate-500">Overlay normalized price movements</span>
+        </Status>
+        <Actions>
+            @if (_productKeys.Count > 0)
+            {
+                <button @onclick="ClearAll"
+                        class="flex items-center gap-2 rounded border border-[#2a2f38] bg-[#101216] px-3 py-1.5 text-xs font-medium text-slate-400 transition-colors hover:bg-[#e64653]/10 hover:text-[#f25c68]">
+                    <i class="ph ph-trash"></i> Clear All
+                </button>
+            }
+        </Actions>
+    </PageHeader>
 
     <!-- Product Selection Cards -->
     <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
@@ -40,35 +29,35 @@
         {
             var product = _productData.GetValueOrDefault(productKey);
             <div
-                class="group relative rounded-xl border border-slate-700/50 bg-slate-900/60 p-4 backdrop-blur-md transition-all hover:border-slate-600">
+                class="group relative rounded-md border border-[#2a2f38] bg-[#1a1d23] p-4 transition-all hover:border-slate-600">
                 <button @onclick="@(() => RemoveProduct(productKey))"
                         aria-label="Remove from comparison"
                         title="Remove from comparison"
-                        class="absolute top-2 right-2 p-1 rounded-lg text-slate-600 hover:text-red-400 hover:bg-red-500/10 opacity-0 group-hover:opacity-100 transition-all">
+                        class="absolute top-2 right-2 p-1 rounded-md text-slate-600 hover:text-[#f25c68] hover:bg-[#e64653]/10 opacity-0 group-hover:opacity-100 transition-all">
                     <i class="ph ph-x text-sm" aria-hidden="true"></i>
                 </button>
 
                 @if (product is not null)
                 {
                     <a href="/product/@productKey" class="block">
-                        <h3 class="font-medium text-slate-200 truncate hover:text-blue-400 transition-colors">
+                        <h3 class="font-medium text-slate-200 truncate hover:text-[#f25c68] transition-colors">
                             @product.ItemFriendlyName
                         </h3>
                         <div class="flex items-center justify-between mt-3 text-xs">
                             <span class="text-slate-500">Ask</span>
-                            <span class="font-mono text-slate-300">@product.AskUnitPrice.ToString("N1")</span>
+                            <span class="font-mono text-[#f6465d]">@product.AskUnitPrice.ToString("N1")</span>
                         </div>
                         <div class="flex items-center justify-between mt-1 text-xs">
                             <span class="text-slate-500">Bid</span>
-                            <span class="font-mono text-slate-300">@product.BidUnitPrice.ToString("N1")</span>
+                            <span class="font-mono text-[#16c784]">@product.BidUnitPrice.ToString("N1")</span>
                         </div>
                     </a>
                 }
                 else
                 {
                     <div class="flex items-center gap-2">
-                        <span class="font-mono text-sm text-slate-400 truncate">@productKey</span>
-                        <div class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-blue-500"></div>
+                        <span class="font-mono text-sm text-slate-500 truncate">@productKey</span>
+                        <div class="h-3 w-3 animate-spin rounded-full border-2 border-slate-600 border-t-[#e64653]"></div>
                     </div>
                 }
             </div>
@@ -77,23 +66,23 @@
         @if (_productKeys.Count < 4)
         {
             <div
-                class="flex flex-col items-center justify-center rounded-xl border border-dashed border-slate-700/50 bg-slate-900/30 p-6 min-h-[120px]">
+                class="flex flex-col items-center justify-center rounded-md border border-dashed border-[#2a2f38] bg-[#1a1d23] p-6 min-h-[120px]">
                 <div class="relative w-full max-w-[200px]">
                     <input type="text"
                            @oninput="OnSearchInput"
                            value="@_searchQuery"
                            placeholder="Search products..."
-                           class="w-full px-3 py-2 rounded-lg border border-slate-700/50 bg-slate-800/50 text-sm text-slate-300 placeholder-slate-600 focus:border-blue-500 focus:ring-1 focus:ring-blue-500 transition-all"/>
+                           class="w-full px-3 py-2 rounded border border-[#2a2f38] bg-[#101216] text-sm text-slate-200 placeholder-slate-600 focus:border-[#e64653]/60 focus:outline-none transition-all"/>
                 </div>
 
                 @if (_searchResults.Any())
                 {
                     <div
-                        class="mt-2 w-full max-w-[200px] max-h-[150px] overflow-auto rounded-lg border border-slate-700/50 bg-slate-900/95 backdrop-blur-xl shadow-xl">
+                        class="mt-2 w-full max-w-[200px] max-h-[150px] overflow-auto rounded-md border border-[#2a2f38] bg-[#1a1d23]">
                         @foreach (var result in _searchResults.Take(5))
                         {
                             <button @onclick="@(() => AddProduct(result.ItemId))"
-                                    class="w-full text-left px-3 py-2 text-xs text-slate-300 hover:bg-slate-800 hover:text-white transition-colors truncate">
+                                    class="w-full text-left px-3 py-2 text-xs text-slate-200 hover:bg-[#101216] hover:text-white transition-colors truncate">
                                 @result.ItemFriendlyName
                             </button>
                         }
@@ -114,10 +103,10 @@
     <!-- Comparison Chart -->
     @if (_productKeys.Count > 0)
     {
-        <div class="rounded-xl border border-slate-700/50 bg-slate-900/60 shadow-xl backdrop-blur-xl overflow-hidden">
-            <div class="flex items-center justify-between p-4 border-b border-slate-800/50">
-                <h2 class="text-sm font-bold text-white flex items-center gap-2">
-                    <i class="ph ph-chart-line-up text-blue-400"></i>
+        <div class="rounded-md border border-[#2a2f38] bg-[#1a1d23] overflow-hidden">
+            <div class="flex items-center justify-between p-4 border-b border-[#2a2f38]">
+                <h2 class="text-sm font-semibold text-slate-200 flex items-center gap-2">
+                    <i class="ph ph-chart-line-up text-[#e64653]"></i>
                     Normalized Price Comparison
                 </h2>
                 <div class="flex items-center gap-2">
@@ -133,9 +122,9 @@
             <div class="relative w-full h-[400px] p-4">
                 @if (_loading)
                 {
-                    <div class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-slate-900/80">
-                        <div class="h-1 w-32 overflow-hidden rounded-full bg-slate-800">
-                            <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-blue-500"></div>
+                    <div class="absolute inset-0 z-10 flex flex-col items-center justify-center bg-[#1a1d23]/80">
+                        <div class="h-1 w-32 overflow-hidden rounded-full bg-[#101216]">
+                            <div class="h-full w-full origin-left animate-[indeterminate_1s_infinite_linear] bg-[#e64653]"></div>
                         </div>
                         <p class="mt-3 text-xs text-slate-500 animate-pulse">Loading chart data...</p>
                     </div>
@@ -153,13 +142,13 @@
     else
     {
         <!-- Empty State -->
-        <div class="flex flex-col items-center justify-center py-20 rounded-xl border border-dashed border-slate-700/50 bg-slate-900/30">
+        <div class="flex flex-col items-center justify-center py-20 rounded-md border border-dashed border-[#2a2f38] bg-[#1a1d23]">
             <i class="ph ph-git-diff text-5xl text-slate-700 mb-4"></i>
-            <h2 class="text-lg font-medium text-slate-400 mb-2">No products to compare</h2>
-            <p class="text-sm text-slate-600 text-center max-w-md mb-6">
+            <h2 class="text-lg font-medium text-slate-200 mb-2">No products to compare</h2>
+            <p class="text-sm text-slate-500 text-center max-w-md mb-6">
                 Add products from their detail pages using the "Compare" button, or search for products above.
             </p>
-            <a href="/" class="px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-500 text-white text-sm font-medium transition-colors">
+            <a href="/" class="px-4 py-2 rounded-md bg-[#e64653] hover:bg-[#f25c68] text-white text-sm font-medium transition-colors">
                 Browse Products
             </a>
         </div>
@@ -168,7 +157,7 @@
     <!-- Legend -->
     @if (_productKeys.Count > 0)
     {
-        <div class="flex flex-wrap items-center justify-center gap-4 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40">
+        <div class="flex flex-wrap items-center justify-center gap-4 p-4 rounded-md border border-[#2a2f38] bg-[#1a1d23]">
             @for (var i = 0; i < _productKeys.Count; i++)
             {
                 var productKey = _productKeys[i];
@@ -176,7 +165,7 @@
                 var color = _colors[i % _colors.Length];
                 <div class="flex items-center gap-2">
                     <div class="w-3 h-3 rounded-full" style="background-color: @color"></div>
-                    <span class="text-xs text-slate-300">@(product?.ItemFriendlyName ?? productKey)</span>
+                    <span class="text-xs text-slate-200">@(product?.ItemFriendlyName ?? productKey)</span>
                 </div>
             }
         </div>

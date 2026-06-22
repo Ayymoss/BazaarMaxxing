@@ -1,0 +1,75 @@
+@using BazaarCompanionWeb.Configurations
+@using BazaarCompanionWeb.Interfaces.Database
+@using Microsoft.Extensions.Options
+@inject IOptions<List<IndexConfiguration>> IndexOptions
+@inject IProductRepository ProductRepository
+
+<div class="phdr">
+    <span><i class="ph ph-chart-pie-slice mr-1.5 text-slate-500"></i>Market Indices</span>
+    <span class="font-mono text-[11px] normal-case text-slate-500">@_indices.Count baskets · equal-weighted</span>
+</div>
+
+@if (_indices.Count == 0)
+{
+    <div class="flex flex-col items-center justify-center gap-2 py-16 text-slate-500">
+        <i class="ph ph-chart-pie-slice text-3xl text-slate-700"></i>
+        <p class="text-sm">No indices configured</p>
+        <p class="text-[11px] text-slate-600">Add index definitions to appsettings.json</p>
+    </div>
+}
+else
+{
+    <div class="grid grid-cols-1 gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
+        @foreach (var index in _indices)
+        {
+            var count = GetResolvedCount(index.Slug);
+            <a href="/index/@index.Slug"
+               class="group flex flex-col rounded-md border border-[#2a2f38] bg-[#1a1d23] p-4 transition-colors hover:border-[#e64653]/40 hover:bg-white/[0.02]">
+                <div class="flex items-start justify-between gap-3">
+                    <div class="flex h-9 w-9 flex-none items-center justify-center rounded-md border border-[#2a2f38] bg-[#101216] text-[#e64653]">
+                        <i class="ph ph-stack-simple text-lg"></i>
+                    </div>
+                    <span class="flex-none rounded border border-[#2a2f38] bg-[#101216] px-2 py-0.5 font-mono text-[10px] text-slate-400">@count comp.</span>
+                </div>
+                <h3 class="mt-3 truncate text-sm font-semibold text-slate-100 group-hover:text-white">@index.Name</h3>
+                <p class="mt-1 line-clamp-2 text-xs text-slate-500">Equal-weighted aggregate of @count normalized Bazaar products.</p>
+                <div class="mt-3 flex flex-wrap gap-1.5">
+                    @foreach (var productKey in GetResolvedSampleKeys(index.Slug))
+                    {
+                        <span class="rounded border border-[#2a2f38] bg-[#101216] px-2 py-0.5 text-[10px] capitalize text-slate-500">@productKey.Replace("_", " ").ToLower()</span>
+                    }
+                    @if (count > 5)
+                    {
+                        <span class="rounded border border-[#e64653]/25 bg-[#e64653]/10 px-2 py-0.5 text-[10px] text-[#f25c68]">+@(count - 5) more</span>
+                    }
+                </div>
+                <div class="mt-auto flex items-center justify-between border-t border-[#2a2f38] pt-3 text-[11px]">
+                    <span class="uppercase tracking-wider text-slate-600">Aggregate</span>
+                    <span class="flex items-center gap-1 text-[#e64653]">Analyze <i class="ph ph-arrow-right transition-transform group-hover:translate-x-0.5"></i></span>
+                </div>
+            </a>
+        }
+    </div>
+}
+
+@code {
+    private List<IndexConfiguration> _indices = [];
+    private Dictionary<string, List<string>> _resolvedKeysBySlug = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _indices = IndexOptions.Value;
+        const double minVolume = 100;
+        foreach (var index in _indices)
+        {
+            var resolved = await ProductRepository.GetProductKeysMatchingAsync(index.ProductKeys);
+            _resolvedKeysBySlug[index.Slug] = await ProductRepository.GetProductKeysWithMinVolumeAsync(resolved, minVolume);
+        }
+    }
+
+    private int GetResolvedCount(string slug) =>
+        _resolvedKeysBySlug.TryGetValue(slug, out var keys) ? keys.Count : 0;
+
+    private IEnumerable<string> GetResolvedSampleKeys(string slug) =>
+        _resolvedKeysBySlug.TryGetValue(slug, out var keys) ? keys.Take(5) : [];
+}

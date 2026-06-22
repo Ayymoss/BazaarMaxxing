@@ -2,25 +2,24 @@
 @rendermode InteractiveServer
 
 <div class="relative inline-block text-left" tabindex="0">
-    <button type="button" 
-            class="flex items-center gap-2 rounded-md border border-slate-700/50 bg-slate-800/40 pl-2.5 pr-8 py-0.5 text-[10px] font-semibold text-slate-300 shadow-sm transition-all hover:border-slate-500 hover:bg-slate-700/60 focus:border-blue-500/50 focus:outline-none focus:ring-1 focus:ring-blue-500/30 backdrop-blur-sm"
+    <button type="button"
+            class="flex items-center gap-2 rounded border border-[#2a2f38] bg-[#101216] pl-2.5 pr-7 py-1 text-[11px] font-mono font-medium text-slate-300 transition-colors hover:text-white focus:border-[#e64653]/60 focus:outline-none"
             @onclick="Toggle"
             @onclick:stopPropagation>
         @GetShortName(SelectedInterval)
-        <i class="ph ph-caret-down absolute right-2.5 top-1/2 -translate-y-1/2 text-slate-500 text-[10px] transition-transform @(_isOpen ? "rotate-180" : "")"></i>
+        <i class="ph ph-caret-down absolute right-2 top-1/2 -translate-y-1/2 text-[10px] text-slate-500 transition-transform @(_isOpen ? "rotate-180" : "")"></i>
     </button>
 
     @if (_isOpen)
     {
-        @* Transparent overlay to catch clicks outside *@
         <div class="fixed inset-0 z-40" @onclick="Close"></div>
 
-        <div class="absolute right-0 z-50 mt-1 w-24 origin-top-right rounded-lg border border-slate-700/60 bg-slate-900/90 p-1 shadow-xl backdrop-blur-xl animate-in fade-in zoom-in-95 duration-100">
+        <div class="absolute left-0 z-50 mt-1 w-24 origin-top-left rounded border border-[#2a2f38] bg-[#1a1d23] p-1 shadow-xl">
             <div class="flex flex-col gap-0.5">
                 @foreach (CandleInterval interval in Enum.GetValues<CandleInterval>().OrderBy(x => (int)x))
                 {
                     <button type="button"
-                            class="flex items-center justify-between rounded-md px-2 py-1.5 text-left text-[10px] font-bold transition-colors @(SelectedInterval == interval ? "bg-blue-500/20 text-blue-400" : "text-slate-400 hover:bg-slate-800 hover:text-slate-200")"
+                            class="flex items-center justify-between rounded px-2 py-1.5 text-left text-[11px] font-mono font-medium transition-colors @(SelectedInterval == interval ? "bg-[#e64653]/15 text-[#f25c68]" : "text-slate-400 hover:bg-white/5 hover:text-slate-200")"
                             @onclick="() => SelectInterval(interval)"
                             @onclick:stopPropagation>
                         @GetShortName(interval)

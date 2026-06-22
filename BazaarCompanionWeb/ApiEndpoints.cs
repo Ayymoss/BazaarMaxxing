@@ -1,3 +1,4 @@
+using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
@@ -22,90 +23,38 @@ public static class ApiEndpoints
 
     private static void MapChartEndpoints(WebApplication app)
     {
-        // Chart data API for lazy loading historical candles
+        // Chart data API: one page of candles + server-computed indicators (Lightweight Charts payload).
+        // ?before=<unixMs> pages backward; omit for the most-recent page.
         app.MapGet("/api/chart/{productKey}/{interval:int}", async (
             string productKey,
             int interval,
             long? before,
             int? limit,
-            IOhlcRepository ohlcRepository,
+            ChartDataService chartData,
             CancellationToken ct) =>
         {
-            var candleInterval = (CandleInterval)interval;
-            var dataLimit = Math.Min(limit ?? 200, 500); // Cap at 500 per request
-
-            List<OhlcDataPoint> candles;
-            if (before.HasValue)
-            {
-                // Load historical data before the specified timestamp
-                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
-                candles = await ohlcRepository.GetCandlesBeforeAsync(productKey, candleInterval, beforeTime, dataLimit, ct);
-            }
-            else
-            {
-                // Initial load - get most recent candles
-                candles = await ohlcRepository.GetCandlesAsync(productKey, candleInterval, dataLimit, ct);
-            }
-
-            // Return in KLineChart format (timestamp in milliseconds)
-            var result = candles.Select(c => new
-            {
-                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
-                open = c.Open,
-                high = c.High,
-                low = c.Low,
-                close = c.Close,
-                volume = c.Volume,
-                askClose = c.AskClose
-            }).ToList();
-
-            return Results.Ok(result);
+            var dataLimit = Math.Min(limit ?? 200, 500);
+            var payload = await chartData.BuildProductPageAsync(productKey, (CandleInterval)interval, before, dataLimit, ct);
+            return Results.Ok(payload);
         });
 
-        // Index chart API for aggregated OHLC data (ETF-like indices)
-        // Supports lazy loading: pass ?before=<unixMs> for historical data before that timestamp
+        // Index chart API for aggregated OHLC (ETF-like indices). Same payload, no ask line.
         app.MapGet("/api/chart/index/{slug}/{interval:int}", async (
             string slug,
             int interval,
             long? before,
             int? limit,
-            IndexAggregationService indexService,
+            ChartDataService chartData,
             IOptions<List<IndexConfiguration>> indexOptions,
             CancellationToken ct) =>
         {
-            var indices = indexOptions.Value;
-            var index = indices.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
+            var index = indexOptions.Value.FirstOrDefault(i => i.Slug.Equals(slug, StringComparison.OrdinalIgnoreCase));
             if (index is null)
-            {
                 return Results.NotFound(new { error = $"Index '{slug}' not found" });
-            }
 
-            var candleInterval = (CandleInterval)interval;
             var dataLimit = Math.Min(limit ?? 200, 500);
-
-            List<OhlcDataPoint> candles;
-            if (before.HasValue)
-            {
-                var beforeTime = DateTimeOffset.FromUnixTimeMilliseconds(before.Value).UtcDateTime;
-                candles = await indexService.GetAggregatedCandlesBeforeAsync(slug, candleInterval, beforeTime, dataLimit, ct);
-            }
-            else
-            {
-                candles = await indexService.GetAggregatedCandlesAsync(slug, candleInterval, dataLimit, ct);
-            }
-
-            var result = candles.Select(c => new
-            {
-                timestamp = new DateTimeOffset(c.Time).ToUnixTimeMilliseconds(),
-                open = c.Open,
-                high = c.High,
-                low = c.Low,
-                close = c.Close,
-                volume = c.Volume,
-                askClose = c.AskClose
-            }).ToList();
-
-            return Results.Ok(result);
+            var payload = await chartData.BuildIndexPageAsync(slug, (CandleInterval)interval, before, dataLimit, ct);
+            return Results.Ok(payload);
         });
     }
 

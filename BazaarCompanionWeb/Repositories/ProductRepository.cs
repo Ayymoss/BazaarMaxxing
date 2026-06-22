@@ -3,11 +3,16 @@ using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Services.Ingestion;
+using BazaarCompanionWeb.Utilities;
 using Microsoft.EntityFrameworkCore;
 
 namespace BazaarCompanionWeb.Repositories;
 
-public class ProductRepository(IDbContextFactory<DataContext> contextFactory, ILogger<ProductRepository> logger)
+public class ProductRepository(
+    IDbContextFactory<DataContext> contextFactory,
+    BazaarSnapshotStore snapshotStore,
+    ILogger<ProductRepository> logger)
     : IProductRepository
 {
     public async Task UpdateOrAddProductsAsync(List<EFProduct> products, CancellationToken cancellationToken)
@@ -224,6 +229,29 @@ public class ProductRepository(IDbContextFactory<DataContext> contextFactory, IL
 
     public async Task<ProductDataInfo> GetProductAsync(string productKey, CancellationToken cancellationToken)
     {
+        // Prefer the live in-memory snapshot (current prices + order books). The DB is only a
+        // fallback for products not yet polled this session; price history always comes from the DB.
+        var live = snapshotStore.GetLatestProduct(productKey);
+        if (live is not null)
+        {
+            var info = ProductMapping.ToInfo(live);
+            var data = snapshotStore.GetLatestData(productKey);
+            if (data is not null)
+            {
+                info.BidBook = data.Bid.OrderBook
+                    .Select(o => new Order(o.UnitPrice, o.Amount, o.Orders))
+                    .OrderByDescending(o => o.UnitPrice) // Bids: highest first
+                    .ToList();
+                info.AskBook = data.Ask.OrderBook
+                    .Select(o => new Order(o.UnitPrice, o.Amount, o.Orders))
+                    .OrderBy(o => o.UnitPrice) // Asks: lowest first
+                    .ToList();
+            }
+
+            info.PriceHistory = await GetPriceHistoryAsync(productKey, cancellationToken);
+            return info;
+        }
+
         await using var context = await contextFactory.CreateDbContextAsync(cancellationToken);
 
         var product = await context.Products.Where(x => x.ProductKey == productKey)

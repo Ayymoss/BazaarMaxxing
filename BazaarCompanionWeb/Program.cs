@@ -244,6 +244,7 @@ public class Program
         builder.Services.AddSingleton<ProductDataCache>();
         builder.Services.AddSingleton<AboutModalService>();
         builder.Services.AddScoped<IndexAggregationService>();
+        builder.Services.AddScoped<BazaarCompanionWeb.Charting.ChartDataService>();
 
         builder.Services.AddHostedService<OhlcAggregationService>();
         builder.Services.AddHostedService<FlushService>();

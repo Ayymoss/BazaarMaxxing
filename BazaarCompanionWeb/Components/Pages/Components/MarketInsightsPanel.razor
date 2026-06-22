@@ -7,154 +7,26 @@
 @inject IOptions<UIConfig> UIConfig
 @implements IDisposable
 
-<div class="mb-4">
-    <!-- Dashboard Header -->
-    <div class="flex items-center justify-between mb-4 px-1">
-        <div class="flex items-center gap-3">
-            <h2 class="text-xl font-bold text-white flex items-center gap-2">
-                <span class="p-1.5 rounded-lg bg-slate-800/50 border border-slate-700/50 shadow-inner">📊</span>
-                Market Insights
-            </h2>
-            @if (_insights?.NewInsightsCount > 0)
+@{
+    var movers = (_insights?.Gainers ?? []).Concat(_insights?.Losers ?? []).Take(16).ToList();
+}
+<div class="ticker">
+    <div class="lbl"><i class="ph-fill ph-fire" style="color: var(--term-gold)"></i> Movers</div>
+    <div class="items">
+        @if (movers.Count == 0)
+        {
+            <span class="tk"><span class="sym">Awaiting market data…</span></span>
+        }
+        else
+        {
+            @foreach (var m in movers)
             {
-                <span class="px-2 py-0.5 text-xs font-semibold rounded-full 
-                             bg-amber-500/20 text-amber-400 border border-amber-500/30
-                             animate-pulse">
-                        @_insights.NewInsightsCount NEW
-                    </span>
+                <span class="tk" @onclick="() => OnProductClick(m.ProductKey)">
+                    <span class="dot" style="background: @(m.IsGainer ? "var(--term-up)" : "var(--term-down)")"></span>
+                    <span class="sym">@m.ProductName</span>
+                    <span style="color: @(m.IsGainer ? "var(--term-up)" : "var(--term-down)")">@(m.IsGainer ? "+" : "")@m.PriceChangePercent24h.ToString("P2")</span>
+                </span>
             }
-        </div>
-        <div class="flex items-center gap-2 text-xs text-slate-500 px-3 py-1.5 rounded-full bg-slate-900/40 border border-slate-800/50">
-            <span class="flex h-1.5 w-1.5 rounded-full bg-emerald-500 shadow-[0_0_8px_rgba(16,185,129,0.4)]"></span>
-            <span>Last updated: @(_insights?.LastUpdated.Humanize() ?? "Loading...")</span>
-        </div>
-    </div>
-
-    <!-- Insights Grid -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-5 gap-4">
-
-        <!-- Hot Products Card -->
-        <div
-            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-amber-500/30 transition-all duration-300 group">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-amber-400 flex items-center gap-2">
-                    <span class="group-hover:animate-bounce transition-all">🔥</span> Hot Products
-                </h3>
-                <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-500 border border-amber-500/20">@(_insights?.HotProducts.Count ?? 0)</span>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                @foreach (var product in (_insights?.HotProducts ?? []).Take(5))
-                {
-                    <div @onclick="() => OnProductClick(product.ProductKey)"
-                         class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                        <span class="w-1.5 h-1.5 rounded-full @GetTierColor(product.Tier)"></span>
-                        <span class="flex-1 truncate text-xs text-slate-300">@product.ProductName</span>
-                        <span class="text-[10px] font-mono @(product.IsIncreasing ? "text-emerald-400" : "text-rose-400")">
-                                @(product.IsIncreasing ? "↑" : "↓") @product.PriceChangePercent.ToString("P2")
-                            </span>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Volume Surges Card -->
-        <div
-            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-cyan-500/30 transition-all duration-300 group">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-cyan-400 flex items-center gap-2">
-                    <span class="group-hover:animate-pulse transition-all">📈</span> Vol Surges
-                </h3>
-                <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-cyan-500/10 text-cyan-500 border border-cyan-500/20">@(_insights?.VolumeSurges.Count ?? 0)</span>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                @foreach (var surge in (_insights?.VolumeSurges ?? []).Take(5))
-                {
-                    <div @onclick="() => OnProductClick(surge.ProductKey)"
-                         class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                        <span class="w-1.5 h-1.5 rounded-full @GetTierColor(surge.Tier)"></span>
-                        <span class="flex-1 truncate text-xs text-slate-300">@surge.ProductName</span>
-                        <span class="text-[10px] font-mono text-cyan-400">@surge.SurgeRatio.ToString("F2")x</span>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Spread Opportunities Card -->
-        <div
-            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-emerald-500/30 transition-all duration-300 group">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-emerald-400 flex items-center gap-2">
-                    <span class="group-hover:rotate-12 transition-transform">💰</span> Top Spreads
-                </h3>
-                <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">@(_insights?.SpreadOpportunities.Count ?? 0)</span>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                @foreach (var opp in (_insights?.SpreadOpportunities ?? []).Take(5))
-                {
-                    <div @onclick="() => OnProductClick(opp.ProductKey)"
-                         class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                        <span class="w-1.5 h-1.5 rounded-full @GetTierColor(opp.Tier)"></span>
-                        <span class="flex-1 truncate text-xs text-slate-300">@opp.ProductName</span>
-                        <span class="text-[10px] font-mono text-emerald-400">@opp.CurrentSpread.ToString("N0")</span>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Fire Sales Card -->
-        <div
-            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-rose-500/30 transition-all duration-300 group">
-            <div class="flex items-center justify-between mb-3">
-                <h3 class="text-sm font-semibold text-rose-400 flex items-center gap-2">
-                    <span class="group-hover:scale-110 transition-transform">🧨</span> Fire Sales
-                </h3>
-                <span
-                    class="text-[10px] font-bold px-1.5 py-0.5 rounded bg-rose-500/10 text-rose-500 border border-rose-500/20">@(_insights?.FireSales.Count ?? 0)</span>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                @foreach (var alert in (_insights?.FireSales ?? []).Take(5))
-                {
-                    <div @onclick="() => OnProductClick(alert.ProductKey)"
-                         class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                        <span class="flex-1 truncate text-xs text-slate-300">@alert.ProductName</span>
-                        <span class="text-[10px] font-mono text-rose-400">@alert.PriceDeviationPercent.ToString("P0")↓</span>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <!-- Market Movers Card -->
-        <div
-            class="bg-slate-900/40 backdrop-blur-md border border-slate-800/50 rounded-xl p-4 hover:border-violet-500/30 transition-all duration-300 group">
-            <div class="flex items-center justify-between mb-2">
-                <h3 class="text-sm font-semibold text-violet-400 flex items-center gap-2">
-                    <span class="group-hover:-translate-y-0.5 transition-transform">🚀</span> Movers
-                </h3>
-                <div class="flex gap-1">
-                    <button @onclick="() => _showGainers = true"
-                            class="text-[9px] px-1 rounded @(_showGainers ? "bg-emerald-500/20 text-emerald-400" : "text-slate-500")">G
-                    </button>
-                    <button @onclick="() => _showGainers = false"
-                            class="text-[9px] px-1 rounded @(!_showGainers ? "bg-rose-500/20 text-rose-400" : "text-slate-500")">L
-                    </button>
-                </div>
-            </div>
-            <div class="space-y-2 max-h-48 overflow-y-auto no-scrollbar">
-                @foreach (var mover in (_showGainers ? _insights?.Gainers : _insights?.Losers) ?? [])
-                {
-                    <div @onclick="() => OnProductClick(mover.ProductKey)"
-                         class="flex items-center gap-2 p-1.5 rounded-lg cursor-pointer hover:bg-white/5 transition-colors">
-                        <span class="flex-1 truncate text-xs text-slate-300">@mover.ProductName</span>
-                        <span class="text-[10px] font-mono @(mover.IsGainer ? "text-emerald-400" : "text-rose-400")">
-                                @(mover.IsGainer ? "+" : "")@mover.PriceChangePercent24h.ToString("P2")
-                            </span>
-                    </div>
-                }
-            </div>
-        </div>
-
+        }
     </div>
 </div>

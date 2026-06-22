@@ -44,6 +44,39 @@ public partial class ProductList(
     private string _searchString = string.Empty;
     private string _titleText = "Bazaar Flips";
     private bool _filter = false;
+
+    // IBKR-style watchlist tabs. Each sets a filter and/or a default sort; column-header sorting still overrides.
+    private string _activeTab = "all";
+    private string? _tabSortProperty;
+    private AppSortDirection _tabSortDirection = AppSortDirection.Descending;
+
+    private static readonly (string Key, string Label)[] Tabs =
+    [
+        ("all", "All Products"),
+        ("smart", "Smart"),
+        ("fire", "Fire Sales"),
+        ("spreads", "Top Spreads"),
+        ("volume", "High Volume"),
+        ("indices", "Indices"),
+    ];
+
+    private async Task SetTabAsync(string tab)
+    {
+        if (_activeTab == tab) return;
+        _activeTab = tab;
+        _currentPageIndex = 0;
+
+        _filter = tab == "smart";
+        _advancedFilters.ManipulationStatus = tab == "fire" ? ManipulationFilter.Manipulated : ManipulationFilter.All;
+        (_tabSortProperty, _tabSortDirection) = tab switch
+        {
+            "spreads" => (nameof(ProductDataInfo.OrderMetaSpread), AppSortDirection.Descending),
+            "volume" => (nameof(ProductDataInfo.OrderMetaTotalWeekVolume), AppSortDirection.Descending),
+            _ => (null, AppSortDirection.Descending),
+        };
+
+        if (_grid is not null) await _grid.RefreshDataAsync();
+    }
     private DateTimeOffset _lastServerRefresh;
     private string _pageTitle = "Bazaar Maxxing";
     private AdvancedFilterOptions _advancedFilters = new();
@@ -105,11 +138,19 @@ public partial class ProductList(
                 }
             }
             
-            // Use default sort if no sort specified or property name not found
+            // No column sort active: fall back to the active tab's default sort, else opportunity score.
             if (string.IsNullOrEmpty(propertyName))
             {
-                propertyName = nameof(ProductDataInfo.OrderMetaFlipOpportunityScore);
-                sortDirection = AppSortDirection.Descending;
+                if (_tabSortProperty is not null)
+                {
+                    propertyName = _tabSortProperty;
+                    sortDirection = _tabSortDirection;
+                }
+                else
+                {
+                    propertyName = nameof(ProductDataInfo.OrderMetaFlipOpportunityScore);
+                    sortDirection = AppSortDirection.Descending;
+                }
             }
             
             sortDescriptors.Add(new SortDescriptor

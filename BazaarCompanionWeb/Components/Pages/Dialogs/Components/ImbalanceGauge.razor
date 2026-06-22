@@ -1,8 +1,8 @@
 @using BazaarCompanionWeb.Dtos
 
-<div class="flex flex-col items-center gap-2 p-4 rounded-xl border border-slate-700/50 bg-slate-900/40 backdrop-blur-md">
-    <h4 class="text-xs font-bold text-slate-400 uppercase tracking-wider">
-        <i class="ph ph-scales mr-1"></i> Order Book Imbalance
+<div class="flex flex-col items-center gap-2 p-4 rounded-md border border-[#2a2f38] bg-[#1a1d23]">
+    <h4 class="text-[11px] font-semibold uppercase tracking-wider text-slate-400 self-start">
+        <i class="ph ph-scales mr-1 text-slate-500"></i> Order Book Imbalance
     </h4>
 
     @if (Imbalance is not null)
@@ -13,7 +13,7 @@
                 <!-- Background arc -->
                 <path d="M 5 50 A 45 45 0 0 1 95 50"
                       fill="none"
-                      stroke="rgb(51 65 85)"
+                      stroke="#2a2f38"
                       stroke-width="8"
                       stroke-linecap="round"/>
                 <!-- Value arc -->

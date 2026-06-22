@@ -22,7 +22,7 @@ export async function createComparisonChart(containerId, normalizedData, product
         const productData = normalizedData[productKey];
         if (!productData || !Array.isArray(productData) || productData.length === 0) return;
 
-        const lineSeries = chart.addLineSeries({
+        const lineSeries = chart.addSeries(LightweightCharts.LineSeries, {
             color: colors[index % colors.length],
             lineWidth: 2,
             title: productKey,
@@ -63,12 +63,8 @@ export async function createDepthChart(containerId, bidData, askData) {
         handleScroll: false,
     });
 
-    const addDepthSeries = (color, top, bottom) => {
-        const options = { lineColor: color, topColor: top, bottomColor: bottom, lineWidth: 2 };
-        return typeof chart.addAreaSeries === 'function'
-            ? chart.addAreaSeries(options)
-            : chart.addSeries('Area', options);
-    };
+    const addDepthSeries = (color, top, bottom) =>
+        chart.addSeries(LightweightCharts.AreaSeries, { lineColor: color, topColor: top, bottomColor: bottom, lineWidth: 2 });
 
     const bidSeries = addDepthSeries('#22c55e', 'rgba(34, 197, 94, 0.4)', 'rgba(34, 197, 94, 0.05)');
     const askSeries = addDepthSeries('#ef4444', 'rgba(239, 68, 68, 0.4)', 'rgba(239, 68, 68, 0.05)');

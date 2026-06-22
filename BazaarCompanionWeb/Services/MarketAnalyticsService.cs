@@ -94,8 +94,8 @@ public class MarketAnalyticsService(
 
         var marketHealthScore = (spreadStability * 0.3 + volumeDistribution * 0.3 + manipulationScore * 0.2 + liquidityScore * 0.2);
 
-        // Volume Trends
-        var volumeTrends = await CalculateVolumeTrendsAsync(context, ct);
+        // Volume Trends (scalar figures from already-loaded products; no fabricated time series)
+        var volumeTrends = CalculateVolumeTrends(products);
 
         var metrics = new MarketMetrics
         {
@@ -247,37 +247,39 @@ public class MarketAnalyticsService(
 
     public async Task<List<ProductTrend>> GetTrendingProductsAsync(int count = 10, CancellationToken ct = default)
     {
-        await using var scope = scopeFactory.CreateAsyncScope();
-        var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
-        
         await using var context = await contextFactory.CreateDbContextAsync(ct);
 
+        // Only consider the most-traded products (bounded) so momentum scanning stays fast.
         var products = await context.Products
             .Include(p => p.Bid)
             .Include(p => p.Meta)
             .AsNoTracking()
             .Where(p => p.Bid.OrderVolumeWeek > 0)
+            .OrderByDescending(p => p.Meta.TotalWeekVolume)
+            .Take(400)
             .ToListAsync(ct);
+
+        // Single bulk candle fetch (few queries) instead of one query per product.
+        await using var scope = scopeFactory.CreateAsyncScope();
+        var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
+        var candlesByProduct = await ohlcRepository.GetCandlesBulkAsync(
+            products.Select(p => p.ProductKey).ToList(), CandleInterval.OneHour, 7 * 24, ct);
 
         var trends = new List<ProductTrend>();
 
         foreach (var product in products)
         {
-            var candles = await ohlcRepository.GetCandlesAsync(
-                product.ProductKey,
-                CandleInterval.OneHour,
-                limit: 7 * 24, // 7 days
-                ct);
+            if (!candlesByProduct.TryGetValue(product.ProductKey, out var candles) || candles.Count < 24)
+                continue; // Need at least 24 hours of data
 
-            if (candles.Count < 24) continue; // Need at least 24 hours of data
-
-            var orderedCandles = candles.OrderBy(c => c.Time).ToList();
-            var currentPrice = orderedCandles.Last().Close;
+            // GetCandlesBulkAsync returns candles chronological per product.
+            var orderedCandles = candles;
+            var currentPrice = orderedCandles[^1].Close;
 
             // Find prices at different time points
             var price6hAgo = GetPriceAtTimeAgo(orderedCandles, TimeSpan.FromHours(6));
             var price24hAgo = GetPriceAtTimeAgo(orderedCandles, TimeSpan.FromHours(24));
-            var price7dAgo = orderedCandles.First().Close;
+            var price7dAgo = orderedCandles[0].Close;
 
             if (price6hAgo == null || price24hAgo == null) continue;
 
@@ -314,52 +316,21 @@ public class MarketAnalyticsService(
             .ToList();
     }
 
-    private async Task<VolumeTrends> CalculateVolumeTrendsAsync(DataContext context, CancellationToken ct)
+    private static VolumeTrends CalculateVolumeTrends(List<EFProduct> products)
     {
-        var now = DateTime.UtcNow;
-        var products = await context.Products
-            .Include(p => p.Bid)
-            .Include(p => p.Ask)
-            .AsNoTracking()
-            .ToListAsync(ct);
-
-        var totalVolume24h = products.Sum(p => (p.Bid.OrderVolumeWeek + p.Ask.OrderVolumeWeek) / 7.0);
         var totalVolume7d = products.Sum(p => p.Bid.OrderVolumeWeek + p.Ask.OrderVolumeWeek);
-        var totalVolume30d = totalVolume7d * 30.0 / 7.0; // Estimate
+        var totalVolume24h = totalVolume7d / 7.0;
+        var totalVolume30d = totalVolume7d * 30.0 / 7.0; // Estimate from weekly
 
-        // For time series, we'd need historical volume data
-        // For now, create simple time series from current data
-        var timeSeries24h = new List<VolumeDataPoint>();
-        var timeSeries7d = new List<VolumeDataPoint>();
-        var timeSeries30d = new List<VolumeDataPoint>();
-
-        // Generate time series (simplified - would need historical data for real implementation)
-        for (int i = 23; i >= 0; i--)
-        {
-            var time = now.AddHours(-i);
-            timeSeries24h.Add(new VolumeDataPoint(time, totalVolume24h / 24.0));
-        }
-
-        for (int i = 6; i >= 0; i--)
-        {
-            var time = now.AddDays(-i);
-            timeSeries7d.Add(new VolumeDataPoint(time, totalVolume7d / 7.0));
-        }
-
-        for (int i = 29; i >= 0; i--)
-        {
-            var time = now.AddDays(-i);
-            timeSeries30d.Add(new VolumeDataPoint(time, totalVolume30d / 30.0));
-        }
-
+        // No fabricated time series — real per-hour market volume history isn't stored.
         return new VolumeTrends
         {
             Volume24h = totalVolume24h,
             Volume7d = totalVolume7d,
             Volume30d = totalVolume30d,
-            TimeSeries24h = timeSeries24h,
-            TimeSeries7d = timeSeries7d,
-            TimeSeries30d = timeSeries30d
+            TimeSeries24h = [],
+            TimeSeries7d = [],
+            TimeSeries30d = []
         };
     }
 

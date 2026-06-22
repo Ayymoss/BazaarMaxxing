@@ -20,6 +20,8 @@ public sealed class BazaarSnapshotStore
     private readonly Lock _diffLock = new();
 
     private readonly ConcurrentDictionary<string, EFProduct> _latestProducts = new();
+    // Full live product (incl. order books) so the web UI can read current state from RAM, not the DB.
+    private readonly ConcurrentDictionary<string, ProductData> _latestData = new();
     private readonly ConcurrentDictionary<string, ProductState> _latestState = new();
     private readonly ConcurrentDictionary<string, RingBuffer<TickSample>> _ticks = new();
     private readonly ConcurrentDictionary<string, CachedScores> _scores = new();
@@ -67,6 +69,7 @@ public sealed class BazaarSnapshotStore
 
                 _latestState[key] = newState;
                 _latestProducts[key] = efProduct;
+                _latestData[key] = product;
 
                 if (stateChanged)
                 {
@@ -113,6 +116,16 @@ public sealed class BazaarSnapshotStore
 
     public EFProduct? GetLatestProduct(string productKey) =>
         _latestProducts.TryGetValue(productKey, out var p) ? p : null;
+
+    /// <summary>The full live product (incl. order books) for a key, or null if not yet polled.</summary>
+    public ProductData? GetLatestData(string productKey) =>
+        _latestData.TryGetValue(productKey, out var d) ? d : null;
+
+    /// <summary>Snapshot of every product's latest mapped entity — the read source for the product list.</summary>
+    public IReadOnlyList<EFProduct> GetAllProducts() => _latestProducts.Values.ToList();
+
+    /// <summary>True once at least one poll has populated the store.</summary>
+    public bool HasData => !_latestProducts.IsEmpty;
 
     public IReadOnlyList<TickSample> GetTicksSince(string productKey, DateTime cutoff) =>
         _ticks.TryGetValue(productKey, out var ring)
