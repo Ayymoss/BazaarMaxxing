@@ -50,13 +50,21 @@ public sealed class FlushService(
     {
         var sw = Stopwatch.StartNew();
         var snapshot = store.DrainForFlush();
+        var present = store.KnownProductKeys;
 
-        if (snapshot.ChangedProducts.Count == 0 && snapshot.ChangedTicks.Count == 0)
+        if (snapshot.ChangedProducts.Count == 0 && snapshot.ChangedTicks.Count == 0 && present.Count == 0)
             return;
 
         await using var scope = scopeFactory.CreateAsyncScope();
         var ohlcRepository = scope.ServiceProvider.GetRequiredService<IOhlcRepository>();
         var productRepository = scope.ServiceProvider.GetRequiredService<IProductRepository>();
+
+        // Mark everything Hypixel is still listing as seen, not just what changed. LastSeenAt drives the
+        // two-day stale sweep, and it was only ever written for products whose prices moved — so a product
+        // that Hypixel returns in every single poll, but whose numbers sit still (an illiquid item, or any
+        // item during a quiet spell), would age out and be deleted along with its history.
+        if (present.Count > 0)
+            await productRepository.MarkProductsSeenAsync(present, ct);
 
         // Products must be upserted before ticks to satisfy FK_EFPriceTicks_EFProducts_ProductKey
         // when a brand-new product key appears in this flush window.

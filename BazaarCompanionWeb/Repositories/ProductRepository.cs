@@ -342,6 +342,21 @@ public class ProductRepository(
             .ToListAsync(ct);
     }
 
+    public async Task MarkProductsSeenAsync(IReadOnlyCollection<string> productKeys, CancellationToken ct = default)
+    {
+        if (productKeys.Count == 0) return;
+
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+        var keys = productKeys as IList<string> ?? productKeys.ToList();
+        var now = DateTime.UtcNow;
+
+        // One set-based UPDATE per flush rather than loading entities: this touches every listed product and
+        // only writes a timestamp.
+        await context.Products
+            .Where(p => keys.Contains(p.ProductKey))
+            .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.LastSeenAt, now), ct);
+    }
+
     public async Task<int> DeleteStaleProductsAsync(int staleAfterDays = 2, CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);

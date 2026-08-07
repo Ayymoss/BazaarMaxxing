@@ -32,4 +32,9 @@ public interface IProductRepository
     /// Deletes products that haven't been seen in the API response for the specified number of days.
     /// </summary>
     Task<int> DeleteStaleProductsAsync(int staleAfterDays = 2, CancellationToken ct = default);
+
+    /// <summary>
+    /// Records that these products are still being listed, independently of whether their prices changed.
+    /// </summary>
+    Task MarkProductsSeenAsync(IReadOnlyCollection<string> productKeys, CancellationToken ct = default);
 }

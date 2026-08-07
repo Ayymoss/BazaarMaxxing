@@ -7,6 +7,7 @@ using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Services;
+using BazaarCompanionWeb.Services.Ingestion;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 
@@ -177,6 +178,8 @@ public static class ApiEndpoints
                 SuggestedCost: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books)) * p.Bid.UnitPrice,
                 SuggestedProfit: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books))
                                  * ((p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice),
+                // Honest about what it is: these rows come from the database, which lags the live snapshot by
+                // the flush interval. Screening on them is fine; pricing an order is not.
                 DataAgeSeconds: Math.Max(0, (DateTime.UtcNow - p.LastSeenAt).TotalSeconds),
                 IsManipulated: p.Meta.IsManipulated,
                 ManipulationIntensity: p.Meta.ManipulationIntensity,
@@ -214,6 +217,7 @@ public static class ApiEndpoints
         app.MapGet("/api/bot/products/{productKey}", async (
             string productKey,
             IProductRepository productRepository,
+            BazaarSnapshotStore snapshotStore,
             CancellationToken ct) =>
         {
             ProductDataInfo product;
@@ -246,7 +250,11 @@ public static class ApiEndpoints
                 IsManipulated: product.IsManipulated,
                 ManipulationIntensity: product.ManipulationIntensity,
                 PriceDeviationPercent: product.PriceDeviationPercent,
-                DataAgeSeconds: Math.Max(0, (DateTime.UtcNow - product.LastSeenAt).TotalSeconds),
+                // This endpoint serves the in-memory snapshot, so its age is the age of the last poll — not
+                // of the database row, which lags behind by however long the flush interval is.
+                DataAgeSeconds: snapshotStore.LastIngestUtc == DateTime.MinValue
+                    ? double.PositiveInfinity
+                    : Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds),
                 BidBook: product.BidBook ?? [],
                 AskBook: product.AskBook ?? [],
                 PriceHistory: product.PriceHistory ?? []
@@ -339,21 +347,17 @@ public static class ApiEndpoints
         // Market health score with trading recommendation
         app.MapGet("/api/bot/market/health", async (
             MarketAnalyticsService marketAnalyticsService,
-            IDbContextFactory<DataContext> contextFactory,
+            BazaarSnapshotStore snapshotStore,
             CancellationToken ct) =>
         {
             var metrics = await marketAnalyticsService.GetMarketMetricsAsync(ct);
 
-            // Ingest freshness. A bot polling for prices needs to know when this service has stopped hearing
-            // from Hypixel, because stale-but-plausible numbers are worse than an obvious error: it would keep
-            // re-pricing against a book that no longer exists.
-            await using var freshnessContext = await contextFactory.CreateDbContextAsync(ct);
-            var newestSeenAt = await freshnessContext.Products
-                .AsNoTracking()
-                .MaxAsync(p => (DateTime?)p.LastSeenAt, ct);
-            var dataAgeSeconds = newestSeenAt is null
+            // Ingest freshness, measured at the poll rather than at the database flush: a bot needs to know
+            // when this service stopped hearing from Hypixel, and the flush interval would otherwise show as
+            // staleness that does not exist.
+            var dataAgeSeconds = snapshotStore.LastIngestUtc == DateTime.MinValue
                 ? double.PositiveInfinity
-                : Math.Max(0, (DateTime.UtcNow - newestSeenAt.Value).TotalSeconds);
+                : Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds);
 
             var (recommendation, reason) = metrics.MarketHealthScore switch
             {

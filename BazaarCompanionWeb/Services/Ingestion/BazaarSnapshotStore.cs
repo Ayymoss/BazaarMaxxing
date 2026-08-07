@@ -30,6 +30,21 @@ public sealed class BazaarSnapshotStore
     private readonly ConcurrentDictionary<string, byte> _dirtySinceFlush = new();
 
     /// <summary>
+    /// When the last poll landed in memory. This — not the database — is how current the served prices are:
+    /// ingest runs every minute, while the DB flush is batched, so a row's LastSeenAt lags by minutes even
+    /// when the numbers being served are seconds old. Anything reporting freshness to a trading client has to
+    /// use this, or the client sees staleness that is not there.
+    /// </summary>
+    public DateTime LastIngestUtc { get; private set; } = DateTime.MinValue;
+
+    /// <summary>
+    /// Every product key Hypixel returned in the last poll — i.e. everything that still exists, whether or not
+    /// its numbers moved. Presence and change are different questions, and the stale-product sweep needs the
+    /// former.
+    /// </summary>
+    public IReadOnlyCollection<string> KnownProductKeys => _latestState.Keys.ToList();
+
+    /// <summary>
     /// Splat one poll's worth of data into the store. Computes change-detection internally
     /// against the previous in-memory state. Returns the list of changed product keys so
     /// callers can decide whether to recompute scores etc.
@@ -45,6 +60,7 @@ public sealed class BazaarSnapshotStore
 
         var changed = new List<string>();
         var firstRun = _latestState.IsEmpty;
+        LastIngestUtc = timestamp;
 
         lock (_diffLock)
         {
