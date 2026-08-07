@@ -277,6 +277,30 @@ public static class ApiEndpoints
             return Results.Ok(detail);
         });
 
+        // Name -> key lookup, for callers that only ever see the display name.
+        //
+        // A bot reading Hypixel's own order menu has "Foxtrot Shard" and nothing else; every other endpoint
+        // here is keyed by product key, so without this it cannot ask about a position it can plainly see.
+        // The name it holds may also be word-inverted relative to the API's ("Shard Foxtrot"), which is why
+        // the match is order-insensitive rather than an equality test.
+        app.MapGet("/api/bot/products/lookup", async (
+            string name,
+            IProductRepository productRepository,
+            CancellationToken ct) =>
+        {
+            if (string.IsNullOrWhiteSpace(name))
+                return Results.BadRequest(new { error = "Query parameter 'name' is required" });
+
+            var matches = await productRepository.FindProductsByNameAsync(name, ct);
+            if (matches.Count == 0)
+                return Results.NotFound(new { error = $"No product matches the name '{name}'" });
+
+            return Results.Ok(matches
+                .Take(10)
+                .Select(m => new { productKey = m.ProductKey, name = m.Name })
+                .ToList());
+        });
+
         // Batch product lookup (lightweight, no order books/history)
         app.MapGet("/api/bot/products/batch", async (
             string keys,

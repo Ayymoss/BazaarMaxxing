@@ -357,6 +357,43 @@ public class ProductRepository(
             .ExecuteUpdateAsync(setters => setters.SetProperty(p => p.LastSeenAt, now), ct);
     }
 
+    public async Task<List<(string ProductKey, string Name)>> FindProductsByNameAsync(string name, CancellationToken ct = default)
+    {
+        var words = name.Split(' ', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries);
+        if (words.Length == 0) return [];
+
+        await using var context = await contextFactory.CreateDbContextAsync(ct);
+
+        // Narrow in SQL on the most distinctive word — the longest one, which is the least likely to be a
+        // family label like "Shard" shared by hundreds of rows — then decide the actual match in memory, where
+        // word order can be ignored without writing it as a query the database cannot index anyway.
+        var anchor = words.OrderByDescending(w => w.Length).First();
+
+        var candidates = await context.Products
+            .AsNoTracking()
+            .Where(p => EF.Functions.ILike(p.FriendlyName, $"%{anchor}%"))
+            .Select(p => new { p.ProductKey, p.FriendlyName })
+            .Take(200)
+            .ToListAsync(ct);
+
+        var wanted = words.Select(w => w.ToLowerInvariant()).ToHashSet();
+
+        return candidates
+            .Select(c => new
+            {
+                c.ProductKey,
+                c.FriendlyName,
+                Words = c.FriendlyName.Split(' ', StringSplitOptions.RemoveEmptyEntries)
+                    .Select(w => w.ToLowerInvariant()).ToHashSet()
+            })
+            // Exact name first, then the same words in any order, then anything merely containing the anchor.
+            .OrderByDescending(c => string.Equals(c.FriendlyName, name, StringComparison.OrdinalIgnoreCase))
+            .ThenByDescending(c => c.Words.SetEquals(wanted))
+            .ThenBy(c => c.FriendlyName.Length)
+            .Select(c => (c.ProductKey, c.FriendlyName))
+            .ToList();
+    }
+
     public async Task<int> DeleteStaleProductsAsync(int staleAfterDays = 2, CancellationToken ct = default)
     {
         await using var context = await contextFactory.CreateDbContextAsync(ct);

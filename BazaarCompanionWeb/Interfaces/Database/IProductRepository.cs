@@ -37,4 +37,12 @@ public interface IProductRepository
     /// Records that these products are still being listed, independently of whether their prices changed.
     /// </summary>
     Task MarkProductsSeenAsync(IReadOnlyCollection<string> productKeys, CancellationToken ct = default);
+
+    /// <summary>
+    /// Finds products by display name, for callers that only ever see the name — a bot reading an in-game menu
+    /// has the friendly name and needs the key before it can ask about anything else. Word order is not
+    /// significant, because Hypixel lists some families the other way round in the API ("Shard Foxtrot") than
+    /// it renders them in game ("Foxtrot Shard").
+    /// </summary>
+    Task<List<(string ProductKey, string Name)>> FindProductsByNameAsync(string name, CancellationToken ct = default);
 }
