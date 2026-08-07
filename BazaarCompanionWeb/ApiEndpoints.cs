@@ -5,6 +5,7 @@ using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Dtos.Bot;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Models;
 using BazaarCompanionWeb.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
@@ -14,6 +15,16 @@ namespace BazaarCompanionWeb;
 public static class ApiEndpoints
 {
     private const double BazaarTaxRate = 0.01125;
+    private const double MinutesPerWeek = 7 * 24 * 60;
+
+    /// <summary>
+    /// Weekly volume divided by minutes overstates how fast a queue actually drains: the volume is spread
+    /// across every price level and every hour, while an order only ever consumes flow arriving at ITS level
+    /// during the hours it is posted. Measured against a live order on ENCHANTED_SLIME_BALL (9.3M/week, so a
+    /// naive 923 units/min) the observed rate was ~170 units/min — a fifth. Estimates are scaled by that
+    /// rather than published as-is, because a bot deciding what it can finish deserves the pessimistic number.
+    /// </summary>
+    private const double QueueDrainFactor = 0.2;
 
     public static void MapApiEndpoints(this WebApplication app)
     {
@@ -69,6 +80,8 @@ public static class ApiEndpoints
             bool? excludeManipulated,
             double? minScore,
             int? maxResults,
+            double? maxFillMinutes,
+            string? sort,
             IDbContextFactory<DataContext> contextFactory,
             CancellationToken ct) =>
         {
@@ -104,10 +117,24 @@ public static class ApiEndpoints
             if (minVolume.HasValue)
                 query = query.Where(p => p.Meta.TotalWeekVolume >= minVolume.Value);
 
+            // Pull a wider candidate pool than the caller asked for: the fill-time filter and the fill/
+            // throughput sorts operate on data that only exists after the order books are deserialized, so
+            // trimming to resultLimit by score first would hide exactly the tradable flips they select for.
+            var candidatePool = Math.Min(Math.Max(resultLimit * 5, resultLimit), 250);
             var products = await query
                 .OrderByDescending(p => p.Meta.FlipOpportunityScore)
-                .Take(resultLimit)
+                .Take(candidatePool)
                 .ToListAsync(ct);
+
+            // Depth at the best price on each side, read from the stored book. This is the queue a bot joins
+            // when it posts at the top — and the reason a fat spread can still be untradable: 11,000 units
+            // parked at the best bid is an hour of waiting, during which anyone can undercut by 0.1 and reset
+            // the wait entirely.
+            static int TopDepth(IReadOnlyList<OrderBook> book) => book.Count > 0 ? book[0].Amount : 0;
+            static double FillMinutes(int depth, double weekVolume) =>
+                weekVolume <= 0
+                    ? double.PositiveInfinity
+                    : depth / (weekVolume / MinutesPerWeek * QueueDrainFactor);
 
             var result = products.Select(p => new FlipOpportunity(
                 ProductKey: p.ProductKey,
@@ -127,10 +154,36 @@ public static class ApiEndpoints
                 ProfitMultiplier: p.Meta.ProfitMultiplier,
                 OpportunityScore: p.Meta.FlipOpportunityScore,
                 EstimatedProfitPerUnit: (p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice,
+                TopBidDepth: TopDepth(p.Bid.Books),
+                TopAskDepth: TopDepth(p.Ask.Books),
+                EstimatedBuyFillMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek),
+                EstimatedSellFillMinutes: FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
+                EstimatedRoundTripMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek)
+                                           + FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
                 IsManipulated: p.Meta.IsManipulated,
                 ManipulationIntensity: p.Meta.ManipulationIntensity,
                 PriceDeviationPercent: p.Meta.PriceDeviationPercent
             )).ToList();
+
+            // Fill time is a filter and a sort, not just a readout: a bot asking for flips wants the ones it
+            // can actually complete. Ordering by score alone puts a 677%-spread product that trades twice a
+            // day above a 26% one that turns over millions a week, which is backwards for anything that has
+            // to hold inventory while it waits.
+            if (maxFillMinutes is { } fillCeiling)
+                result = result.Where(f => f.EstimatedRoundTripMinutes <= fillCeiling).ToList();
+
+            result = (sort?.ToLowerInvariant() switch
+            {
+                "fill" => result.OrderBy(f => f.EstimatedRoundTripMinutes),
+                "profit" => result.OrderByDescending(f => f.EstimatedProfitPerUnit),
+                // Profit per unit is worthless if the flip takes a day; profit per minute is the honest
+                // ranking for a bot that can only hold one position at a time.
+                "throughput" => result.OrderByDescending(f =>
+                    f.EstimatedRoundTripMinutes > 0 && !double.IsInfinity(f.EstimatedRoundTripMinutes)
+                        ? f.EstimatedProfitPerUnit / f.EstimatedRoundTripMinutes
+                        : 0),
+                _ => result.OrderByDescending(f => f.OpportunityScore)
+            }).Take(resultLimit).ToList();
 
             return Results.Ok(result);
         });

@@ -23,6 +23,17 @@ public sealed record FlipOpportunity(
     double ProfitMultiplier,
     double OpportunityScore,
     double EstimatedProfitPerUnit,
+    // Queue position — what actually decides whether a limit order ever fills.
+    // A flip needs BOTH legs to fill, and an order joins the back of a price level's queue. These are the
+    // depths sitting at the best price on each side: post at that price and this is what clears before you.
+    int TopBidDepth,
+    int TopAskDepth,
+    // Rough minutes for that queue to clear at the product's own average pace. Weekly volume is spread over
+    // every price level and every hour of the day, so treat these as a RANKING signal, not a promise —
+    // observed fill rates run several times slower than the average implies.
+    double EstimatedBuyFillMinutes,
+    double EstimatedSellFillMinutes,
+    double EstimatedRoundTripMinutes,
     // Risk indicators
     bool IsManipulated,
     double ManipulationIntensity,
