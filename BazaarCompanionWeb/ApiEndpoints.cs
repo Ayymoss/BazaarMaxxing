@@ -27,6 +27,20 @@ public static class ApiEndpoints
     /// </summary>
     private const double QueueDrainFactor = 0.2;
 
+    /// <summary>
+    /// Stand-in for "not knowable" in fields that are otherwise a duration.
+    ///
+    /// Infinity is the mathematically honest answer for a queue that never drains, or the age of a snapshot
+    /// that has never been taken — but System.Text.Json refuses to write non-finite numbers and throws, which
+    /// turns one odd product into a 500 for the whole endpoint. A large finite value serialises, sorts to the
+    /// bottom, and is comfortably past any threshold a caller would filter on. Roughly 28 hours in either
+    /// unit, so it also reads as absurd rather than plausible.
+    /// </summary>
+    private const double Unknown = 99_999;
+
+    /// <summary>Replaces anything JSON cannot represent — NaN and both infinities — with <see cref="Unknown"/>.</summary>
+    private static double Serialisable(double value) => double.IsFinite(value) ? value : Unknown;
+
     public static void MapApiEndpoints(this WebApplication app)
     {
         MapChartEndpoints(app);
@@ -147,8 +161,8 @@ public static class ApiEndpoints
 
             static double FillMinutes(int depth, double weekVolume) =>
                 weekVolume <= 0
-                    ? double.PositiveInfinity
-                    : depth / (weekVolume / MinutesPerWeek * QueueDrainFactor);
+                    ? Unknown
+                    : Serialisable(depth / (weekVolume / MinutesPerWeek * QueueDrainFactor));
 
             var result = products.Select(p => new FlipOpportunity(
                 ProductKey: p.ProductKey,
@@ -164,10 +178,10 @@ public static class ApiEndpoints
                 AskVolume: p.Ask.OrderVolume,
                 AskWeekVolume: p.Ask.OrderVolumeWeek,
                 Spread: p.Meta.Spread,
-                SpreadPercent: p.Bid.UnitPrice > 0 ? p.Meta.Spread / p.Bid.UnitPrice * 100 : 0,
+                SpreadPercent: p.Bid.UnitPrice > 0 ? Serialisable(p.Meta.Spread / p.Bid.UnitPrice * 100) : 0,
                 ProfitMultiplier: p.Meta.ProfitMultiplier,
                 OpportunityScore: p.Meta.FlipOpportunityScore,
-                EstimatedProfitPerUnit: (p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice,
+                EstimatedProfitPerUnit: Serialisable((p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice),
                 TopBidDepth: TopDepth(p.Bid.Books),
                 TopAskDepth: TopDepth(p.Ask.Books),
                 EstimatedBuyFillMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek),
@@ -180,7 +194,7 @@ public static class ApiEndpoints
                                  * ((p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice),
                 // Honest about what it is: these rows come from the database, which lags the live snapshot by
                 // the flush interval. Screening on them is fine; pricing an order is not.
-                DataAgeSeconds: Math.Max(0, (DateTime.UtcNow - p.LastSeenAt).TotalSeconds),
+                DataAgeSeconds: Serialisable(Math.Max(0, (DateTime.UtcNow - p.LastSeenAt).TotalSeconds)),
                 IsManipulated: p.Meta.IsManipulated,
                 ManipulationIntensity: p.Meta.ManipulationIntensity,
                 PriceDeviationPercent: p.Meta.PriceDeviationPercent
@@ -204,7 +218,7 @@ public static class ApiEndpoints
                 // Profit per unit is worthless if the flip takes a day; profit per minute is the honest
                 // ranking for a bot that can only hold one position at a time.
                 "throughput" => result.OrderByDescending(f =>
-                    f.EstimatedRoundTripMinutes > 0 && !double.IsInfinity(f.EstimatedRoundTripMinutes)
+                    f.EstimatedRoundTripMinutes is > 0 and < Unknown
                         ? f.EstimatedProfitPerUnit / f.EstimatedRoundTripMinutes
                         : 0),
                 _ => result.OrderByDescending(f => f.OpportunityScore)
@@ -253,8 +267,8 @@ public static class ApiEndpoints
                 // This endpoint serves the in-memory snapshot, so its age is the age of the last poll — not
                 // of the database row, which lags behind by however long the flush interval is.
                 DataAgeSeconds: snapshotStore.LastIngestUtc == DateTime.MinValue
-                    ? double.PositiveInfinity
-                    : Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds),
+                    ? Unknown
+                    : Serialisable(Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds)),
                 BidBook: product.BidBook ?? [],
                 AskBook: product.AskBook ?? [],
                 PriceHistory: product.PriceHistory ?? []
@@ -356,8 +370,8 @@ public static class ApiEndpoints
             // when this service stopped hearing from Hypixel, and the flush interval would otherwise show as
             // staleness that does not exist.
             var dataAgeSeconds = snapshotStore.LastIngestUtc == DateTime.MinValue
-                ? double.PositiveInfinity
-                : Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds);
+                ? Unknown
+                : Serialisable(Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds));
 
             var (recommendation, reason) = metrics.MarketHealthScore switch
             {
