@@ -34,6 +34,15 @@ public sealed record FlipOpportunity(
     double EstimatedBuyFillMinutes,
     double EstimatedSellFillMinutes,
     double EstimatedRoundTripMinutes,
+    // Sizing for a given budget. Only populated when the caller passes ?budget=, and derived rather than
+    // guessed: a bot should not carry a hardcoded quantity that ignores both its purse and the depth of the
+    // book it is about to trade into.
+    int SuggestedQuantity,
+    double SuggestedCost,
+    double SuggestedProfit,
+    // How old the snapshot behind these numbers is. The bot re-prices against this data, so it has to be able
+    // to tell "the book moved" from "our copy of the book is stale".
+    double DataAgeSeconds,
     // Risk indicators
     bool IsManipulated,
     double ManipulationIntensity,
@@ -84,6 +93,13 @@ public sealed record BotProductSummary(
 );
 
 public sealed record BotMarketHealth(
+    /// <summary>
+    /// The tax the server takes on sell proceeds, as this service assumes it. Published so a client cannot
+    /// silently disagree with the figure used in every profit number here — both apps had it hardcoded.
+    /// </summary>
+    double BazaarTaxRate,
+    /// <summary>Seconds since the most recently refreshed product. Large values mean the ingest has stalled.</summary>
+    double DataAgeSeconds,
     double HealthScore,
     double AverageSpread,
     double ManipulationIndex,

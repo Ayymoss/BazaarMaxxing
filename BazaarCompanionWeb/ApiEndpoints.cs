@@ -82,6 +82,7 @@ public static class ApiEndpoints
             int? maxResults,
             double? maxFillMinutes,
             string? sort,
+            double? budget,
             IDbContextFactory<DataContext> contextFactory,
             CancellationToken ct) =>
         {
@@ -131,6 +132,18 @@ public static class ApiEndpoints
             // parked at the best bid is an hour of waiting, during which anyone can undercut by 0.1 and reset
             // the wait entirely.
             static int TopDepth(IReadOnlyList<OrderBook> book) => book.Count > 0 ? book[0].Amount : 0;
+            // How many units this budget can buy, bounded by the book rather than by the purse alone. Taking
+            // more than a slice of the top level means the sell side has to absorb an order larger than the
+            // depth that was there when the decision was made — and Hypixel caps a single order anyway.
+            const int hypixelMaxOrderUnits = 71_680;
+            static int SuggestedUnits(double? budgetCoins, double bidPrice, int topAskDepth)
+            {
+                if (budgetCoins is not { } coins || bidPrice <= 0) return 0;
+                var affordable = (int)Math.Floor(coins / bidPrice);
+                var bookLimit = topAskDepth > 0 ? Math.Max(1, topAskDepth / 4) : affordable;
+                return Math.Clamp(Math.Min(affordable, bookLimit), 0, hypixelMaxOrderUnits);
+            }
+
             static double FillMinutes(int depth, double weekVolume) =>
                 weekVolume <= 0
                     ? double.PositiveInfinity
@@ -160,6 +173,11 @@ public static class ApiEndpoints
                 EstimatedSellFillMinutes: FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
                 EstimatedRoundTripMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek)
                                            + FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
+                SuggestedQuantity: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books)),
+                SuggestedCost: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books)) * p.Bid.UnitPrice,
+                SuggestedProfit: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books))
+                                 * ((p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice),
+                DataAgeSeconds: Math.Max(0, (DateTime.UtcNow - p.LastSeenAt).TotalSeconds),
                 IsManipulated: p.Meta.IsManipulated,
                 ManipulationIntensity: p.Meta.ManipulationIntensity,
                 PriceDeviationPercent: p.Meta.PriceDeviationPercent
@@ -171,6 +189,10 @@ public static class ApiEndpoints
             // to hold inventory while it waits.
             if (maxFillMinutes is { } fillCeiling)
                 result = result.Where(f => f.EstimatedRoundTripMinutes <= fillCeiling).ToList();
+
+            // A flip the caller cannot afford a single unit of is not an opportunity for them.
+            if (budget is not null)
+                result = result.Where(f => f.SuggestedQuantity > 0).ToList();
 
             result = (sort?.ToLowerInvariant() switch
             {
@@ -316,9 +338,21 @@ public static class ApiEndpoints
         // Market health score with trading recommendation
         app.MapGet("/api/bot/market/health", async (
             MarketAnalyticsService marketAnalyticsService,
+            IDbContextFactory<DataContext> contextFactory,
             CancellationToken ct) =>
         {
             var metrics = await marketAnalyticsService.GetMarketMetricsAsync(ct);
+
+            // Ingest freshness. A bot polling for prices needs to know when this service has stopped hearing
+            // from Hypixel, because stale-but-plausible numbers are worse than an obvious error: it would keep
+            // re-pricing against a book that no longer exists.
+            await using var freshnessContext = await contextFactory.CreateDbContextAsync(ct);
+            var newestSeenAt = await freshnessContext.Products
+                .AsNoTracking()
+                .MaxAsync(p => (DateTime?)p.LastSeenAt, ct);
+            var dataAgeSeconds = newestSeenAt is null
+                ? double.PositiveInfinity
+                : Math.Max(0, (DateTime.UtcNow - newestSeenAt.Value).TotalSeconds);
 
             var (recommendation, reason) = metrics.MarketHealthScore switch
             {
@@ -329,6 +363,8 @@ public static class ApiEndpoints
             };
 
             var result = new BotMarketHealth(
+                BazaarTaxRate: BazaarTaxRate,
+                DataAgeSeconds: dataAgeSeconds,
                 HealthScore: metrics.MarketHealthScore,
                 AverageSpread: metrics.AverageSpread,
                 ManipulationIndex: metrics.MarketManipulationIndex,
