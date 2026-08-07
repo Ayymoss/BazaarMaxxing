@@ -11,6 +11,9 @@ public class ProductDataInfo
     public ItemTier ItemTier { get; set; }
     public bool ItemUnstackable { get; set; }
     public string? SkinUrl { get; set; }
+
+    /// <summary>When this product was last refreshed from Hypixel. Drives the freshness the bot API reports.</summary>
+    public DateTime LastSeenAt { get; set; }
     public double BidUnitPrice { get; set; }
     public double BidWeekVolume { get; set; }
     public int BidCurrentOrders { get; set; }

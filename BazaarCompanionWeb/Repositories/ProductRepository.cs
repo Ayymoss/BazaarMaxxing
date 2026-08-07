@@ -264,6 +264,7 @@ public class ProductRepository(
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
                 SkinUrl = x.SkinUrl,
+                LastSeenAt = x.LastSeenAt,
                 BidUnitPrice = x.Bid.UnitPrice,
                 BidWeekVolume = x.Bid.OrderVolumeWeek,
                 BidCurrentOrders = x.Bid.OrderCount,
@@ -326,6 +327,7 @@ public class ProductRepository(
                 ItemTier = x.Tier,
                 ItemUnstackable = x.Unstackable,
                 SkinUrl = x.SkinUrl,
+                LastSeenAt = x.LastSeenAt,
                 BidUnitPrice = x.Bid.UnitPrice,
                 AskUnitPrice = x.Ask.UnitPrice,
             }).ToListAsync(cancellationToken);
@@ -429,6 +431,7 @@ public class ProductRepository(
                     ItemTier = x.Tier,
                     ItemUnstackable = x.Unstackable,
                     SkinUrl = x.SkinUrl,
+                LastSeenAt = x.LastSeenAt,
                     BidUnitPrice = x.Bid.UnitPrice,
                     BidWeekVolume = x.Bid.OrderVolumeWeek,
                     BidCurrentOrders = x.Bid.OrderCount,

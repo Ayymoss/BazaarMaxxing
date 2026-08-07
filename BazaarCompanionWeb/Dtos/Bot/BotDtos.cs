@@ -73,6 +73,12 @@ public sealed record BotProductDetail(
     bool IsManipulated,
     double ManipulationIntensity,
     double PriceDeviationPercent,
+    /// <summary>
+    /// Age of this snapshot. The bot re-prices live orders against this endpoint every poll, and a repricing
+    /// rule fed stale prices chases a book that has already moved — so staleness has to be visible here, not
+    /// only on the flips list.
+    /// </summary>
+    double DataAgeSeconds,
     // Order books
     List<Order> BidBook,
     List<Order> AskBook,

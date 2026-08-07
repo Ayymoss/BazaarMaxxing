@@ -246,6 +246,7 @@ public static class ApiEndpoints
                 IsManipulated: product.IsManipulated,
                 ManipulationIntensity: product.ManipulationIntensity,
                 PriceDeviationPercent: product.PriceDeviationPercent,
+                DataAgeSeconds: Math.Max(0, (DateTime.UtcNow - product.LastSeenAt).TotalSeconds),
                 BidBook: product.BidBook ?? [],
                 AskBook: product.AskBook ?? [],
                 PriceHistory: product.PriceHistory ?? []
