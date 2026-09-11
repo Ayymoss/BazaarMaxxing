@@ -7,8 +7,8 @@ namespace BazaarCompanionWeb.Configurations;
 public sealed class UIConfig
 {
     /// <summary>
-    /// How often the "Last Updated" humanized text on Product / ProductList re-renders.
-    /// Lower values waste CPU; the string only changes at minute boundaries anyway.
+    /// How often the "Last Updated" humanized text on ProductList re-renders. (The Product page ticks
+    /// every second on its own and only re-renders when the displayed text changes.)
     /// </summary>
     public int LastUpdatedRefreshSeconds { get; set; } = 30;
 

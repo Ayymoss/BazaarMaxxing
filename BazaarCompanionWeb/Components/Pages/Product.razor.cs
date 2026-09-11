@@ -38,6 +38,11 @@ public partial class Product(
     private DateTimeOffset? _lastServerRefresh;
     private DateTimeOffset? _lastLivePush;
 
+    // Rendered footer state. Recomputed every second by the ticker; the page only re-renders when
+    // one of these strings actually changes, so "now" -> "5 seconds ago" -> ... advances on its own.
+    private string _lastRefreshText = "…";
+    private string _liveDotClass = "bg-amber-500";
+
     internal CandleInterval _selectedInterval = CandleInterval.OneHour;
     private List<RelatedProduct> _relatedProducts = [];
     private bool _relatedProductsLoaded;
@@ -51,7 +56,7 @@ public partial class Product(
     // Recent candles for the right-panel sparkline (fills far sooner than daily PriceSnapshots)
     private List<OhlcDataPoint> _sparkCandles = [];
 
-    // Timer to refresh humanized "Last Updated" text
+    // Ticks once a second to keep the humanized "Last Updated" text and live dot current
     private Timer? _refreshTimer;
 
     // Comparison state
@@ -107,9 +112,33 @@ public partial class Product(
         if (!_disposed)
             _updateSubscription = updateBus.Subscribe(ProductKey, OnLiveUpdateAsync);
 
-        // Refresh the humanized "Last Updated" text on the configured cadence.
-        var interval = TimeSpan.FromSeconds(uiConfig.Value.LastUpdatedRefreshSeconds);
-        _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, interval, interval);
+        RefreshFooter();
+        _refreshTimer = new Timer(_ => OnRefreshTick(), null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    /// <summary>Recompute the footer strings; true if anything visible changed.</summary>
+    private bool RefreshFooter()
+    {
+        var text = _lastServerRefresh?.Humanize() ?? "…";
+        var dot = LiveDotClass();
+        if (text == _lastRefreshText && dot == _liveDotClass) return false;
+        _lastRefreshText = text;
+        _liveDotClass = dot;
+        return true;
+    }
+
+    private void OnRefreshTick()
+    {
+        if (_disposed || !RefreshFooter()) return;
+        try
+        {
+            _ = InvokeAsync(StateHasChanged);
+        }
+        catch (Exception ex)
+        {
+            // A timer callback must never throw — that takes the whole process down.
+            Log.Warning(ex, "Footer refresh failed for {ProductKey}", ProductKey);
+        }
     }
 
     private async Task OnLiveUpdateAsync(ProductDataInfo product, LiveTick tick)
@@ -129,6 +158,7 @@ public partial class Product(
         _product = product;
         _lastServerRefresh = timeCache.LastUpdated;
         _lastLivePush = TimeProvider.System.GetLocalNow();
+        RefreshFooter();
 
         if (_priceGraph is not null)
             await _priceGraph.UpdateTickAsync(tick);
@@ -152,7 +182,7 @@ public partial class Product(
     private string LiveDotTitle() => _updateSubscription is null
         ? "Not subscribed to live updates"
         : _lastLivePush is { } t
-            ? $"Last live push {t.Humanize()}"
+            ? $"Last live push at {t:HH:mm:ss}"
             : "No live push yet — waiting for the next poll to change this product";
 
     private void OnComparisonStateChanged()
