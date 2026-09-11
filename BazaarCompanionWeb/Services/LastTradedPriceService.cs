@@ -1,11 +1,16 @@
+using BazaarCompanionWeb.Services.Ingestion;
+
 namespace BazaarCompanionWeb.Services;
 
 /// <summary>
-/// Estimates Last Traded Price (LTP) from volume deltas between consecutive API polls.
-/// Hypixel doesn't provide LTP directly, so we infer trade direction from changes in
-/// outstanding order volume: decreased bid volume = sells hit the bid, decreased ask
-/// volume = buys hit the ask. An EMA with confidence-weighted alpha smooths noise
-/// from cancellations and race conditions.
+/// Estimates Last Traded Price (LTP) from the units that traded between consecutive API polls.
+/// Hypixel doesn't provide LTP directly, but it does count fills per side: instant buys consume the
+/// best asks and instant sells hit the best bids (see <see cref="TradedDelta"/>). The raw estimate is
+/// the fill-weighted average of the two touch prices; an EMA with confidence-weighted alpha smooths
+/// the one-minute sampling (the touch can move within a poll).
+///
+/// Until 2026-09-11 this inferred fills from drops in resting order-book depth, which counted every
+/// cancelled order as a trade.
 /// </summary>
 public sealed class LastTradedPriceService
 {
@@ -13,53 +18,27 @@ public sealed class LastTradedPriceService
     private const double VolumeConfidenceScale = 1000.0;
 
     private readonly Lock _lock = new();
-    private readonly Dictionary<string, (int BidVolume, int AskVolume)> _previousVolumes = new();
     private readonly Dictionary<string, double> _ltpEstimates = new();
 
     /// <summary>
-    /// Update volume state and return the smoothed LTP estimate for a product.
-    /// Call this for every product on every poll (not just changed ones).
+    /// Fold one poll's fills into the smoothed LTP estimate for a product. Call this for every
+    /// product on every poll (not just changed ones).
     /// </summary>
-    public double? UpdateAndEstimate(
-        string productKey,
-        double bestBid,
-        double bestAsk,
-        int currentBidVolume,
-        int currentAskVolume)
+    public double? UpdateAndEstimate(string productKey, double bestBid, double bestAsk, TradedDelta traded)
     {
         lock (_lock)
         {
-            if (!_previousVolumes.TryGetValue(productKey, out var prev))
-            {
-                // First poll for this product — store volumes, no estimate yet
-                _previousVolumes[productKey] = (currentBidVolume, currentAskVolume);
-                return _ltpEstimates.TryGetValue(productKey, out var v) ? v : null;
-            }
+            var total = traded.Total;
 
-            // Volume consumed = orders that were filled (or cancelled — EMA handles noise)
-            var bidConsumed = Math.Max(0, prev.BidVolume - currentBidVolume);
-            var askConsumed = Math.Max(0, prev.AskVolume - currentAskVolume);
-
-            // Store current volumes for next poll
-            _previousVolumes[productKey] = (currentBidVolume, currentAskVolume);
-
-            var totalConsumed = bidConsumed + askConsumed;
-
-            // No volume consumed on either side — preserve current estimate
-            if (totalConsumed == 0)
+            // Nothing traded — preserve current estimate
+            if (total <= 0)
                 return _ltpEstimates.TryGetValue(productKey, out var v) ? v : null;
 
-            // Raw LTP estimate weighted by which side was consumed
-            double rawEstimate;
-            if (bidConsumed > 0 && askConsumed > 0)
-                rawEstimate = ((double)bidConsumed * bestBid + (double)askConsumed * bestAsk) / totalConsumed;
-            else if (bidConsumed > 0)
-                rawEstimate = bestBid;
-            else
-                rawEstimate = bestAsk;
+            // Instant buys filled at the ask, instant sells at the bid
+            var rawEstimate = (traded.Buy * bestAsk + traded.Sell * bestBid) / total;
 
             // EMA with confidence-weighted alpha
-            var volumeFactor = Math.Clamp(totalConsumed / VolumeConfidenceScale, 0, 1);
+            var volumeFactor = Math.Clamp(total / VolumeConfidenceScale, 0, 1);
             var alpha = BaseAlpha + (1 - BaseAlpha) * volumeFactor * 0.5;
 
             if (_ltpEstimates.TryGetValue(productKey, out var previousLtp))

@@ -84,6 +84,10 @@ public class Program
             try
             {
                 var dbContext = services.GetRequiredService<DataContext>();
+                // Data migrations rewrite whole tables (RealTradedVolume touched every candle row, 1.7 GB on
+                // dev) and the default 30s command timeout aborts them. Migrations run once at startup, so
+                // give them as long as they need; the timeout only scopes this context.
+                dbContext.Database.SetCommandTimeout(TimeSpan.FromHours(1));
                 dbContext.Database.Migrate();
             }
             catch (Exception ex)

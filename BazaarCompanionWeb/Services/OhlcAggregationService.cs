@@ -12,6 +12,14 @@ public class OhlcAggregationService(
 {
     private static readonly TimeSpan AggregationInterval = TimeSpan.FromMinutes(5);
     private static readonly TimeSpan TickRetention = TimeSpan.FromDays(7);
+
+    /// <summary>
+    /// How far behind its watermark each (product, interval) re-aggregates. Bars reach the DB up to one
+    /// flush interval (10 min) after their bucket closes — a forming bar is flushed partial, then again
+    /// complete — so a watermark that only re-reads the current open period would keep the partial candle
+    /// for ever. Candle saves are upserts, so re-reading a few closed periods is idempotent and cheap.
+    /// </summary>
+    private static readonly TimeSpan ReaggregationLag = TimeSpan.FromMinutes(15);
     private static readonly TimeSpan VacuumInterval = TimeSpan.FromHours(24);
     private bool _historySeeded;
     private bool _flatCandlesRepaired;
@@ -103,6 +111,8 @@ public class OhlcAggregationService(
             Low = s.BidUnitPrice,
             Close = s.BidUnitPrice,
             Volume = 0, // Historical snapshots don't have volume
+            BuyVolume = 0,
+            SellVolume = 0,
             Spread = 0 // Historical snapshots don't have spread data
         }).ToList();
 
@@ -123,8 +133,8 @@ public class OhlcAggregationService(
     ];
 
     /// <summary>
-    /// Incremental aggregation: for each (product, interval) watermark, query ticks at or after
-    /// the watermark's <c>LastSeenPeriodStart</c>, build candles for those periods, upsert, and
+    /// Incremental aggregation: for each (product, interval) watermark, query the five-minute bars at or
+    /// after the watermark's <c>LastSeenPeriodStart</c>, build candles for those periods, upsert, and
     /// advance the watermark. First-run (no watermark) falls back to a 7-day lookback.
     ///
     /// Only short intervals (5m, 15m, 1h, 4h) pull from ticks. OneDay/OneWeek are built from
@@ -147,7 +157,8 @@ public class OhlcAggregationService(
         {
             if (states.TryGetValue((key, interval), out var s))
             {
-                if (s.LastSeenPeriodStart < sinceCutoff) sinceCutoff = s.LastSeenPeriodStart;
+                var c = ReaggregateFrom(s.LastSeenPeriodStart, interval);
+                if (c < sinceCutoff) sinceCutoff = c;
             }
             else
             {
@@ -215,7 +226,8 @@ public class OhlcAggregationService(
         var hourly = await context.OhlcCandles
             .AsNoTracking()
             .Where(c => c.Interval == CandleInterval.OneHour && c.PeriodStart >= daySince)
-            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })
+            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow })
             .ToListAsync(ct);
 
         var dayCandles = hourly
@@ -233,8 +245,13 @@ public class OhlcAggregationService(
                     High = ordered.Max(h => h.High),
                     Low = ordered.Min(h => h.Low),
                     Close = ordered.Last().Close,
+                    AskOpen = ordered.First().AskOpen,
+                    AskHigh = ordered.Max(h => h.AskHigh),
+                    AskLow = AskLowOf(ordered.Select(h => h.AskLow)),
                     AskClose = ordered.Last().AskClose,
                     Volume = ordered.Sum(h => h.Volume),
+                    BuyVolume = ordered.Sum(h => h.BuyVolume),
+                    SellVolume = ordered.Sum(h => h.SellVolume),
                     Spread = spreads.Count > 0 ? spreads.Average() : 0,
                 };
             })
@@ -244,7 +261,8 @@ public class OhlcAggregationService(
         var daily = await context.OhlcCandles
             .AsNoTracking()
             .Where(c => c.Interval == CandleInterval.OneDay && c.PeriodStart >= weekSince)
-            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose })
+            .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow })
             .ToListAsync(ct);
 
         var weekCandles = daily
@@ -262,8 +280,13 @@ public class OhlcAggregationService(
                     High = ordered.Max(d => d.High),
                     Low = ordered.Min(d => d.Low),
                     Close = ordered.Last().Close,
+                    AskOpen = ordered.First().AskOpen,
+                    AskHigh = ordered.Max(d => d.AskHigh),
+                    AskLow = AskLowOf(ordered.Select(d => d.AskLow)),
                     AskClose = ordered.Last().AskClose,
                     Volume = ordered.Sum(d => d.Volume),
+                    BuyVolume = ordered.Sum(d => d.BuyVolume),
+                    SellVolume = ordered.Sum(d => d.SellVolume),
                     Spread = spreads.Count > 0 ? spreads.Average() : 0,
                 };
             })
@@ -280,6 +303,16 @@ public class OhlcAggregationService(
                 sw.ElapsedMilliseconds, dayCandles.Count, weekCandles.Count);
     }
 
+    /// <summary>
+    /// Lowest ask across child candles, ignoring zeros: a child that pre-dates the ask candle has no ask
+    /// open/high/low, and letting its zero through would pin every roll-up's ask low to the floor.
+    /// </summary>
+    private static double AskLowOf(IEnumerable<double> lows)
+    {
+        var positive = lows.Where(l => l > 0).ToList();
+        return positive.Count > 0 ? positive.Min() : 0;
+    }
+
     private static DateTime StartOfIsoWeek(DateTime date)
     {
         // ISO week starts on Monday. DayOfWeek: Sun=0, Mon=1 … Sat=6.
@@ -288,14 +321,22 @@ public class OhlcAggregationService(
         return DateTime.SpecifyKind(date.Date.AddDays(-offset), DateTimeKind.Utc);
     }
 
+    /// <summary>
+    /// Where re-aggregation starts for a watermark: <see cref="ReaggregationLag"/> earlier, aligned DOWN to a
+    /// period boundary. Alignment matters — a candle built from the bars after an unaligned cutoff would be
+    /// partial, and the upsert would replace a correct candle with it.
+    /// </summary>
+    private static DateTime ReaggregateFrom(DateTime watermark, CandleInterval interval) =>
+        (watermark - ReaggregationLag).GetPeriodStart(interval);
+
     private async Task<EFOhlcAggregationState?> AggregateIntervalAsync(
         IOhlcRepository ohlcRepository, string productKey, CandleInterval interval,
         EFOhlcAggregationState? state, List<EFPriceTick> preloadedTicks, DateTime now,
         CancellationToken ct)
     {
-        // Watermark cutoff: from the period we last touched (re-query the current open period),
-        // or 7 days back on first run.
-        var cutoff = state?.LastSeenPeriodStart ?? (now - TickRetention);
+        // Watermark cutoff: a period boundary at least ReaggregationLag before the period we last
+        // touched, or 7 days back on first run.
+        var cutoff = state is null ? now - TickRetention : ReaggregateFrom(state.LastSeenPeriodStart, interval);
         var currentPeriodStart = now.GetPeriodStart(interval);
 
         var ticks = preloadedTicks
@@ -310,10 +351,12 @@ public class OhlcAggregationService(
             {
                 var candles = grouped.Select(g =>
                 {
-                    var orderedTicks = g.OrderBy(t => t.Timestamp).ToList();
-                    var totalVolume = orderedTicks.Sum(t => t.BidVolume + t.AskVolume);
+                    // Each row is a five-minute bar (open/high/low/close per side, units traded inside it).
+                    var bars = g.OrderBy(t => t.Timestamp).ToList();
+                    var buyVolume = bars.Sum(t => t.TradedBuy);
+                    var sellVolume = bars.Sum(t => t.TradedSell);
 
-                    var spreads = orderedTicks
+                    var spreads = bars
                         .Where(t => t.AskPrice > 0 && t.BidPrice > 0)
                         .Select(t => t.AskPrice - t.BidPrice)
                         .Where(s => s > 0)
@@ -325,12 +368,17 @@ public class OhlcAggregationService(
                         ProductKey = productKey,
                         Interval = interval,
                         PeriodStart = g.Key,
-                        Open = orderedTicks.First().BidPrice,
-                        High = orderedTicks.Max(t => t.BidPrice),
-                        Low = orderedTicks.Min(t => t.BidPrice),
-                        Close = orderedTicks.Last().BidPrice,
-                        AskClose = orderedTicks.Last().AskPrice,
-                        Volume = totalVolume,
+                        Open = bars.First().BidOpen,
+                        High = bars.Max(t => t.BidHigh),
+                        Low = bars.Min(t => t.BidLow),
+                        Close = bars.Last().BidPrice,
+                        AskOpen = bars.First().AskOpen,
+                        AskHigh = bars.Max(t => t.AskHigh),
+                        AskLow = AskLowOf(bars.Select(t => t.AskLow)),
+                        AskClose = bars.Last().AskPrice,
+                        Volume = buyVolume + sellVolume,
+                        BuyVolume = buyVolume,
+                        SellVolume = sellVolume,
                         Spread = avgSpread,
                     };
                 }).ToList();
@@ -425,6 +473,11 @@ public class OhlcAggregationService(
                 flatCandle.Low = dayHourly.Min(h => h.Low);
                 flatCandle.Close = dayHourly.Last().Close;
                 flatCandle.Volume = dayHourly.Sum(h => h.Volume);
+                flatCandle.BuyVolume = dayHourly.Sum(h => h.BuyVolume);
+                flatCandle.SellVolume = dayHourly.Sum(h => h.SellVolume);
+                flatCandle.AskOpen = dayHourly.First().AskOpen;
+                flatCandle.AskHigh = dayHourly.Max(h => h.AskHigh);
+                flatCandle.AskLow = AskLowOf(dayHourly.Select(h => h.AskLow));
                 flatCandle.AskClose = dayHourly.Last().AskClose;
 
                 var spreads = dayHourly.Where(h => h.Spread > 0).Select(h => h.Spread).ToList();

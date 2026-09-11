@@ -2,6 +2,7 @@ using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
+using BazaarCompanionWeb.Services.Ingestion;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
@@ -18,6 +19,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
 
     [Inject] private IJSRuntime JSRuntime { get; set; } = null!;
     [Inject] private IOhlcRepository OhlcRepository { get; set; } = null!;
+    [Inject] private BazaarSnapshotStore SnapshotStore { get; set; } = null!;
     [Inject] private BrowserStorage BrowserStorage { get; set; } = null!;
 
     private IJSObjectReference? _chartModule;
@@ -32,6 +34,11 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
     // In-memory candle buffer (window + warmup) kept so live ticks can recompute indicator tail values.
     private List<OhlcDataPoint> _candles = [];
 
+    // The minute whose traded units were last folded into the forming bar, and how much it contributed.
+    // A live tick is the forming MINUTE bar; two pushes for the same minute must replace, not re-add.
+    private DateTime _liveMinute = DateTime.MinValue;
+    private double _liveMinuteBuy, _liveMinuteSell;
+
     /// <summary>Indicator definitions for the toggle UI. Overlay = drawn on the price pane.</summary>
     private readonly record struct IndicatorDef(string Key, string Label, bool Overlay);
 
@@ -40,7 +47,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         new("ASK", "ASK", true),
         new("MA", "MA 50/250", true),
         new("BB", "BB", true),
-        new("VOL", "VOL", false),
+        new("VOL", "VOL", true),
         new("MACD", "MACD", false),
         new("RSI", "RSI", false),
     ];
@@ -131,8 +138,8 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
                 return;
             }
 
-            // Fold the current live price into the latest (forming) candle.
-            MergeLivePrice(candles, Product.BidUnitPrice, Product.AskUnitPrice);
+            // The DB is minutes behind (10-min flush, 5-min aggregation); rebuild the forming candle from RAM.
+            SeedFormingBar(candles);
             _candles = candles;
 
             var payload = ChartDataService.Build(candles, includeAsk: true);
@@ -156,20 +163,80 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         }
     }
 
-    private void MergeLivePrice(List<OhlcDataPoint> candles, double bid, double ask)
+    /// <summary>
+    /// Bring the forming candle up to the last poll. When the RAM ring covers the whole bucket, the bar is
+    /// rebuilt from the one-minute samples (open/high/low/close per side, units traded) and replaces whatever
+    /// the DB had — the DB copy is at best a few minutes old. Otherwise (the app started mid-bucket, or the
+    /// ring wrapped) the current price is folded into the DB candle and its volume kept.
+    /// </summary>
+    private void SeedFormingBar(List<OhlcDataPoint> candles)
     {
+        var bid = Product.BidUnitPrice;
+        var ask = Product.AskUnitPrice;
         var bucket = DateTime.UtcNow.GetPeriodStart(Interval);
         var last = candles[^1];
+        var samples = SnapshotStore.GetTicksSnapshot(Product.ItemId);
+
+        var ringCovers = SnapshotStore.FirstIngestUtc <= bucket
+                         && (samples.Count < BazaarSnapshotStore.TickRingCapacity
+                             || (samples.Count > 0 && samples[0].Timestamp <= bucket));
+
+        if (ringCovers)
+        {
+            var inBucket = samples.Where(t => t.Timestamp >= bucket).ToList();
+            var before = samples.LastOrDefault(t => t.Timestamp < bucket);
+            // Open at the price the product had when the bucket started: the last sample before it, else the
+            // DB's own open for this bucket, else the previous candle's close.
+            var openBid = before?.BidPrice ?? (last.Time == bucket ? last.Open : last.Close);
+            var openAsk = before?.AskPrice ?? (last.Time == bucket && last.AskOpen > 0 ? last.AskOpen : last.AskClose);
+            if (openAsk <= 0) openAsk = ask;
+
+            var bar = new OhlcDataPoint(bucket, openBid, openBid, openBid, openBid, 0, 0, openAsk, 0, 0, openAsk, openAsk, openAsk);
+            foreach (var t in inBucket)
+            {
+                bar = bar with
+                {
+                    High = Math.Max(bar.High, t.BidPrice),
+                    Low = Math.Min(bar.Low, t.BidPrice),
+                    Close = t.BidPrice,
+                    AskHigh = Math.Max(bar.AskHigh, t.AskPrice),
+                    AskLow = Math.Min(bar.AskLow, t.AskPrice),
+                    AskClose = t.AskPrice,
+                    BuyVolume = bar.BuyVolume + t.TradedBuy,
+                    SellVolume = bar.SellVolume + t.TradedSell,
+                };
+            }
+            bar = bar with { Volume = bar.BuyVolume + bar.SellVolume };
+
+            if (last.Time == bucket) candles[^1] = bar;
+            else candles.Add(bar);
+
+            // The newest sample in the bucket is this minute's contribution; a live tick for the same minute
+            // (a poll racing the page load) must replace it rather than add to it.
+            if (inBucket.Count > 0)
+            {
+                var newest = inBucket[^1];
+                _liveMinute = new DateTime(newest.Timestamp.Year, newest.Timestamp.Month, newest.Timestamp.Day,
+                    newest.Timestamp.Hour, newest.Timestamp.Minute, 0, DateTimeKind.Utc);
+                _liveMinuteBuy = newest.TradedBuy;
+                _liveMinuteSell = newest.TradedSell;
+            }
+            return;
+        }
+
         if (last.Time == bucket)
             candles[^1] = last with
             {
                 High = Math.Max(last.High, bid),
                 Low = Math.Min(last.Low, bid),
                 Close = bid,
+                AskOpen = last.AskOpen > 0 ? last.AskOpen : ask,
+                AskHigh = Math.Max(last.AskHigh, ask),
+                AskLow = last.AskLow > 0 ? Math.Min(last.AskLow, ask) : ask,
                 AskClose = ask,
             };
         else
-            candles.Add(new OhlcDataPoint(bucket, bid, bid, bid, bid, 0d, 0d, ask));
+            candles.Add(new OhlcDataPoint(bucket, bid, bid, bid, bid, 0d, 0d, ask, 0, 0, ask, ask, ask));
     }
 
     public async Task UpdateTickAsync(LiveTick liveTick)
@@ -180,18 +247,40 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
             var bucket = liveTick.Time.GetPeriodStart(Interval);
             var last = _candles[^1];
             if (last.Time == bucket)
+            {
+                // Add this minute's traded units once: back out what the same minute contributed before.
+                var buy = last.BuyVolume + liveTick.BuyVolume;
+                var sell = last.SellVolume + liveTick.SellVolume;
+                if (_liveMinute == liveTick.Time)
+                {
+                    buy -= _liveMinuteBuy;
+                    sell -= _liveMinuteSell;
+                }
+
                 _candles[^1] = last with
                 {
                     High = Math.Max(last.High, liveTick.High),
                     Low = Math.Min(last.Low, liveTick.Low),
                     Close = liveTick.Close,
-                    Volume = liveTick.Volume,
+                    Volume = buy + sell,
+                    BuyVolume = buy,
+                    SellVolume = sell,
+                    AskOpen = last.AskOpen > 0 ? last.AskOpen : liveTick.AskOpen,
+                    AskHigh = Math.Max(last.AskHigh, liveTick.AskHigh),
+                    AskLow = last.AskLow > 0 ? Math.Min(last.AskLow, liveTick.AskLow) : liveTick.AskLow,
                     AskClose = liveTick.AskClose,
                 };
+            }
             else if (bucket > last.Time)
-                _candles.Add(new OhlcDataPoint(bucket, liveTick.Open, liveTick.High, liveTick.Low, liveTick.Close, liveTick.Volume, 0d, liveTick.AskClose));
+                _candles.Add(new OhlcDataPoint(bucket, liveTick.Open, liveTick.High, liveTick.Low, liveTick.Close,
+                    liveTick.Volume, 0d, liveTick.AskClose, liveTick.BuyVolume, liveTick.SellVolume,
+                    liveTick.AskOpen, liveTick.AskHigh, liveTick.AskLow));
             else
                 return; // stale tick older than current bar
+
+            _liveMinute = liveTick.Time;
+            _liveMinuteBuy = liveTick.BuyVolume;
+            _liveMinuteSell = liveTick.SellVolume;
 
             TrimBuffer();
 

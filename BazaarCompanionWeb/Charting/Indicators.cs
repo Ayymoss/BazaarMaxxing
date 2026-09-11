@@ -10,6 +10,7 @@ public static class Indicators
 {
     public const string UpColor = "rgba(16, 185, 129, 0.5)";   // emerald
     public const string DownColor = "rgba(239, 68, 68, 0.5)";  // red
+    public const string NeutralColor = "rgba(148, 163, 184, 0.35)"; // slate
 
     internal static long Sec(DateTime t) =>
         new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)).ToUnixTimeSeconds();
@@ -148,21 +149,36 @@ public static class Indicators
         return (u, m, lo);
     }
 
-    /// <summary>Volume histogram coloured by candle direction.</summary>
-    public static List<HistPoint> Volume(IReadOnlyList<OhlcDataPoint> c)
+    /// <summary>
+    /// Volume histogram: bar height is units traded, colour is the side that did more of it — green when
+    /// instant buys (asks lifted) outweigh instant sells (bids hit), red the other way, neutral on a tie.
+    /// </summary>
+    public static List<VolumePoint> Volume(IReadOnlyList<OhlcDataPoint> c)
     {
-        var r = new List<HistPoint>(c.Count);
+        var r = new List<VolumePoint>(c.Count);
         foreach (var b in c)
-            r.Add(new HistPoint(Sec(b.Time), b.Volume, b.Close >= b.Open ? UpColor : DownColor));
+        {
+            var color = b.BuyVolume > b.SellVolume ? UpColor : b.SellVolume > b.BuyVolume ? DownColor : NeutralColor;
+            r.Add(new VolumePoint(Sec(b.Time), b.Volume, color, b.BuyVolume, b.SellVolume));
+        }
         return r;
     }
 
-    /// <summary>Ask price as a line; gaps (null) where ask is missing/zero.</summary>
-    public static List<LinePoint> AskLine(IReadOnlyList<OhlcDataPoint> c)
+    /// <summary>
+    /// Ask candles; bars where ask is missing/zero are skipped. Candles that pre-date ask open/high/low
+    /// (zero) render flat at their close — a dash at the ask level rather than nothing.
+    /// </summary>
+    public static List<Candle> AskCandles(IReadOnlyList<OhlcDataPoint> c)
     {
-        var r = new List<LinePoint>();
+        var r = new List<Candle>(c.Count);
         foreach (var b in c)
-            if (b.AskClose > 0) r.Add(new LinePoint(Sec(b.Time), b.AskClose));
+        {
+            if (b.AskClose <= 0) continue;
+            var open = b.AskOpen > 0 ? b.AskOpen : b.AskClose;
+            var high = b.AskHigh > 0 ? Math.Max(b.AskHigh, Math.Max(open, b.AskClose)) : Math.Max(open, b.AskClose);
+            var low = b.AskLow > 0 ? Math.Min(b.AskLow, Math.Min(open, b.AskClose)) : Math.Min(open, b.AskClose);
+            r.Add(new Candle(Sec(b.Time), open, high, low, b.AskClose));
+        }
         return r;
     }
 }

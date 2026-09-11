@@ -3,9 +3,12 @@
 // delivered as plain series data; this module only renders, pages, and updates.
 //
 // Data contract (all times are UNIX seconds):
-//   payload = { candles:[{time,open,high,low,close}], volume:[{time,value,color}],
-//               ma50, ma250, bbUpper, bbMiddle, bbLower, macdLine, signal, rsi, ask : [{time,value}],
+//   payload = { candles:[{time,open,high,low,close}], askCandles:[{time,open,high,low,close}],
+//               volume:[{time,value,color,buy,sell}],
+//               ma50, ma250, bbUpper, bbMiddle, bbLower, macdLine, signal, rsi : [{time,value}],
 //               macdHist:[{time,value,color}] }
+// Bid is the green/red candle; ask is the blue/orange one. Volume is units traded, coloured by the
+// side that did more (buy = green, sell = red).
 
 const PAGE = 200;
 const reg = {};
@@ -21,7 +24,8 @@ const C = {
     text: '#9aa0aa', grid: 'rgba(148,163,184,0.06)', border: '#2a2f38',
     ma50: '#d99a00', ma250: '#5b8def',
     bb: 'rgba(148,163,184,0.5)', bbMid: 'rgba(148,163,184,0.32)',
-    macd: '#d99a00', signal: '#5b8def', rsi: '#c98bff', ask: '#fb923c',
+    macd: '#d99a00', signal: '#5b8def', rsi: '#c98bff',
+    ask: '#3b82f6', askUp: '#3b82f6', askDown: '#f97316',
     crosshairLabel: '#2a2f38',
 };
 
@@ -88,24 +92,33 @@ function build(id) {
         s.ma250 = chart.addSeries(LWC.LineSeries, lineOpts(C.ma250, { lineWidth: 2 }), 0);
     }
     if (f.ask) {
-        // Ask rides the SAME 'right' scale as bid/candles so its reading is always on the bid
+        // Ask rides the SAME 'right' scale as the bid candles so its reading is always on the bid
         // scale. Hypixel ask = whatever a user typed, so it spikes wildly; autoscaleInfoProvider
         // returning null excludes ask from the scale's autoscale, so only bid drives the range.
         // Wild ask values simply fall out of view; rescaling the right axis brings them back since
-        // both lines share one coordinate system.
-        s.ask = chart.addSeries(LWC.LineSeries, lineOpts(C.ask, {
-            lineWidth: 2, priceScaleId: 'right', autoscaleInfoProvider: () => null,
-        }), 0);
+        // both series share one coordinate system. Blue/orange so it cannot be read as the bid.
+        s.askCandle = chart.addSeries(LWC.CandlestickSeries, {
+            upColor: C.askUp, downColor: C.askDown, borderUpColor: C.askUp, borderDownColor: C.askDown,
+            wickUpColor: C.askUp, wickDownColor: C.askDown,
+            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+            priceScaleId: 'right', autoscaleInfoProvider: () => null,
+            lastValueVisible: false, priceLineVisible: false,
+        }, 0);
+    }
+
+    if (f.vol) {
+        // Volume sits inside the price pane, broker-style, on the otherwise unused LEFT axis, squeezed into
+        // the bottom fifth so the bars underline the candles instead of competing with them. Being a real
+        // axis (not a hidden overlay) it gets tick labels for that band, a crosshair readout, and the
+        // last bar's value.
+        s.volume = chart.addSeries(LWC.HistogramSeries, {
+            priceFormat: { type: 'volume' }, priceScaleId: 'left', lastValueVisible: true, priceLineVisible: false,
+        }, 0);
+        chart.applyOptions({ leftPriceScale: { visible: true, borderColor: C.border, scaleMargins: { top: 0.8, bottom: 0 } } });
     }
 
     // --- sub-panes: assigned sequentially among the enabled ones ---
     let pane = 1;
-    if (f.vol) {
-        s.volume = chart.addSeries(LWC.HistogramSeries, {
-            priceFormat: { type: 'volume' }, priceScaleId: 'right', lastValueVisible: false, priceLineVisible: false,
-        }, pane);
-        pane++;
-    }
     if (f.macd) {
         s.macdHist = chart.addSeries(LWC.HistogramSeries, {
             priceFormat: { type: 'price', precision: 3, minMove: 0.001 }, lastValueVisible: false, priceLineVisible: false,
@@ -160,13 +173,13 @@ function applyData(s, cache, f) {
     s.candle.setData(cache.candles);
     if (f.bb) { s.bbUpper.setData(cache.bbUpper); s.bbLower.setData(cache.bbLower); s.bbMiddle.setData(cache.bbMiddle); }
     if (f.ma) { s.ma50.setData(cache.ma50); s.ma250.setData(cache.ma250); }
-    if (f.ask) s.ask.setData(cache.ask);
+    if (f.ask) s.askCandle.setData(cache.askCandles);
     if (f.vol) s.volume.setData(cache.volume);
     if (f.macd) { s.macdHist.setData(cache.macdHist); s.macdLine.setData(cache.macdLine); s.signal.setData(cache.signal); }
     if (f.rsi) s.rsi.setData(cache.rsi);
 }
 
-const KEYS = ['candles', 'volume', 'ma50', 'ma250', 'bbUpper', 'bbMiddle', 'bbLower', 'macdHist', 'macdLine', 'signal', 'rsi', 'ask'];
+const KEYS = ['candles', 'askCandles', 'volume', 'ma50', 'ma250', 'bbUpper', 'bbMiddle', 'bbLower', 'macdHist', 'macdLine', 'signal', 'rsi'];
 
 function emptyCache() {
     const c = {};
@@ -219,6 +232,7 @@ export function updateOhlcTick(id, t) {
     const s = e.series, c = e.cache, f = e.opts.flags;
 
     push(c.candles, t.candle); s.candle.update(t.candle);
+    if (t.askCandle) { push(c.askCandles, t.askCandle); if (f.ask) s.askCandle.update(t.askCandle); }
     if (t.volume) { push(c.volume, t.volume); if (f.vol) s.volume.update(t.volume); }
     pushLine(c.ma50, t.ma50, f.ma && s.ma50);
     pushLine(c.ma250, t.ma250, f.ma && s.ma250);
@@ -229,7 +243,6 @@ export function updateOhlcTick(id, t) {
     pushLine(c.macdLine, t.macdLine, f.macd && s.macdLine);
     pushLine(c.signal, t.signal, f.macd && s.signal);
     pushLine(c.rsi, t.rsi, f.rsi && s.rsi);
-    pushLine(c.ask, t.ask, f.ask && s.ask);
 
     renderLegend(id, lastValues(c));
 }
@@ -282,13 +295,24 @@ async function loadOlder(id) {
 
 // ---------------------------------------------------------------- legend
 const pick = arr => (arr && arr.length ? arr[arr.length - 1].value : null);
+const lastOf = arr => (arr && arr.length ? arr[arr.length - 1] : null);
+
+// Point at exactly `time`, searching from the newest end — crosshair hits are near the right edge.
+function atTime(arr, time) {
+    for (let i = arr.length - 1; i >= 0; i--) {
+        if (arr[i].time === time) return arr[i];
+        if (arr[i].time < time) return null;
+    }
+    return null;
+}
 
 function lastValues(cache) {
     const c = cache.candles[cache.candles.length - 1];
     if (!c) return null;
+    const a = lastOf(cache.askCandles);
     return {
         o: c.open, h: c.high, l: c.low, cl: c.close, up: c.close >= c.open,
-        ask: pick(cache.ask), vol: pick(cache.volume),
+        ask: a && a.time === c.time ? a : null, vol: lastOf(cache.volume),
         ma50: pick(cache.ma50), ma250: pick(cache.ma250),
         bbU: pick(cache.bbUpper), bbL: pick(cache.bbLower),
         macd: pick(cache.macdLine), sig: pick(cache.signal), rsi: pick(cache.rsi),
@@ -303,9 +327,12 @@ function onCrosshair(id, p) {
     const c = p.seriesData.get(s.candle);
     if (!c) { renderLegend(id, lastValues(e.cache)); return; }
     const g = ser => { const v = ser && p.seriesData.get(ser); return v ? (v.value ?? null) : null; };
+    // The buy/sell split is not on the series point, only in the cache.
+    const vol = s.volume && p.seriesData.get(s.volume) ? atTime(e.cache.volume, p.time) : null;
     renderLegend(id, {
         o: c.open, h: c.high, l: c.low, cl: c.close, up: c.close >= c.open,
-        ask: g(s.ask), vol: g(s.volume), ma50: g(s.ma50), ma250: g(s.ma250),
+        ask: s.askCandle ? (p.seriesData.get(s.askCandle) || null) : null, vol,
+        ma50: g(s.ma50), ma250: g(s.ma250),
         bbU: g(s.bbUpper), bbL: g(s.bbLower), macd: g(s.macdLine), sig: g(s.signal), rsi: g(s.rsi),
     });
 }
@@ -323,11 +350,18 @@ function renderLegend(id, x) {
     const parts = [
         `<span class="ohlc-lg-ohlc" style="color:${col}">O<b>${n2(x.o)}</b> H<b>${n2(x.h)}</b> L<b>${n2(x.l)}</b> C<b>${n2(x.cl)}</b></span>`,
     ];
-    if (x.ask != null) parts.push(item('ASK', n2(x.ask), C.ask));
+    if (x.ask != null) {
+        const ac = x.ask.close >= x.ask.open ? C.askUp : C.askDown;
+        parts.push(`<span class="ohlc-lg-ohlc" style="color:${ac}"><i>ASK</i> O<b>${n2(x.ask.open)}</b> H<b>${n2(x.ask.high)}</b> L<b>${n2(x.ask.low)}</b> C<b>${n2(x.ask.close)}</b></span>`);
+    }
     if (x.ma50 != null) parts.push(item('MA50', n2(x.ma50), C.ma50));
     if (x.ma250 != null) parts.push(item('MA250', n2(x.ma250), C.ma250));
     if (x.bbU != null) parts.push(item('BB', `${n2(x.bbU)}/${n2(x.bbL)}`, C.bb));
-    if (x.vol != null) parts.push(item('VOL', vol(x.vol), C.text));
+    if (x.vol != null) {
+        const vc = x.vol.buy > x.vol.sell ? C.up : x.vol.sell > x.vol.buy ? C.down : C.text;
+        parts.push(`<span class="ohlc-lg-item"><i style="color:${vc}">VOL</i>${vol(x.vol.value)}` +
+            ` <i style="color:${C.up}">B</i>${vol(x.vol.buy)} <i style="color:${C.down}">S</i>${vol(x.vol.sell)}</span>`);
+    }
     if (x.macd != null) parts.push(item('MACD', n3(x.macd), C.macd));
     if (x.sig != null) parts.push(item('SIG', n3(x.sig), C.signal));
     if (x.rsi != null) parts.push(item('RSI', n2(x.rsi), C.rsi));

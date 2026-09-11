@@ -39,7 +39,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
             MacdLine = ml,
             Signal = sig,
             Rsi = Indicators.Rsi(candles),
-            Ask = includeAsk ? Indicators.AskLine(candles) : [],
+            AskCandles = includeAsk ? Indicators.AskCandles(candles) : [],
         };
     }
 
@@ -61,7 +61,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
             MacdLine = Tail(p.MacdLine),
             Signal = Tail(p.Signal),
             Rsi = Tail(p.Rsi),
-            Ask = includeAsk ? TailAtTime(p.Ask, Indicators.Sec(last.Time)) : null,
+            AskCandle = includeAsk ? TailCandleAtTime(p.AskCandles, Indicators.Sec(last.Time)) : null,
         };
     }
 
@@ -107,7 +107,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
 
     private static LinePoint? Tail(IReadOnlyList<LinePoint> l) => l.Count > 0 ? l[^1] : null;
 
-    private static LinePoint? TailAtTime(IReadOnlyList<LinePoint> l, long time) =>
+    private static Candle? TailCandleAtTime(IReadOnlyList<Candle> l, long time) =>
         l.Count > 0 && l[^1].Time == time ? l[^1] : null;
 
     /// <summary>Drop everything older than the window start, leaving only the requested page.</summary>
@@ -124,6 +124,6 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
         MacdLine = p.MacdLine.Where(x => x.Time >= fromSec).ToList(),
         Signal = p.Signal.Where(x => x.Time >= fromSec).ToList(),
         Rsi = p.Rsi.Where(x => x.Time >= fromSec).ToList(),
-        Ask = p.Ask.Where(x => x.Time >= fromSec).ToList(),
+        AskCandles = p.AskCandles.Where(x => x.Time >= fromSec).ToList(),
     };
 }

@@ -6,8 +6,8 @@ namespace BazaarCompanionWeb.Interfaces.Database;
 public interface IOhlcRepository
 {
     /// <summary>
-    /// Bulk inserts pre-built EFPriceTick rows via Npgsql binary COPY. Drops EF change-tracking
-    /// overhead and is ~10-50x faster than AddRange+SaveChanges for large batches.
+    /// Upserts pre-built five-minute bars by (product, bucket) via Npgsql binary COPY into a temp table.
+    /// Drops EF change-tracking overhead and is ~10-50x faster than AddRange+SaveChanges for large batches.
     /// </summary>
     Task CopyTicksAsync(IReadOnlyList<EFPriceTick> ticks, CancellationToken ct = default);
     Task<List<OhlcDataPoint>> GetCandlesAsync(string productKey, CandleInterval interval, int limit = 100, CancellationToken ct = default);

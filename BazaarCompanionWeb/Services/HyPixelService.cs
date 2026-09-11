@@ -50,13 +50,20 @@ public class HyPixelService(
         // Splat into RAM store. Flusher (FlushService) drains every ~10min and writes to DB.
         snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow);
 
-        // Compute LTP estimates for ALL products (not just changed — volume can shift without price changing)
+        // Compute LTP estimates for ALL products (not just changed — a fill moves the counters without
+        // necessarily moving the touch). The traded units come from the ingest that just ran.
         var ltpByProduct = new Dictionary<string, double?>();
         foreach (var p in productList)
         {
             ltpByProduct[p.ItemId] = lastTradedPriceService.UpdateAndEstimate(
-                p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, p.Bid.CurrentVolume, p.Ask.CurrentVolume);
+                p.ItemId, p.Bid.OrderPrice, p.Ask.OrderPrice, snapshotStore.GetLastTraded(p.ItemId));
         }
+
+        var ingest = snapshotStore.LastIngest;
+        if (ingest.Burst)
+            logger.LogWarning(
+                "Moving-week expiry burst: {Negatives} counters fell, {Estimated} products estimated this poll",
+                ingest.Negatives, ingest.Estimated);
 
         timeCache.LastUpdated = TimeProvider.System.GetLocalNow();
 
@@ -74,7 +81,7 @@ public class HyPixelService(
                 efProduct.ProductKey,
                 efProduct.Bid.UnitPrice,
                 efProduct.Ask.UnitPrice,
-                efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
+                snapshotStore.GetLastTraded(efProduct.ProductKey));
 
             if (updateBus.HasSubscribers(efProduct.ProductKey))
                 broadcastItems.Add((product, efProduct, liveTick));
@@ -126,11 +133,12 @@ public class HyPixelService(
             });
         totalSw.Stop();
 
-        // One line per poll covering API + build + scoring + ingest + broadcast.
+        // One line per poll covering API + build + scoring + ingest + broadcast. traded = units that
+        // changed hands across the whole bazaar since the previous poll (derived, see TradedDelta).
         logger.LogInformation(
-            "Poll: total={TotalMs}ms api={ApiMs}ms changed={Changed}/{Total} pushed={PushedCount}",
+            "Poll: total={TotalMs}ms api={ApiMs}ms changed={Changed}/{Total} pushed={PushedCount} traded={Traded}",
             totalSw.ElapsedMilliseconds, apiSw.ElapsedMilliseconds,
-            changedKeys.Count, productList.Count, broadcastItems.Count);
+            changedKeys.Count, productList.Count, broadcastItems.Count, ingest.TradedUnits);
     }
 
     private async Task<(IEnumerable<ProductData> Products, IReadOnlyList<string> ChangedKeys)> BuildProductDataAsync(

@@ -374,8 +374,14 @@ public static class ApiEndpoints
                 high = c.High,
                 low = c.Low,
                 close = c.Close,
+                // Units traded in the period (buy + sell); the split says which side was hitting.
                 volume = c.Volume,
+                buyVolume = c.BuyVolume,
+                sellVolume = c.SellVolume,
                 spread = c.Spread,
+                askOpen = c.AskOpen,
+                askHigh = c.AskHigh,
+                askLow = c.AskLow,
                 askClose = c.AskClose
             }).ToList();
 
