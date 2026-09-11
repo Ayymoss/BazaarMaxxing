@@ -347,7 +347,7 @@ function renderLegend(id, x) {
     if (!x) { host.innerHTML = ''; return; }
     const col = x.up ? C.up : C.down;
     const item = (label, val, c) => `<span class="ohlc-lg-item"><i style="color:${c}">${label}</i>${val}</span>`;
-    // One row per price series, then the indicators on their own row — stacked, not one long run.
+    // One row per indicator. MA50/MA250 share a row, as do MACD/SIG — they are one indicator each.
     const rows = [
         `<span class="ohlc-lg-ohlc" style="color:${col}"><i>BID</i> O<b>${n2(x.o)}</b> H<b>${n2(x.h)}</b> L<b>${n2(x.l)}</b> C<b>${n2(x.cl)}</b></span>`,
     ];
@@ -355,18 +355,15 @@ function renderLegend(id, x) {
         const ac = x.ask.close >= x.ask.open ? C.askUp : C.askDown;
         rows.push(`<span class="ohlc-lg-ohlc" style="color:${ac}"><i>ASK</i> O<b>${n2(x.ask.open)}</b> H<b>${n2(x.ask.high)}</b> L<b>${n2(x.ask.low)}</b> C<b>${n2(x.ask.close)}</b></span>`);
     }
-    const parts = [];
-    if (x.ma50 != null) parts.push(item('MA50', n2(x.ma50), C.ma50));
-    if (x.ma250 != null) parts.push(item('MA250', n2(x.ma250), C.ma250));
-    if (x.bbU != null) parts.push(item('BB', `${n2(x.bbU)}/${n2(x.bbL)}`, C.bb));
+    const row = (...items) => rows.push(`<span class="ohlc-lg-row">${items.join('')}</span>`);
+    if (x.ma50 != null || x.ma250 != null) row(item('MA50', n2(x.ma50), C.ma50), item('MA250', n2(x.ma250), C.ma250));
+    if (x.bbU != null) row(item('BB', `${n2(x.bbU)}/${n2(x.bbL)}`, C.bb));
     if (x.vol != null) {
         const vc = x.vol.buy > x.vol.sell ? C.up : x.vol.sell > x.vol.buy ? C.down : C.text;
-        parts.push(`<span class="ohlc-lg-item"><i style="color:${vc}">VOL</i>${vol(x.vol.value)}` +
+        row(`<span class="ohlc-lg-item"><i style="color:${vc}">VOL</i>${vol(x.vol.value)}` +
             ` <i style="color:${C.up}">B</i>${vol(x.vol.buy)} <i style="color:${C.down}">S</i>${vol(x.vol.sell)}</span>`);
     }
-    if (x.macd != null) parts.push(item('MACD', n3(x.macd), C.macd));
-    if (x.sig != null) parts.push(item('SIG', n3(x.sig), C.signal));
-    if (x.rsi != null) parts.push(item('RSI', n2(x.rsi), C.rsi));
-    if (parts.length) rows.push(`<span class="ohlc-lg-row">${parts.join('')}</span>`);
+    if (x.macd != null || x.sig != null) row(item('MACD', n3(x.macd), C.macd), item('SIG', n3(x.sig), C.signal));
+    if (x.rsi != null) row(item('RSI', n2(x.rsi), C.rsi));
     host.innerHTML = rows.join('');
 }
