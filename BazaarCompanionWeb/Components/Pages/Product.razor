@@ -139,7 +139,7 @@
 
             <div class="flex items-center justify-between border-t border-[#2a2f38] px-3 py-1.5 font-mono text-[11px] text-slate-500">
                 <span>Market depth shows active orders · % change vs 12h reference</span>
-                <span class="flex items-center gap-1.5"><span class="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>@(_lastServerRefresh?.Humanize() ?? "…")</span>
+                <span class="flex items-center gap-1.5" title="@LiveDotTitle()"><span class="h-1.5 w-1.5 rounded-full @LiveDotClass()"></span>@(_lastServerRefresh?.Humanize() ?? "…")</span>
             </div>
         </main>
 

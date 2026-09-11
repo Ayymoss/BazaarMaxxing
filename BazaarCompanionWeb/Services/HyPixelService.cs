@@ -1,8 +1,6 @@
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
-using BazaarCompanionWeb.Hubs;
 using BazaarCompanionWeb.Interfaces;
-using Microsoft.AspNetCore.SignalR;
 using BazaarCompanionWeb.Interfaces.Api;
 using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Models;
@@ -20,7 +18,7 @@ public class HyPixelService(
     IOhlcRepository ohlcRepository,
     IOpportunityScoringService opportunityScoringService,
     MarketInsightsService marketInsightsService,
-    IHubContext<ProductHub> hubContext,
+    ProductUpdateBus updateBus,
     TimeCache timeCache,
     LiveCandleTracker liveCandleTracker,
     BazaarSnapshotStore snapshotStore,
@@ -64,14 +62,30 @@ public class HyPixelService(
 
         await marketInsightsService.RefreshInsightsAsync(cancellationToken);
 
+        // The live candle must advance for every changed product, watched or not, so a page that opens
+        // mid-minute inherits the correct open/high/low; the DTO is only built for products someone is viewing.
         var changedSet = changedKeys.ToHashSet();
-        var broadcastItems = productList.Zip(mappedProducts).Where(z => changedSet.Contains(z.First.ItemId)).ToList();
+        var broadcastItems = new List<(ProductData Product, EFProduct EfProduct, LiveTick Tick)>();
+        foreach (var (product, efProduct) in productList.Zip(mappedProducts))
+        {
+            if (!changedSet.Contains(product.ItemId)) continue;
+
+            var liveTick = liveCandleTracker.UpdateAndGetTick(
+                efProduct.ProductKey,
+                efProduct.Bid.UnitPrice,
+                efProduct.Ask.UnitPrice,
+                efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
+
+            if (updateBus.HasSubscribers(efProduct.ProductKey))
+                broadcastItems.Add((product, efProduct, liveTick));
+        }
+
         await Parallel.ForEachAsync(
             broadcastItems,
             new ParallelOptions { MaxDegreeOfParallelism = 16, CancellationToken = cancellationToken },
             async (item, ct) =>
             {
-                var (product, efProduct) = item;
+                var (product, efProduct, liveTick) = item;
                 var updateInfo = new ProductDataInfo
                 {
                     ItemId = efProduct.ProductKey,
@@ -108,20 +122,13 @@ public class HyPixelService(
                     AskBook = product.Ask.OrderBook.Select(x => new Order(x.UnitPrice, x.Amount, x.Orders)).ToList()
                 };
 
-                await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("ProductUpdated", updateInfo, ct);
-
-                var liveTick = liveCandleTracker.UpdateAndGetTick(
-                    efProduct.ProductKey,
-                    efProduct.Bid.UnitPrice,
-                    efProduct.Ask.UnitPrice,
-                    efProduct.Bid.OrderVolume + efProduct.Ask.OrderVolume);
-                await hubContext.Clients.Group(efProduct.ProductKey).SendAsync("TickUpdated", liveTick, ct);
+                await updateBus.PublishAsync(efProduct.ProductKey, updateInfo, liveTick);
             });
         totalSw.Stop();
 
         // One line per poll covering API + build + scoring + ingest + broadcast.
         logger.LogInformation(
-            "Poll: total={TotalMs}ms api={ApiMs}ms changed={Changed}/{Total} broadcast={BroadcastCount}",
+            "Poll: total={TotalMs}ms api={ApiMs}ms changed={Changed}/{Total} pushed={PushedCount}",
             totalSw.ElapsedMilliseconds, apiSw.ElapsedMilliseconds,
             changedKeys.Count, productList.Count, broadcastItems.Count);
     }

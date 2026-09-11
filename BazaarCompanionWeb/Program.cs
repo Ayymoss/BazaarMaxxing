@@ -14,7 +14,6 @@ using BazaarCompanionWeb.Repositories;
 using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Services.Ingestion;
 using BazaarCompanionWeb.Utilities;
-using BazaarCompanionWeb.Hubs;
 using BazaarCompanionWeb.Middleware;
 using Microsoft.AspNetCore.DataProtection;
 using Microsoft.EntityFrameworkCore;
@@ -62,7 +61,6 @@ public class Program
         builder.Services.AddRazorComponents()
             .AddInteractiveServerComponents();
 
-        builder.Services.AddSignalR();
 
         var dataDirectory = GetDataDirectory(builder.Environment);
         var dataProtectionKeysPath = Path.Join(dataDirectory, "DataProtection-Keys");
@@ -120,7 +118,6 @@ public class Program
         app.MapRazorComponents<App>()
             .AddInteractiveServerRenderMode();
 
-        app.MapHub<ProductHub>("/hubs/products");
         app.MapApiEndpoints();
 
         app.Run();
@@ -228,6 +225,7 @@ public class Program
         builder.Services.AddSingleton<ScheduledTaskRunner>();
         builder.Services.AddSingleton<TimeCache>();
         builder.Services.AddSingleton<LiveCandleTracker>();
+        builder.Services.AddSingleton<ProductUpdateBus>();
         builder.Services.AddSingleton<BazaarSnapshotStore>();
         builder.Services.AddSingleton<LastTradedPriceService>();
 

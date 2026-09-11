@@ -5,7 +5,6 @@ using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
 using Microsoft.JSInterop;
-using System.Text.Json;
 
 namespace BazaarCompanionWeb.Components.Pages.Dialogs.Components;
 
@@ -173,17 +172,11 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
             candles.Add(new OhlcDataPoint(bucket, bid, bid, bid, bid, 0d, 0d, ask));
     }
 
-    public async Task UpdateTickAsync(object tick)
+    public async Task UpdateTickAsync(LiveTick liveTick)
     {
         if (_disposed || _chartModule is null || !_chartInitialized || _candles.Count == 0) return;
         try
         {
-            var json = tick.ToString();
-            if (string.IsNullOrEmpty(json)) return;
-
-            var liveTick = JsonSerializer.Deserialize<LiveTick>(json, new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-            if (liveTick is null) return;
-
             var bucket = liveTick.Time.GetPeriodStart(Interval);
             var last = _candles[^1];
             if (last.Time == bucket)

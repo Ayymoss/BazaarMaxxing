@@ -13,6 +13,12 @@ public sealed class UIConfig
     public int LastUpdatedRefreshSeconds { get; set; } = 30;
 
     /// <summary>
+    /// The Product page's live dot turns amber once no push has arrived for this long. The poll runs every
+    /// minute and only pushes when a product's top-of-book or weekly volume moved, so allow a few misses.
+    /// </summary>
+    public int LiveStaleAfterSeconds { get; set; } = 180;
+
+    /// <summary>
     /// Poll interval for <c>MarketInsightsPanel</c>. Pauses when tab is hidden.
     /// </summary>
     public int InsightsPanelRefreshSeconds { get; set; } = 30;

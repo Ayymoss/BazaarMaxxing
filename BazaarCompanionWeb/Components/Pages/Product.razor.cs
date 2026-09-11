@@ -9,8 +9,8 @@ using BazaarCompanionWeb.Interfaces.Database;
 using BazaarCompanionWeb.Services;
 using BazaarCompanionWeb.Utilities;
 using Microsoft.AspNetCore.Components;
-using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.Extensions.Options;
+using Humanizer;
 using Serilog;
 
 namespace BazaarCompanionWeb.Components.Pages;
@@ -24,24 +24,24 @@ public partial class Product(
     LastTradedPriceService lastTradedPriceService,
     IOhlcRepository ohlcRepository,
     IOptions<UIConfig> uiConfig,
-    NavigationManager navigationManager) : ComponentBase, IAsyncDisposable
+    ProductUpdateBus updateBus) : ComponentBase, IAsyncDisposable
 {
     [Parameter] public required string ProductKey { get; set; }
     
     private PriceGraph? _priceGraph;
-    private HubConnection? _hubConnection;
+    private IDisposable? _updateSubscription;
     private ProductDataInfo? _product;
     private ProductDataInfo? ProductData => _product;
 
     private CancellationTokenSource? _cancellationTokenSource;
     private bool _loading = true;
     private DateTimeOffset? _lastServerRefresh;
+    private DateTimeOffset? _lastLivePush;
 
     internal CandleInterval _selectedInterval = CandleInterval.OneHour;
     private List<RelatedProduct> _relatedProducts = [];
     private bool _relatedProductsLoaded;
     private bool _relatedProductsFailed;
-    private bool _joinedHubGroup;
     private bool _disposed;
 
     // Order book analysis
@@ -102,62 +102,58 @@ public partial class Product(
         await FetchProductDataAsync(_cancellationTokenSource.Token);
         await LoadRelatedProductsAsync(_cancellationTokenSource.Token);
 
-        // Setup SignalR
-        _hubConnection = new HubConnectionBuilder()
-            .WithUrl(navigationManager.ToAbsoluteUri("/hubs/products"))
-            .WithAutomaticReconnect()
-            .Build();
+        // Live updates arrive in-process from the Hypixel poll (ProductUpdateBus) — the page is
+        // InteractiveServer, so there is no network hop and nothing to reconnect.
+        if (!_disposed)
+            _updateSubscription = updateBus.Subscribe(ProductKey, OnLiveUpdateAsync);
 
-        _hubConnection.On<ProductDataInfo>("ProductUpdated", async (product) =>
-        {
-            if (_product is not null)
-            {
-                // Preserve PriceHistory as it's not sent in the live update DTO to save bandwidth
-                product.PriceHistory = _product.PriceHistory;
-                
-                // Only update books if the incoming data has them
-                product.BidBook ??= _product.BidBook;
-                product.AskBook ??= _product.AskBook;
-            }
-            
-            _product = product;
-            _lastServerRefresh = timeCache.LastUpdated;
-            
-            // Trigger UI re-render to update TradingDesk and other components
-            await InvokeAsync(StateHasChanged);
-        });
-
-        _hubConnection.On<object>("TickUpdated", async (tick) =>
-        {
-            if (_priceGraph is not null)
-            {
-                await _priceGraph.UpdateTickAsync(tick);
-            }
-        });
-
-        // Refresh the humanized "Last Updated" text on the configured cadence. Live data flows via SignalR.
+        // Refresh the humanized "Last Updated" text on the configured cadence.
         var interval = TimeSpan.FromSeconds(uiConfig.Value.LastUpdatedRefreshSeconds);
         _refreshTimer = new Timer(_ => InvokeAsync(StateHasChanged), null, interval, interval);
     }
 
-    protected override async Task OnAfterRenderAsync(bool firstRender)
+    private async Task OnLiveUpdateAsync(ProductDataInfo product, LiveTick tick)
     {
-        if (firstRender && _hubConnection is not null && !_disposed)
+        if (_disposed) return;
+
+        if (_product is not null)
         {
-            try
-            {
-                await _hubConnection.StartAsync();
-                // Re-check disposed after async gap — user may have navigated away mid-handshake.
-                if (_disposed) return;
-                await _hubConnection.SendAsync("JoinProductGroup", ProductKey);
-                _joinedHubGroup = true;
-            }
-            catch (Exception ex)
-            {
-                Log.Error(ex, "Failed to start SignalR connection for {ProductKey}", ProductKey);
-            }
+            // Preserve PriceHistory as it's not carried in the live update DTO
+            product.PriceHistory = _product.PriceHistory;
+
+            // Only update books if the incoming data has them
+            product.BidBook ??= _product.BidBook;
+            product.AskBook ??= _product.AskBook;
         }
+
+        _product = product;
+        _lastServerRefresh = timeCache.LastUpdated;
+        _lastLivePush = TimeProvider.System.GetLocalNow();
+
+        if (_priceGraph is not null)
+            await _priceGraph.UpdateTickAsync(tick);
+
+        // Re-render TradingDesk and the rest of the page
+        await InvokeAsync(StateHasChanged);
     }
+
+    /// <summary>
+    /// The footer dot is only green while we are subscribed AND the poll has pushed to this product
+    /// recently. A product whose top-of-book has not moved gets no push — that is stale-by-design and
+    /// shows amber rather than a false "live".
+    /// </summary>
+    private string LiveDotClass()
+    {
+        if (_updateSubscription is null) return "bg-red-500";
+        var age = TimeProvider.System.GetLocalNow() - (_lastLivePush ?? _lastServerRefresh);
+        return age is { } a && a < TimeSpan.FromSeconds(uiConfig.Value.LiveStaleAfterSeconds) ? "bg-emerald-500" : "bg-amber-500";
+    }
+
+    private string LiveDotTitle() => _updateSubscription is null
+        ? "Not subscribed to live updates"
+        : _lastLivePush is { } t
+            ? $"Last live push {t.Humanize()}"
+            : "No live push yet — waiting for the next poll to change this product";
 
     private void OnComparisonStateChanged()
     {
@@ -263,24 +259,8 @@ public partial class Product(
         _disposed = true;
         comparisonStateService.OnChange -= OnComparisonStateChanged;
 
-        if (_hubConnection is not null)
-        {
-            try
-            {
-                // Only LeaveProductGroup if we actually Joined. Otherwise the server has no
-                // matching subscription and we'd just log a warning on the hub side.
-                if (_joinedHubGroup && _hubConnection.State == HubConnectionState.Connected)
-                {
-                    await _hubConnection.SendAsync("LeaveProductGroup", ProductKey);
-                }
-            }
-            catch (Exception ex)
-            {
-                Log.Warning(ex, "Error leaving product group during dispose");
-            }
-
-            await _hubConnection.DisposeAsync();
-        }
+        _updateSubscription?.Dispose();
+        _updateSubscription = null;
 
         _refreshTimer?.Dispose();
         _cancellationTokenSource?.Cancel();
