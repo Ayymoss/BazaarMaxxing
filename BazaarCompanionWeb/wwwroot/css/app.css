@@ -472,9 +472,9 @@ table[theme] th[aria-sort="descending"]::after {
     left: 12px;
     z-index: 5;
     display: flex;
-    flex-wrap: wrap;
-    align-items: center;
-    gap: 12px;
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 3px;
     pointer-events: none;
     padding: 5px 10px;
     border-radius: 6px;
@@ -494,6 +494,13 @@ table[theme] th[aria-sort="descending"]::after {
 .ohlc-legend .ohlc-lg-ohlc b {
     font-weight: 600;
     margin: 0 5px 0 1px;
+}
+
+.ohlc-legend .ohlc-lg-row {
+    display: flex;
+    flex-wrap: wrap;
+    align-items: center;
+    gap: 12px;
 }
 
 .ohlc-legend .ohlc-lg-item i,

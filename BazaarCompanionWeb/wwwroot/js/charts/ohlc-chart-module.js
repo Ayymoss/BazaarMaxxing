@@ -347,13 +347,15 @@ function renderLegend(id, x) {
     if (!x) { host.innerHTML = ''; return; }
     const col = x.up ? C.up : C.down;
     const item = (label, val, c) => `<span class="ohlc-lg-item"><i style="color:${c}">${label}</i>${val}</span>`;
-    const parts = [
-        `<span class="ohlc-lg-ohlc" style="color:${col}">O<b>${n2(x.o)}</b> H<b>${n2(x.h)}</b> L<b>${n2(x.l)}</b> C<b>${n2(x.cl)}</b></span>`,
+    // One row per price series, then the indicators on their own row — stacked, not one long run.
+    const rows = [
+        `<span class="ohlc-lg-ohlc" style="color:${col}"><i>BID</i> O<b>${n2(x.o)}</b> H<b>${n2(x.h)}</b> L<b>${n2(x.l)}</b> C<b>${n2(x.cl)}</b></span>`,
     ];
     if (x.ask != null) {
         const ac = x.ask.close >= x.ask.open ? C.askUp : C.askDown;
-        parts.push(`<span class="ohlc-lg-ohlc" style="color:${ac}"><i>ASK</i> O<b>${n2(x.ask.open)}</b> H<b>${n2(x.ask.high)}</b> L<b>${n2(x.ask.low)}</b> C<b>${n2(x.ask.close)}</b></span>`);
+        rows.push(`<span class="ohlc-lg-ohlc" style="color:${ac}"><i>ASK</i> O<b>${n2(x.ask.open)}</b> H<b>${n2(x.ask.high)}</b> L<b>${n2(x.ask.low)}</b> C<b>${n2(x.ask.close)}</b></span>`);
     }
+    const parts = [];
     if (x.ma50 != null) parts.push(item('MA50', n2(x.ma50), C.ma50));
     if (x.ma250 != null) parts.push(item('MA250', n2(x.ma250), C.ma250));
     if (x.bbU != null) parts.push(item('BB', `${n2(x.bbU)}/${n2(x.bbL)}`, C.bb));
@@ -365,5 +367,6 @@ function renderLegend(id, x) {
     if (x.macd != null) parts.push(item('MACD', n3(x.macd), C.macd));
     if (x.sig != null) parts.push(item('SIG', n3(x.sig), C.signal));
     if (x.rsi != null) parts.push(item('RSI', n2(x.rsi), C.rsi));
-    host.innerHTML = parts.join('');
+    if (parts.length) rows.push(`<span class="ohlc-lg-row">${parts.join('')}</span>`);
+    host.innerHTML = rows.join('');
 }
