@@ -1,4 +1,4 @@
-using BazaarCompanionWeb.Models.Api.Items;
+﻿using BazaarCompanionWeb.Models.Api.Items;
 
 namespace BazaarCompanionWeb.Dtos.Bot;
 
@@ -74,11 +74,17 @@ public sealed record BotProductDetail(
     double ManipulationIntensity,
     double PriceDeviationPercent,
     /// <summary>
-    /// Age of this snapshot. The bot re-prices live orders against this endpoint every poll, and a repricing
-    /// rule fed stale prices chases a book that has already moved — so staleness has to be visible here, not
-    /// only on the flips list.
+    /// Age of THIS product's numbers, measured from the time Hypixel stamped on the poll that last carried
+    /// it. The bot re-prices live orders against this endpoint every poll, and a repricing rule fed stale
+    /// prices chases a book that has already moved — so staleness has to be visible here, not only on the
+    /// flips list. It used to be the age of the last poll whatever it carried, so a product that had dropped
+    /// out of the feed looked as fresh as the poll that no longer mentioned it.
     /// </summary>
     double DataAgeSeconds,
+    /// <summary>The poll that last carried this product, the time Hypixel stamped on it, and when this reply was built.</summary>
+    DateTime? ObservedUtc,
+    DateTime? UpstreamUtc,
+    DateTime RequestUtc,
     // Order books
     List<Order> BidBook,
     List<Order> AskBook,

@@ -167,6 +167,11 @@ public static class ApiEndpoints
                 return Results.NotFound(new { error = $"Product '{productKey}' not found" });
             }
 
+            // This product's own observation, not the last poll's: a product that has dropped out of the
+            // feed keeps the numbers it had, and their age has to say so.
+            var observed = snapshotStore.ObservationOf(productKey);
+            var requestUtc = DateTime.UtcNow;
+
             var detail = new BotProductDetail(
                 ProductKey: product.ItemId,
                 Name: product.ItemFriendlyName,
@@ -187,11 +192,12 @@ public static class ApiEndpoints
                 IsManipulated: product.IsManipulated,
                 ManipulationIntensity: product.ManipulationIntensity,
                 PriceDeviationPercent: product.PriceDeviationPercent,
-                // This endpoint serves the in-memory snapshot, so its age is the age of the last poll — not
-                // of the database row, which lags behind by however long the flush interval is.
-                DataAgeSeconds: snapshotStore.LastIngestUtc == DateTime.MinValue
+                DataAgeSeconds: observed is null
                     ? Unknown
-                    : Serialisable(Math.Max(0, (DateTime.UtcNow - snapshotStore.LastIngestUtc).TotalSeconds)),
+                    : Serialisable(Math.Max(0, (requestUtc - observed.UpstreamUtc).TotalSeconds)),
+                ObservedUtc: observed?.ObservedUtc,
+                UpstreamUtc: observed?.UpstreamUtc,
+                RequestUtc: requestUtc,
                 BidBook: product.BidBook ?? [],
                 AskBook: product.AskBook ?? [],
                 PriceHistory: product.PriceHistory ?? []

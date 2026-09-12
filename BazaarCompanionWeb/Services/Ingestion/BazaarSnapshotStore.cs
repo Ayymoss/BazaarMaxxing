@@ -1,4 +1,4 @@
-using System.Collections.Concurrent;
+﻿using System.Collections.Concurrent;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Models;
@@ -35,6 +35,7 @@ public sealed class BazaarSnapshotStore
     // Full live product (incl. order books) so the web UI can read current state from RAM, not the DB.
     private readonly ConcurrentDictionary<string, ProductData> _latestData = new();
     private readonly ConcurrentDictionary<string, ProductState> _latestState = new();
+    private readonly ConcurrentDictionary<string, Observation> _observed = new();
     private readonly ConcurrentDictionary<string, RingBuffer<TickSample>> _ticks = new();
     private readonly ConcurrentDictionary<string, CachedScores> _scores = new();
 
@@ -58,6 +59,9 @@ public sealed class BazaarSnapshotStore
     /// </summary>
     public DateTime LastIngestUtc { get; private set; } = DateTime.MinValue;
 
+    /// <summary>The time Hypixel stamped on the last poll's snapshot - the market's own clock, not ours.</summary>
+    public DateTime LastUpstreamUtc { get; private set; } = DateTime.MinValue;
+
     /// <summary>When the first poll landed — the ring buffers hold nothing from before this.</summary>
     public DateTime FirstIngestUtc { get; private set; } = DateTime.MaxValue;
 
@@ -80,7 +84,8 @@ public sealed class BazaarSnapshotStore
         IReadOnlyList<ProductData> products,
         IReadOnlyList<EFProduct> mapped,
         IReadOnlyDictionary<string, CachedScores> scores,
-        DateTime timestamp)
+        DateTime timestamp,
+        DateTime? upstreamUtc = null)
     {
         if (products.Count != mapped.Count)
             throw new ArgumentException("products and mapped must have matching length");
@@ -88,7 +93,9 @@ public sealed class BazaarSnapshotStore
         var changed = new List<string>();
         var firstRun = _latestState.IsEmpty;
         LastIngestUtc = timestamp;
+        LastUpstreamUtc = upstreamUtc ?? timestamp;
         if (firstRun) FirstIngestUtc = timestamp;
+        var observation = new Observation(timestamp, LastUpstreamUtc);
 
         lock (_diffLock)
         {
@@ -138,6 +145,7 @@ public sealed class BazaarSnapshotStore
                 _latestState[key] = newState;
                 _latestProducts[key] = efProduct;
                 _latestData[key] = product;
+                _observed[key] = observation;
 
                 if (stateChanged)
                 {
@@ -239,6 +247,10 @@ public sealed class BazaarSnapshotStore
 
     public EFProduct? GetLatestProduct(string productKey) =>
         _latestProducts.TryGetValue(productKey, out var p) ? p : null;
+
+    /// <summary>When this product was last seen, or null if it never has been.</summary>
+    public Observation? ObservationOf(string productKey) =>
+        _observed.TryGetValue(productKey, out var o) ? o : null;
 
     /// <summary>The full live product (incl. order books) for a key, or null if not yet polled.</summary>
     public ProductData? GetLatestData(string productKey) =>

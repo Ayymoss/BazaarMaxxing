@@ -48,7 +48,8 @@ public class HyPixelService(
                 ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
                 ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
         // Splat into RAM store. Flusher (FlushService) drains every ~10min and writes to DB.
-        snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow);
+        snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow,
+            DateTimeOffset.FromUnixTimeMilliseconds(bazaarResponse.LastUpdated).UtcDateTime);
 
         // Compute LTP estimates for ALL products (not just changed — a fill moves the counters without
         // necessarily moving the touch). The traded units come from the ingest that just ran.
