@@ -112,6 +112,17 @@ public static class FlipQuoting
         public double Minutes(int units) => Rate is { } rate ? Serialisable((QueueAhead + units) / rate) : Unknown;
     }
 
+    /// <summary>
+    /// Coins a minute the ORDER would make: what the suggested quantity earns over the time that quantity
+    /// takes to fill. Profit per unit is worthless if the flip takes a day, and per-unit profit over a
+    /// whole order's fill time favoured the smallest orders once fill times were sized to the order - a
+    /// slot earns on coins, not on rate (audit 2026-09-12, "what should count as a good trade").
+    /// </summary>
+    public static double Throughput(FlipOpportunity f) =>
+        f.EstimatedRoundTripMinutes is > 0 and < Unknown
+            ? (f.SuggestedQuantity > 0 ? f.SuggestedProfit : f.EstimatedProfitPerUnit) / f.EstimatedRoundTripMinutes
+            : 0;
+
     /// <param name="observedUtc">When these numbers were observed; the row's own stamp when not given.</param>
     public static FlipOpportunity Quote(EFProduct p, double taxRate, double? budget, double? maxFillMinutes,
         DateTime? observedUtc = null)

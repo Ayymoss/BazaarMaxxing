@@ -152,12 +152,7 @@ public static class ApiEndpoints
             {
                 "fill" => result.OrderBy(f => f.EstimatedRoundTripMinutes),
                 "profit" => result.OrderByDescending(f => f.EstimatedProfitPerUnit),
-                // Profit per unit is worthless if the flip takes a day; profit per minute is the honest
-                // ranking for a bot that can only hold one position at a time.
-                "throughput" => result.OrderByDescending(f =>
-                    f.EstimatedRoundTripMinutes is > 0 and < Unknown
-                        ? f.EstimatedProfitPerUnit / f.EstimatedRoundTripMinutes
-                        : 0),
+                "throughput" => result.OrderByDescending(FlipQuoting.Throughput),
                 _ => result.OrderByDescending(f => f.OpportunityScore)
             }).Take(resultLimit).ToList();
 

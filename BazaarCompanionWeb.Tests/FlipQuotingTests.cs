@@ -111,6 +111,20 @@ public class FlipQuotingTests
             "a bigger order is a longer queue, not the same 0.11 minutes");
     }
 
+    /// <summary>
+    /// 30k in three minutes is 600k a slot-hour; 500k in two hours is 250k. Ranked on profit per unit the
+    /// slow trade wins every time; ranked on what the order earns per minute the fast one does.
+    /// </summary>
+    [Fact]
+    public void Throughput_is_what_the_order_earns_per_minute_not_a_unit()
+    {
+        var fast = FlipQuoting.Quote(Product(bid: 1_000, ask: 1_200, bidWeek: 50_400_000, askWeek: 50_400_000), 0.05, budget: 200_000, maxFillMinutes: 45);
+        var slow = FlipQuoting.Quote(Product(bid: 100_000, ask: 130_000, bidWeek: 100_800, askWeek: 100_800, topBidDepth: 100, topAskDepth: 100), 0.05, budget: 500_000, maxFillMinutes: 45);
+
+        slow.EstimatedProfitPerUnit.Should().BeGreaterThan(fast.EstimatedProfitPerUnit);
+        FlipQuoting.Throughput(fast).Should().BeGreaterThan(FlipQuoting.Throughput(slow));
+    }
+
     [Fact]
     public void Without_a_stated_tax_the_perkless_rate_is_assumed()
     {
