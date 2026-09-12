@@ -5,6 +5,14 @@ namespace BazaarCompanionWeb.Services;
 
 public sealed partial class OpportunityScoringService(ILogger<OpportunityScoringService> logger) : IOpportunityScoringService
 {
+    /// <summary>
+    /// The raw score of every product scored so far, changed or not. A batch only carries the products that
+    /// moved since the last poll, and a score normalised against that batch alone depended on which peers
+    /// happened to move with it: a product's eligibility at minScore=2 changed with the company it kept
+    /// (audit 2026-09-12, finding 14). Each batch is normalised against the whole universe instead.
+    /// </summary>
+    private readonly System.Collections.Concurrent.ConcurrentDictionary<string, double> _universe = new();
+
     private const int MinCandlesForAnalysis = 6;
 
     // Hypixel Specific Constants
@@ -108,8 +116,13 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
             }
         }
 
-        // Phase 2: Z-score normalize across all non-zero scores
-        var normalizedScores = NormalizeToZScores(rawScores);
+        // Phase 2: Z-score normalize against every product scored so far, not this batch alone
+        for (var i = 0; i < products.Count; i++)
+        {
+            if (rawScores[i] > 0) _universe[products[i].ProductKey] = rawScores[i];
+            else _universe.TryRemove(products[i].ProductKey, out _);
+        }
+        var normalizedScores = NormalizeToZScores(rawScores, _universe.Values.ToList());
 
         // Phase 3: Build results
         var results = new ScoringResult[products.Count];
@@ -381,10 +394,10 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
     /// Z-score normalization: maps raw scores to 0–10 scale.
     /// Mean→2.0, each σ adds 1.5 points.
     /// </summary>
-    private static double[] NormalizeToZScores(double[] rawScores)
+    private static double[] NormalizeToZScores(double[] rawScores, List<double> universe)
     {
         var result = new double[rawScores.Length];
-        var nonZero = rawScores.Where(s => s > 0).ToList();
+        var nonZero = universe.Where(s => s > 0).ToList();
 
         if (nonZero.Count < MinSamplesForZScore)
         {
