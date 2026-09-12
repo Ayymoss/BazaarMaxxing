@@ -1,4 +1,4 @@
-using BazaarCompanionWeb.Charting;
+﻿using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces.Database;
@@ -50,11 +50,12 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         new("VOL", "VOL", true),
         new("MACD", "MACD", false),
         new("RSI", "RSI", false),
+        new("SPREAD", "SPREAD", false),
     ];
 
     private readonly Dictionary<string, bool> _enabled = new()
     {
-        ["ASK"] = true, ["MA"] = false, ["BB"] = false, ["VOL"] = true, ["MACD"] = true, ["RSI"] = false,
+        ["ASK"] = true, ["MA"] = false, ["BB"] = false, ["VOL"] = true, ["MACD"] = true, ["RSI"] = false, ["SPREAD"] = false,
     };
 
     private sealed record IndicatorState(Dictionary<string, bool> Indicators);
@@ -67,6 +68,7 @@ public partial class PriceGraph : ComponentBase, IAsyncDisposable
         vol = _enabled["VOL"],
         macd = _enabled["MACD"],
         rsi = _enabled["RSI"],
+        spread = _enabled["SPREAD"],
     };
 
     protected override async Task OnAfterRenderAsync(bool firstRender)

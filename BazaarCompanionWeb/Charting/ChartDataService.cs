@@ -39,6 +39,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
             MacdLine = ml,
             Signal = sig,
             Rsi = Indicators.Rsi(candles),
+            Spread = includeAsk ? Indicators.Spread(candles) : [],
             AskCandles = includeAsk ? Indicators.AskCandles(candles) : [],
         };
     }
@@ -62,6 +63,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
             Signal = Tail(p.Signal),
             Rsi = Tail(p.Rsi),
             AskCandle = includeAsk ? TailCandleAtTime(p.AskCandles, Indicators.Sec(last.Time)) : null,
+            Spread = includeAsk && p.Spread.Count > 0 && p.Spread[^1].Time == Indicators.Sec(last.Time) ? p.Spread[^1] : null,
         };
     }
 
@@ -124,6 +126,7 @@ public sealed class ChartDataService(IOhlcRepository ohlcRepository, IndexAggreg
         MacdLine = p.MacdLine.Where(x => x.Time >= fromSec).ToList(),
         Signal = p.Signal.Where(x => x.Time >= fromSec).ToList(),
         Rsi = p.Rsi.Where(x => x.Time >= fromSec).ToList(),
+        Spread = p.Spread.Where(x => x.Time >= fromSec).ToList(),
         AskCandles = p.AskCandles.Where(x => x.Time >= fromSec).ToList(),
     };
 }

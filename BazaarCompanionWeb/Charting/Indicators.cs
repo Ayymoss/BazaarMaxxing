@@ -12,6 +12,17 @@ public static class Indicators
     public const string DownColor = "rgba(239, 68, 68, 0.5)";  // red
     public const string NeutralColor = "rgba(148, 163, 184, 0.35)"; // slate
 
+    // Spread line colours are opaque: a 1px line at 35% alpha vanishes against the grid.
+    public const string SpreadWideColor = "#16c784";
+    public const string SpreadTightColor = "#f6465d";
+    public const string SpreadNormalColor = "#94a3b8";
+
+    /// <summary>Bars of history a spread reading is ranked against — the MA250 warmup, so pages rank correctly.</summary>
+    public const int SpreadRankWindow = 250;
+
+    /// <summary>Below this many prior readings the rank is meaningless and the point is drawn neutral.</summary>
+    public const int SpreadRankMinHistory = 20;
+
     internal static long Sec(DateTime t) =>
         new DateTimeOffset(DateTime.SpecifyKind(t, DateTimeKind.Utc)).ToUnixTimeSeconds();
 
@@ -162,6 +173,62 @@ public static class Indicators
             r.Add(new VolumePoint(Sec(b.Time), b.Volume, color, b.BuyVolume, b.SellVolume));
         }
         return r;
+    }
+
+    /// <summary>
+    /// Bid/ask spread (ask close − bid close, floored at 0 for a crossed or garbage book), coloured by its
+    /// percentile against the product's trailing <see cref="SpreadRankWindow"/> readings: top quartile green
+    /// (wide for this product — margin), bottom quartile red (tight), the middle neutral. The window is
+    /// rolling and only looks backwards, so old bars are judged against their own past, not the future.
+    /// Bars with no ask are skipped, like <see cref="AskCandles"/>.
+    /// </summary>
+    public static List<SpreadPoint> Spread(IReadOnlyList<OhlcDataPoint> c)
+    {
+        var r = new List<SpreadPoint>(c.Count);
+        var window = new List<double>(SpreadRankWindow + 1); // sorted ascending
+        var recent = new Queue<double>(SpreadRankWindow + 1); // insertion order, for eviction
+        foreach (var b in c)
+        {
+            if (b.AskClose <= 0 || b.Close <= 0) continue;
+            var spread = Math.Max(0, b.AskClose - b.Close);
+
+            double? rank = null;
+            if (window.Count >= SpreadRankMinHistory)
+            {
+                // Share of history at or below this reading, counting the reading itself.
+                var below = UpperBound(window, spread);
+                rank = (below + 1.0) / (window.Count + 1.0);
+            }
+
+            var color = rank switch
+            {
+                >= 0.75 => SpreadWideColor,
+                <= 0.25 => SpreadTightColor,
+                _ => SpreadNormalColor,
+            };
+            r.Add(new SpreadPoint(Sec(b.Time), spread, color, rank));
+
+            window.Insert(UpperBound(window, spread), spread);
+            recent.Enqueue(spread);
+            if (recent.Count > SpreadRankWindow)
+            {
+                var evict = recent.Dequeue();
+                window.RemoveAt(window.BinarySearch(evict) is var idx && idx >= 0 ? idx : ~idx);
+            }
+        }
+        return r;
+
+        // Index of the first element greater than v (== count of elements <= v).
+        static int UpperBound(List<double> sorted, double v)
+        {
+            int lo = 0, hi = sorted.Count;
+            while (lo < hi)
+            {
+                var mid = (lo + hi) >> 1;
+                if (sorted[mid] <= v) lo = mid + 1; else hi = mid;
+            }
+            return lo;
+        }
     }
 
     /// <summary>

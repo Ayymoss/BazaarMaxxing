@@ -6,9 +6,10 @@
 //   payload = { candles:[{time,open,high,low,close}], askCandles:[{time,open,high,low,close}],
 //               volume:[{time,value,color,buy,sell}],
 //               ma50, ma250, bbUpper, bbMiddle, bbLower, macdLine, signal, rsi : [{time,value}],
-//               macdHist:[{time,value,color}] }
+//               macdHist:[{time,value,color}], spread:[{time,value,color,rank}] }
 // Bid is the green/red candle; ask is the blue/orange one. Volume is units traded, coloured by the
-// side that did more (buy = green, sell = red).
+// side that did more (buy = green, sell = red). Spread is ask − bid in coins, coloured by its percentile
+// against the product's own trailing history (green = wide for this product, red = tight).
 
 const PAGE = 200;
 const reg = {};
@@ -24,7 +25,7 @@ const C = {
     text: '#9aa0aa', grid: 'rgba(148,163,184,0.06)', border: '#2a2f38',
     ma50: '#d99a00', ma250: '#5b8def',
     bb: 'rgba(148,163,184,0.5)', bbMid: 'rgba(148,163,184,0.32)',
-    macd: '#d99a00', signal: '#5b8def', rsi: '#c98bff',
+    macd: '#d99a00', signal: '#5b8def', rsi: '#c98bff', spread: '#94a3b8',
     ask: '#3b82f6', askUp: '#3b82f6', askDown: '#f97316',
     crosshairLabel: '#2a2f38',
 };
@@ -134,6 +135,14 @@ function build(id) {
         }
         pane++;
     }
+    if (f.spread) {
+        // Per-point colour comes with the data (the server ranks each bar against the product's history).
+        s.spread = chart.addSeries(LWC.LineSeries, lineOpts(C.spread, {
+            lineWidth: 2, lastValueVisible: true,
+            priceFormat: { type: 'price', precision: 2, minMove: 0.01 },
+        }), pane);
+        pane++;
+    }
 
     applyData(s, e.cache, f);
 
@@ -177,9 +186,10 @@ function applyData(s, cache, f) {
     if (f.vol) s.volume.setData(cache.volume);
     if (f.macd) { s.macdHist.setData(cache.macdHist); s.macdLine.setData(cache.macdLine); s.signal.setData(cache.signal); }
     if (f.rsi) s.rsi.setData(cache.rsi);
+    if (f.spread) s.spread.setData(cache.spread);
 }
 
-const KEYS = ['candles', 'askCandles', 'volume', 'ma50', 'ma250', 'bbUpper', 'bbMiddle', 'bbLower', 'macdHist', 'macdLine', 'signal', 'rsi'];
+const KEYS = ['candles', 'askCandles', 'volume', 'ma50', 'ma250', 'bbUpper', 'bbMiddle', 'bbLower', 'macdHist', 'macdLine', 'signal', 'rsi', 'spread'];
 
 function emptyCache() {
     const c = {};
@@ -243,6 +253,7 @@ export function updateOhlcTick(id, t) {
     pushLine(c.macdLine, t.macdLine, f.macd && s.macdLine);
     pushLine(c.signal, t.signal, f.macd && s.signal);
     pushLine(c.rsi, t.rsi, f.rsi && s.rsi);
+    pushLine(c.spread, t.spread, f.spread && s.spread);
 
     renderLegend(id, lastValues(c));
 }
@@ -316,6 +327,7 @@ function lastValues(cache) {
         ma50: pick(cache.ma50), ma250: pick(cache.ma250),
         bbU: pick(cache.bbUpper), bbL: pick(cache.bbLower),
         macd: pick(cache.macdLine), sig: pick(cache.signal), rsi: pick(cache.rsi),
+        spread: lastOf(cache.spread),
     };
 }
 
@@ -329,11 +341,14 @@ function onCrosshair(id, p) {
     const g = ser => { const v = ser && p.seriesData.get(ser); return v ? (v.value ?? null) : null; };
     // The buy/sell split is not on the series point, only in the cache.
     const vol = s.volume && p.seriesData.get(s.volume) ? atTime(e.cache.volume, p.time) : null;
+    // Likewise the spread's percentile rank.
+    const spread = s.spread && p.seriesData.get(s.spread) ? atTime(e.cache.spread, p.time) : null;
     renderLegend(id, {
         o: c.open, h: c.high, l: c.low, cl: c.close, up: c.close >= c.open,
         ask: s.askCandle ? (p.seriesData.get(s.askCandle) || null) : null, vol,
         ma50: g(s.ma50), ma250: g(s.ma250),
         bbU: g(s.bbUpper), bbL: g(s.bbLower), macd: g(s.macdLine), sig: g(s.signal), rsi: g(s.rsi),
+        spread,
     });
 }
 
@@ -365,5 +380,9 @@ function renderLegend(id, x) {
     }
     if (x.macd != null || x.sig != null) row(item('MACD', n3(x.macd), C.macd), item('SIG', n3(x.sig), C.signal));
     if (x.rsi != null) row(item('RSI', n2(x.rsi), C.rsi));
+    if (x.spread != null) {
+        const pct = x.spread.rank == null ? '' : ` · P${Math.round(x.spread.rank * 100)}`;
+        row(item('SPREAD', n2(x.spread.value) + pct, x.spread.color || C.spread));
+    }
     host.innerHTML = rows.join('');
 }

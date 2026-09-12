@@ -15,6 +15,13 @@ public readonly record struct HistPoint(long Time, double Value, string Color);
 /// </summary>
 public readonly record struct VolumePoint(long Time, double Value, string Color, double Buy, double Sell);
 
+/// <summary>
+/// One spread reading: <paramref name="Value"/> is ask − bid in coins (floored at 0), coloured by where it
+/// sits against the product's own recent history; <paramref name="Rank"/> is that percentile (0–1), null
+/// while there is too little history to rank against.
+/// </summary>
+public readonly record struct SpreadPoint(long Time, double Value, string Color, double? Rank);
+
 /// <summary>Full dataset for a window of candles, with every indicator pre-computed server-side.</summary>
 public sealed class ChartPayload
 {
@@ -29,6 +36,8 @@ public sealed class ChartPayload
     public List<LinePoint> MacdLine { get; init; } = [];
     public List<LinePoint> Signal { get; init; } = [];
     public List<LinePoint> Rsi { get; init; } = [];
+    /// <summary>Bid/ask spread per bar. Empty when the source has no ask data (indices).</summary>
+    public List<SpreadPoint> Spread { get; init; } = [];
     /// <summary>Ask candles (the main candles are bid). Empty when the source has no ask data (indices).</summary>
     public List<Candle> AskCandles { get; init; } = [];
 }
@@ -48,4 +57,5 @@ public sealed class ChartTick
     public LinePoint? Signal { get; init; }
     public LinePoint? Rsi { get; init; }
     public Candle? AskCandle { get; init; }
+    public SpreadPoint? Spread { get; init; }
 }
