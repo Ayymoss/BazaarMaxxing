@@ -1,4 +1,4 @@
-using BazaarCompanionWeb.Charting;
+﻿using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
@@ -147,17 +147,42 @@ public static class ApiEndpoints
             // parked at the best bid is an hour of waiting, during which anyone can undercut by 0.1 and reset
             // the wait entirely.
             static int TopDepth(IReadOnlyList<OrderBook> book) => book.Count > 0 ? book[0].Amount : 0;
-            // How many units this budget can buy, bounded by the book rather than by the purse alone. Taking
-            // more than a slice of the top level means the sell side has to absorb an order larger than the
-            // depth that was there when the decision was made — and Hypixel caps a single order anyway.
+            // How many units this budget can buy, bounded by what the market can absorb in the time the
+            // caller is willing to wait.
+            //
+            // THE OLD BOUND MEASURED THE WRONG THING. It was a quarter of the depth at the single best ask
+            // level, floored at one. Units queued at the best ask are OTHER SELLERS - competition, not
+            // capacity - and one level is a few seconds of a busy book. A product whose best level happened
+            // to hold four units came back as "buy 1", whatever its weekly turnover.
+            //
+            // Measured against a live bot on 2026-09-11: 22 of 36 positions opened committed under 200,000
+            // coins, the median 122,573 against a per-position budget near 3,500,000. Hypercharge Chip at
+            // 20,000 a unit was suggested at ONE unit - 20,001 coins - and that position then cost an order
+            // slot and a cycle of repricing like any other. An account holding 35m had a fifth of it
+            // deployed, because the suggestions it was given could not use the rest.
+            //
+            // Throughput is the honest bound and the file already computes it for FillMinutes: units the ask
+            // side actually turns over per minute, times the minutes the caller said it would wait. Where
+            // there is no volume to reason from, the budget decides and the caller's own slot rules cap it.
             const int hypixelMaxOrderUnits = 71_680;
-            static int SuggestedUnits(double? budgetCoins, double bidPrice, int topAskDepth)
+            static int SuggestedUnits(double? budgetCoins, double bidPrice, double askWeekVolume,
+                double waitMinutes)
             {
                 if (budgetCoins is not { } coins || bidPrice <= 0) return 0;
+
                 var affordable = (int)Math.Floor(coins / bidPrice);
-                var bookLimit = topAskDepth > 0 ? Math.Max(1, topAskDepth / 4) : affordable;
-                return Math.Clamp(Math.Min(affordable, bookLimit), 0, hypixelMaxOrderUnits);
+
+                var absorbable = askWeekVolume > 0
+                    ? (int)Math.Floor(askWeekVolume / MinutesPerWeek * QueueDrainFactor * waitMinutes)
+                    : affordable;
+
+                return Math.Clamp(Math.Min(affordable, absorbable), 0, hypixelMaxOrderUnits);
             }
+
+            // What the caller said it would wait for a round trip, halved because the suggestion sizes ONE
+            // leg and a round trip is two. Defaulted rather than required: the parameter is optional, and a
+            // caller that does not care still wants a size it can sell.
+            var sizingWaitMinutes = Math.Max(1, (maxFillMinutes ?? 30) / 2.0);
 
             static double FillMinutes(int depth, double weekVolume) =>
                 weekVolume <= 0
@@ -188,9 +213,10 @@ public static class ApiEndpoints
                 EstimatedSellFillMinutes: FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
                 EstimatedRoundTripMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek)
                                            + FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
-                SuggestedQuantity: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books)),
-                SuggestedCost: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books)) * p.Bid.UnitPrice,
-                SuggestedProfit: SuggestedUnits(budget, p.Bid.UnitPrice, TopDepth(p.Ask.Books))
+                SuggestedQuantity: SuggestedUnits(budget, p.Bid.UnitPrice, p.Ask.OrderVolumeWeek, sizingWaitMinutes),
+                SuggestedCost: SuggestedUnits(budget, p.Bid.UnitPrice, p.Ask.OrderVolumeWeek, sizingWaitMinutes)
+                               * p.Bid.UnitPrice,
+                SuggestedProfit: SuggestedUnits(budget, p.Bid.UnitPrice, p.Ask.OrderVolumeWeek, sizingWaitMinutes)
                                  * ((p.Ask.UnitPrice * (1 - BazaarTaxRate)) - p.Bid.UnitPrice),
                 // Honest about what it is: these rows come from the database, which lags the live snapshot by
                 // the flush interval. Screening on them is fine; pricing an order is not.
