@@ -160,7 +160,8 @@ public sealed class BazaarSnapshotStore
                         product.Ask.CurrentVolume,
                         traded.Buy,
                         traded.Sell,
-                        timestamp));
+                        timestamp,
+                        traded.Estimated));
 
                     UpdateBar(key, product, hadPrev ? prev : null, traded, timestamp);
                 }
@@ -326,7 +327,7 @@ public sealed class BazaarSnapshotStore
 
         private double _bidHigh = bidOpen, _bidLow = bidOpen, _bidClose = bidOpen;
         private double _askHigh = askOpen, _askLow = askOpen, _askClose = askOpen;
-        private long _bidDepth, _askDepth, _tradedBuy, _tradedSell;
+        private long _bidDepth, _askDepth, _tradedBuy, _tradedSell, _tradedEstimated;
 
         public void Apply(double bid, double ask, long bidDepth, long askDepth, TradedDelta traded)
         {
@@ -340,6 +341,7 @@ public sealed class BazaarSnapshotStore
             _askDepth = askDepth;
             _tradedBuy += traded.Buy;
             _tradedSell += traded.Sell;
+            if (traded.Estimated) _tradedEstimated += traded.Total;
             Dirty = true;
         }
 
@@ -359,6 +361,7 @@ public sealed class BazaarSnapshotStore
             AskVolume = _askDepth,
             TradedBuy = _tradedBuy,
             TradedSell = _tradedSell,
+            TradedEstimated = _tradedEstimated,
         };
     }
 }

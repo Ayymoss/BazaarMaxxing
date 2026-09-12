@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
@@ -42,6 +42,9 @@ public sealed record EFPriceTick
     public long TradedBuy { get; set; }
     /// <summary>Units instantly sold during the bucket (bids consumed) — the increase in <c>sellMovingWeek</c>.</summary>
     public long TradedSell { get; set; }
+
+    /// <summary>Units of TradedBuy + TradedSell that were estimated during an expiry burst rather than read off the counters.</summary>
+    public long TradedEstimated { get; set; }
 
     [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

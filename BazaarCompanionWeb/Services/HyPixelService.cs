@@ -46,7 +46,8 @@ public class HyPixelService(
             ef.Meta.SuggestedBidVolume.HasValue ? new TradeRecommendation(
                 ef.Meta.SuggestedBidVolume.Value, ef.Meta.SuggestedBidPrice ?? 0, ef.Meta.SuggestedAskPrice ?? 0,
                 ef.Meta.EstimatedFillTimeHours ?? 0, ef.Meta.EstimatedProfitPerUnit ?? 0,
-                ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null));
+                ef.Meta.EstimatedTotalProfit ?? 0, ef.Meta.RecommendationConfidence ?? 0) : null,
+            EvidenceLimited: ef.Meta.EvidenceLimited));
         // Splat into RAM store. Flusher (FlushService) drains every ~10min and writes to DB.
         snapshotStore.Ingest(productList, mappedProducts, scoresByProduct, DateTime.UtcNow,
             DateTimeOffset.FromUnixTimeMilliseconds(bazaarResponse.LastUpdated).UtcDateTime);
@@ -228,6 +229,7 @@ public class HyPixelService(
             double manipulationIntensity;
             double deviationPercent;
             TradeRecommendation? recommendation = null;
+            var evidenceLimited = false;
 
             if (changedKeyToIndex.TryGetValue(bazaar.ProductId, out var changedIdx))
             {
@@ -237,6 +239,7 @@ public class HyPixelService(
                 manipulationIntensity = sr.ManipulationIntensity;
                 deviationPercent = sr.PriceDeviationPercent;
                 recommendation = sr.Recommendation;
+                evidenceLimited = sr.EvidenceLimited;
             }
             else
             {
@@ -248,6 +251,7 @@ public class HyPixelService(
                     manipulationIntensity = cached.ManipulationIntensity;
                     deviationPercent = cached.PriceDeviationPercent;
                     recommendation = cached.Recommendation;
+                    evidenceLimited = cached.EvidenceLimited;
                 }
                 else
                 {
@@ -255,6 +259,7 @@ public class HyPixelService(
                     isManipulated = false;
                     manipulationIntensity = 0;
                     deviationPercent = 0;
+                    evidenceLimited = true;
                 }
             }
 
@@ -306,6 +311,7 @@ public class HyPixelService(
                     IsManipulated = isManipulated,
                     ManipulationIntensity = manipulationIntensity,
                     PriceDeviationPercent = deviationPercent,
+                    EvidenceLimited = evidenceLimited,
                     SuggestedBidVolume = recommendation?.SuggestedBidVolume,
                     SuggestedBidPrice = recommendation?.SuggestedBidPrice,
                     SuggestedAskPrice = recommendation?.SuggestedAskPrice,

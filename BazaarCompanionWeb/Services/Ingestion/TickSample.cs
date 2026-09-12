@@ -1,4 +1,4 @@
-namespace BazaarCompanionWeb.Services.Ingestion;
+﻿namespace BazaarCompanionWeb.Services.Ingestion;
 
 /// <summary>
 /// One poll's worth of state for a product that changed. <see cref="BidVolume"/>/<see cref="AskVolume"/> are
@@ -12,4 +12,6 @@ public sealed record TickSample(
     long AskVolume,
     long TradedBuy,
     long TradedSell,
-    DateTime Timestamp);
+    DateTime Timestamp,
+    // <summary>Whether the traded figures were stood in for during an expiry burst rather than read off the counters.</summary>
+    bool Estimated = false);

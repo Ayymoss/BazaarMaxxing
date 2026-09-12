@@ -170,6 +170,7 @@ public static class FlipQuoting
             DataAgeSeconds: Serialisable(Math.Max(0, (DateTime.UtcNow - (observedUtc ?? p.LastSeenAt)).TotalSeconds)),
             IsManipulated: p.Meta.IsManipulated,
             ManipulationIntensity: p.Meta.ManipulationIntensity,
-            PriceDeviationPercent: p.Meta.PriceDeviationPercent);
+            PriceDeviationPercent: p.Meta.PriceDeviationPercent,
+            EvidenceLimited: p.Meta.EvidenceLimited);
     }
 }

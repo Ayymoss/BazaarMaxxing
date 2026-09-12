@@ -15,6 +15,21 @@ public class OpportunityScoringServiceTests
     private static readonly IReadOnlyDictionary<string, List<OhlcDataPoint>> NoCandles = new Dictionary<string, List<OhlcDataPoint>>();
 
     /// <summary>
+    /// Too little history is not a clean bill. The simplified score left the manipulation flag at its
+    /// default, so "insufficient evidence" read as "not manipulated". Audit 2026-09-12, finding 14.
+    /// </summary>
+    [Fact]
+    public void A_product_scored_on_too_little_history_says_so()
+    {
+        var scorer = new OpportunityScoringService(NullLogger<OpportunityScoringService>.Instance);
+
+        var result = scorer.CalculateScoresBatch([Input("P1", 1_000, 1_500)], NoCandles);
+
+        result[0].EvidenceLimited.Should().BeTrue();
+        result[0].IsManipulated.Should().BeFalse("a default, which is why the flag beside it has to say so");
+    }
+
+    /// <summary>
     /// A score is a place in the whole market, not in whichever products moved this minute. Scored on its
     /// own after the first poll, a product used to come back with the top mark of a one-product batch.
     /// Audit 2026-09-12, finding 14.

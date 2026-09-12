@@ -1,4 +1,4 @@
-using System.ComponentModel.DataAnnotations;
+﻿using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 
 namespace BazaarCompanionWeb.Entities;
@@ -14,6 +14,7 @@ public sealed record EFProductMeta
     public required bool IsManipulated { get; set; }
     public required double ManipulationIntensity { get; set; }
     public required double PriceDeviationPercent { get; set; }
+    public bool EvidenceLimited { get; set; }
 
     // Trade recommendation fields
     public int? SuggestedBidVolume { get; set; }

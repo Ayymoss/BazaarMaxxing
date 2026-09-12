@@ -51,6 +51,7 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
         var spreadPersistences = new double[products.Count];
         var executionConfidences = new double[products.Count];
         var recommendations = new TradeRecommendation?[products.Count];
+        var evidenceLimited = new bool[products.Count];
 
         // Phase 1: Calculate raw scores and components for each product
         for (var i = 0; i < products.Count; i++)
@@ -73,6 +74,7 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
             if (candles.Count < MinCandlesForAnalysis)
             {
                 rawScores[i] = CalculateSimplifiedScore(p);
+                evidenceLimited[i] = true;
                 LogInsufficientCandles(candles.Count, MinCandlesForAnalysis, p.ProductKey);
                 continue;
             }
@@ -134,7 +136,8 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
                 IsManipulated: bagRisk > BagRiskManipulationThreshold,
                 ManipulationIntensity: bagRisk,
                 PriceDeviationPercent: deviationPercents[i],
-                Recommendation: recommendations[i]);
+                Recommendation: recommendations[i],
+                EvidenceLimited: evidenceLimited[i]);
         }
 
         return results;

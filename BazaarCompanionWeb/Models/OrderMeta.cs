@@ -1,4 +1,4 @@
-namespace BazaarCompanionWeb.Models;
+﻿namespace BazaarCompanionWeb.Models;
 
 public class OrderMeta
 {
@@ -10,6 +10,7 @@ public class OrderMeta
     public bool IsManipulated { get; set; }
     public double ManipulationIntensity { get; set; }
     public double PriceDeviationPercent { get; set; }
+    public bool EvidenceLimited { get; set; }
 
     // Trade recommendation fields
     public int? SuggestedBidVolume { get; set; }

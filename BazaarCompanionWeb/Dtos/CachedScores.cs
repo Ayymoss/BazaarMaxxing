@@ -1,4 +1,4 @@
-namespace BazaarCompanionWeb.Dtos;
+﻿namespace BazaarCompanionWeb.Dtos;
 
 /// <summary>
 /// Cached scores from the previous run for unchanged products.
@@ -8,4 +8,5 @@ public record CachedScores(
     bool IsManipulated,
     double ManipulationIntensity,
     double PriceDeviationPercent,
-    TradeRecommendation? Recommendation);
+    TradeRecommendation? Recommendation,
+    bool EvidenceLimited = false);

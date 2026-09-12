@@ -1,4 +1,4 @@
-using System.Text.Json;
+﻿using System.Text.Json;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 
@@ -31,6 +31,7 @@ public class ProductData
                 IsManipulated = OrderMeta.IsManipulated,
                 ManipulationIntensity = OrderMeta.ManipulationIntensity,
                 PriceDeviationPercent = OrderMeta.PriceDeviationPercent,
+                EvidenceLimited = OrderMeta.EvidenceLimited,
                 SuggestedBidVolume = OrderMeta.SuggestedBidVolume,
                 SuggestedBidPrice = OrderMeta.SuggestedBidPrice,
                 SuggestedAskPrice = OrderMeta.SuggestedAskPrice,
