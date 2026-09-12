@@ -65,8 +65,11 @@ public static class FlipQuoting
     // the wait entirely.
     private static int TopDepth(IReadOnlyList<OrderBook> book) => book.Count > 0 ? book[0].Amount : 0;
 
-    // How many units this budget can buy, bounded by what the market can absorb in the time the
-    // caller is willing to wait.
+    /// <summary>Units a minute an order at the top of this side fills at: the weekly flow, scaled by <see cref="QueueDrainFactor"/>.</summary>
+    private static double UnitsPerMinute(double weekVolume) => weekVolume / MinutesPerWeek * QueueDrainFactor;
+
+    // How many units this budget can buy, bounded by what BOTH sides of the market can absorb in the time
+    // the caller is willing to wait for each leg, after the queue already ahead at the top of each side.
     //
     // THE OLD BOUND MEASURED THE WRONG THING. It was a quarter of the depth at the single best ask
     // level, floored at one. Units queued at the best ask are OTHER SELLERS - competition, not
@@ -79,26 +82,35 @@ public static class FlipQuoting
     // slot and a cycle of repricing like any other. An account holding 35m had a fifth of it
     // deployed, because the suggestions it was given could not use the rest.
     //
-    // Throughput is the honest bound and the file already computes it for FillMinutes: units the ask
-    // side actually turns over per minute, times the minutes the caller said it would wait. Where
-    // there is no volume to reason from, the budget decides and the caller's own slot rules cap it.
-    private static int SuggestedUnits(double? budgetCoins, double bidPrice, double askWeekVolume, double waitMinutes)
+    // Then it was the ask side's throughput alone, and a product whose sellers turned over 100 a minute
+    // was sized at 2,250 units against buyers supplying ten: the buy leg alone would take 225 minutes
+    // of a 45-minute limit (audit 2026-09-12, finding 1). The weaker side sizes the trade. Where there
+    // is no volume to reason from, the budget decides and the caller's own slot rules cap it.
+    private static int SuggestedUnits(double? budgetCoins, double bidPrice, Side buy, Side sell, double waitMinutes)
     {
         if (budgetCoins is not { } coins || bidPrice <= 0) return 0;
 
         var affordable = (int)Math.Floor(coins / bidPrice);
-
-        var absorbable = askWeekVolume > 0
-            ? (int)Math.Floor(askWeekVolume / MinutesPerWeek * QueueDrainFactor * waitMinutes)
-            : affordable;
+        var absorbable = Math.Min(buy.Absorbs(waitMinutes) ?? affordable, sell.Absorbs(waitMinutes) ?? affordable);
 
         return Math.Clamp(Math.Min(affordable, absorbable), 0, HypixelMaxOrderUnits);
     }
 
-    private static double FillMinutes(int depth, double weekVolume) =>
-        weekVolume <= 0
-            ? Unknown
-            : Serialisable(depth / (weekVolume / MinutesPerWeek * QueueDrainFactor));
+    /// <summary>One side of the book as a queue: the units already ahead at the top, and how fast they go.</summary>
+    private readonly record struct Side(int QueueAhead, double WeekVolume)
+    {
+        public double? Rate => WeekVolume > 0 ? UnitsPerMinute(WeekVolume) : null;
+
+        /// <summary>Units this side could fill for us in the time, after the queue ahead; null when it has no flow to reason from.</summary>
+        public int? Absorbs(double minutes) => Rate is { } rate ? Math.Max(0, (int)Math.Floor(rate * minutes) - QueueAhead) : null;
+
+        /// <summary>
+        /// Minutes to fill <paramref name="units"/> of ours: the queue ahead drains first, then our own
+        /// order at the same rate. The old figure stopped at the queue ahead, so a 2,250-unit order was
+        /// quoted the 0.11 minutes it would take one unit to reach the front.
+        /// </summary>
+        public double Minutes(int units) => Rate is { } rate ? Serialisable((QueueAhead + units) / rate) : Unknown;
+    }
 
     /// <param name="observedUtc">When these numbers were observed; the row's own stamp when not given.</param>
     public static FlipOpportunity Quote(EFProduct p, double taxRate, double? budget, double? maxFillMinutes,
@@ -108,7 +120,12 @@ public static class FlipQuoting
         // leg and a round trip is two. Defaulted rather than required: the parameter is optional, and a
         // caller that does not care still wants a size it can sell.
         var sizingWaitMinutes = Math.Max(1, (maxFillMinutes ?? 30) / 2.0);
-        var units = SuggestedUnits(budget, p.Bid.UnitPrice, p.Ask.OrderVolumeWeek, sizingWaitMinutes);
+
+        // Our BUY is a bid, filled by instant sells - the bid side's flow, behind the bids already at the
+        // top; our SELL is an ask, filled by instant buys, behind the asks at the top.
+        var buy = new Side(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek);
+        var sell = new Side(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek);
+        var units = SuggestedUnits(budget, p.Bid.UnitPrice, buy, sell, sizingWaitMinutes);
         var profitPerUnit = (p.Ask.UnitPrice * (1 - taxRate)) - p.Bid.UnitPrice;
 
         return new FlipOpportunity(
@@ -131,10 +148,9 @@ public static class FlipQuoting
             EstimatedProfitPerUnit: Serialisable(profitPerUnit),
             TopBidDepth: TopDepth(p.Bid.Books),
             TopAskDepth: TopDepth(p.Ask.Books),
-            EstimatedBuyFillMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek),
-            EstimatedSellFillMinutes: FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
-            EstimatedRoundTripMinutes: FillMinutes(TopDepth(p.Bid.Books), p.Bid.OrderVolumeWeek)
-                                       + FillMinutes(TopDepth(p.Ask.Books), p.Ask.OrderVolumeWeek),
+            EstimatedBuyFillMinutes: buy.Minutes(units),
+            EstimatedSellFillMinutes: sell.Minutes(units),
+            EstimatedRoundTripMinutes: Serialisable(buy.Minutes(units) + sell.Minutes(units)),
             SuggestedQuantity: units,
             SuggestedCost: units * p.Bid.UnitPrice,
             SuggestedProfit: units * profitPerUnit,

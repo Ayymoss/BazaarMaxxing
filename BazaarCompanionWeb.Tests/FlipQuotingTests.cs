@@ -78,6 +78,39 @@ public class FlipQuotingTests
         quote.DataAgeSeconds.Should().BeApproximately(90, 2);
     }
 
+    /// <summary>
+    /// The audit's own arithmetic (2026-09-12, finding 1): buyers supply ten a minute, sellers take a
+    /// hundred, one unit ahead on each side, plenty of budget, 45 minutes. Sized on the ask side alone the
+    /// quote was 2,250 units and a 0.11-minute round trip; filling 2,250 at those rates takes 225 + 22.5
+    /// minutes. The weaker side sizes the trade, and the fill times are for the quantity proposed.
+    /// </summary>
+    [Fact]
+    public void The_weaker_side_sizes_the_trade_and_the_fill_time_is_for_that_size()
+    {
+        // 10/min and 100/min after the drain factor: week = rate / 0.2 x 10,080.
+        var product = Product(bid: 1_000, ask: 1_200, bidWeek: 504_000, askWeek: 5_040_000, topBidDepth: 1, topAskDepth: 1);
+
+        var quote = FlipQuoting.Quote(product, 0.05, budget: 100_000_000, maxFillMinutes: 45);
+
+        quote.SuggestedQuantity.Should().Be(224, "10/min for 22.5 minutes, less the one unit ahead");
+        quote.EstimatedBuyFillMinutes.Should().BeApproximately(22.5, 0.01);
+        quote.EstimatedSellFillMinutes.Should().BeApproximately(2.25, 0.01);
+        quote.EstimatedRoundTripMinutes.Should().BeApproximately(24.75, 0.01);
+    }
+
+    [Fact]
+    public void A_larger_budget_buys_a_larger_order_and_a_longer_fill()
+    {
+        var product = Product(bid: 1_000, ask: 1_200, bidWeek: 504_000, askWeek: 5_040_000, topBidDepth: 1, topAskDepth: 1);
+
+        var small = FlipQuoting.Quote(product, 0.05, budget: 50_000, maxFillMinutes: 45);
+        var large = FlipQuoting.Quote(product, 0.05, budget: 100_000, maxFillMinutes: 45);
+
+        large.SuggestedQuantity.Should().Be(2 * small.SuggestedQuantity);
+        large.EstimatedRoundTripMinutes.Should().BeGreaterThan(small.EstimatedRoundTripMinutes,
+            "a bigger order is a longer queue, not the same 0.11 minutes");
+    }
+
     [Fact]
     public void Without_a_stated_tax_the_perkless_rate_is_assumed()
     {
