@@ -76,6 +76,7 @@ public static class ApiEndpoints
             double? maxFillMinutes,
             string? sort,
             double? budget,
+            double? taxRate,
             IDbContextFactory<DataContext> contextFactory,
             CancellationToken ct) =>
         {
@@ -120,7 +121,7 @@ public static class ApiEndpoints
                 .Take(candidatePool)
                 .ToListAsync(ct);
 
-            var result = products.Select(p => FlipQuoting.Quote(p, FlipQuoting.BazaarTaxRate, budget, maxFillMinutes)).ToList();
+            var result = products.Select(p => FlipQuoting.Quote(p, FlipQuoting.TaxRateFor(taxRate), budget, maxFillMinutes)).ToList();
 
             // Fill time is a filter and a sort, not just a readout: a bot asking for flips wants the ones it
             // can actually complete. Ordering by score alone puts a 677%-spread product that trades twice a
@@ -334,7 +335,7 @@ public static class ApiEndpoints
             };
 
             var result = new BotMarketHealth(
-                BazaarTaxRate: FlipQuoting.BazaarTaxRate,
+                BazaarTaxRate: FlipQuoting.PerklessTaxRate,
                 DataAgeSeconds: dataAgeSeconds,
                 HealthScore: metrics.MarketHealthScore,
                 AverageSpread: metrics.AverageSpread,

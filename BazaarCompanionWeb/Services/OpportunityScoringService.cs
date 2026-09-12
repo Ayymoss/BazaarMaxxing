@@ -1,4 +1,4 @@
-using BazaarCompanionWeb.Dtos;
+﻿using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Interfaces;
 
 namespace BazaarCompanionWeb.Services;
@@ -8,7 +8,7 @@ public sealed partial class OpportunityScoringService(ILogger<OpportunityScoring
     private const int MinCandlesForAnalysis = 6;
 
     // Hypixel Specific Constants
-    private const double BazaarTaxRate = 0.01125; // 1.125% (Standard for God Potion/Cookie users)
+    private const double BazaarTaxRate = FlipQuoting.PerklessTaxRate;
 
     // Hard rejection thresholds
     private const double MinNetProfitAfterTax = 100.0; // Spread must yield at least 100 coins after tax

@@ -7,7 +7,16 @@ namespace BazaarCompanionWeb.Services;
 /// <summary>What the bot is told about one flip: prices, sizing and the fill-time estimates behind them.</summary>
 public static class FlipQuoting
 {
-    public const double BazaarTaxRate = 0.01125;
+    /// <summary>
+    /// The Bazaar's cut for an account with no perks - the rate assumed when the caller does not say. It was
+    /// 1.125%, the rate with the Bazaar Flipper perk maxed, and a fresh account pays 5%; the account's own
+    /// rate comes in on the request, because only the account knows it.
+    /// </summary>
+    public const double PerklessTaxRate = 0.05;
+
+    /// <summary>The caller's rate when it is one an account could pay, else the perkless one.</summary>
+    public static double TaxRateFor(double? requested) =>
+        requested is >= 0 and <= 0.25 ? requested.Value : PerklessTaxRate;
     private const double MinutesPerWeek = 7 * 24 * 60;
 
     /// <summary>
