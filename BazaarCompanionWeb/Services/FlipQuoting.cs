@@ -1,4 +1,5 @@
-﻿using BazaarCompanionWeb.Dtos.Bot;
+﻿using System.Linq.Expressions;
+using BazaarCompanionWeb.Dtos.Bot;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Models;
 
@@ -44,6 +45,20 @@ public static class FlipQuoting
 
     private const int HypixelMaxOrderUnits = 71_680;
 
+    /// <summary>
+    /// What a product must be before it is a flip at all, whatever it scores: priced on both sides, at least
+    /// 100 coins a unit and 100 coins of spread, enough weekly demand on the ask side and at least 30% of
+    /// its volume there, and - unless the caller says otherwise - not manipulated. One expression, so the
+    /// database query and the in-memory check on an included product cannot disagree.
+    /// </summary>
+    public static Expression<Func<EFProduct, bool>> Tradable(double askVolumeFloor, bool excludeManipulated) =>
+        p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0
+             && p.Ask.OrderVolumeWeek >= askVolumeFloor
+             && p.Bid.UnitPrice >= 100
+             && (p.Ask.UnitPrice - p.Bid.UnitPrice) >= 100
+             && p.Ask.OrderVolumeWeek >= 0.30 * (p.Ask.OrderVolumeWeek + p.Bid.OrderVolumeWeek)
+             && (!excludeManipulated || !p.Meta.IsManipulated);
+
     // Depth at the best price on each side, read from the stored book. This is the queue a bot joins
     // when it posts at the top — and the reason a fat spread can still be untradable: 11,000 units
     // parked at the best bid is an hour of waiting, during which anyone can undercut by 0.1 and reset
@@ -85,7 +100,9 @@ public static class FlipQuoting
             ? Unknown
             : Serialisable(depth / (weekVolume / MinutesPerWeek * QueueDrainFactor));
 
-    public static FlipOpportunity Quote(EFProduct p, double taxRate, double? budget, double? maxFillMinutes)
+    /// <param name="observedUtc">When these numbers were observed; the row's own stamp when not given.</param>
+    public static FlipOpportunity Quote(EFProduct p, double taxRate, double? budget, double? maxFillMinutes,
+        DateTime? observedUtc = null)
     {
         // What the caller said it would wait for a round trip, halved because the suggestion sizes ONE
         // leg and a round trip is two. Defaulted rather than required: the parameter is optional, and a
@@ -123,7 +140,7 @@ public static class FlipQuoting
             SuggestedProfit: units * profitPerUnit,
             // Honest about what it is: these rows come from the database, which lags the live snapshot by
             // the flush interval. Screening on them is fine; pricing an order is not.
-            DataAgeSeconds: Serialisable(Math.Max(0, (DateTime.UtcNow - p.LastSeenAt).TotalSeconds)),
+            DataAgeSeconds: Serialisable(Math.Max(0, (DateTime.UtcNow - (observedUtc ?? p.LastSeenAt)).TotalSeconds)),
             IsManipulated: p.Meta.IsManipulated,
             ManipulationIntensity: p.Meta.ManipulationIntensity,
             PriceDeviationPercent: p.Meta.PriceDeviationPercent);

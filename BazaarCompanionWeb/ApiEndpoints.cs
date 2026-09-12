@@ -77,7 +77,9 @@ public static class ApiEndpoints
             string? sort,
             double? budget,
             double? taxRate,
+            string? include,
             IDbContextFactory<DataContext> contextFactory,
+            BazaarSnapshotStore snapshotStore,
             CancellationToken ct) =>
         {
             var filterManipulated = excludeManipulated ?? true;
@@ -92,16 +94,8 @@ public static class ApiEndpoints
                 .Include(p => p.Ask)
                 .Include(p => p.Meta)
                 .AsNoTracking()
-                // Hard safety filters
-                .Where(p => p.Bid.UnitPrice > 0 && p.Ask.UnitPrice > 0)
-                .Where(p => p.Ask.OrderVolumeWeek >= askVolumeFloor)
-                .Where(p => p.Bid.UnitPrice >= 100) // Min bid price for practical flipping
-                .Where(p => (p.Ask.UnitPrice - p.Bid.UnitPrice) >= 100) // Min 100 coin spread
-                .Where(p => p.Ask.OrderVolumeWeek >= 0.30 * (p.Ask.OrderVolumeWeek + p.Bid.OrderVolumeWeek)) // Min 30% ask ratio
+                .Where(FlipQuoting.Tradable(askVolumeFloor, filterManipulated))
                 .Where(p => p.Meta.FlipOpportunityScore >= scoreThreshold);
-
-            if (filterManipulated)
-                query = query.Where(p => !p.Meta.IsManipulated);
 
             if (minPrice.HasValue)
                 query = query.Where(p => p.Bid.UnitPrice >= minPrice.Value);
@@ -121,7 +115,27 @@ public static class ApiEndpoints
                 .Take(candidatePool)
                 .ToListAsync(ct);
 
-            var result = products.Select(p => FlipQuoting.Quote(p, FlipQuoting.TaxRateFor(taxRate), budget, maxFillMinutes)).ToList();
+            // Products the caller wants quoted whatever they score - its own proven ones - through the same
+            // gate and the same quote as the rest, so a record is a reason to look and never a way past the
+            // checks (audit 2026-09-12, finding 4).
+            var tradable = FlipQuoting.Tradable(askVolumeFloor, filterManipulated).Compile();
+            foreach (var key in (include ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                if (products.Any(p => p.ProductKey == key)) continue;
+                var live = snapshotStore.GetLatestProduct(key)
+                           ?? await context.Products.Include(p => p.Bid).Include(p => p.Ask).Include(p => p.Meta)
+                               .AsNoTracking().FirstOrDefaultAsync(p => p.ProductKey == key, ct);
+                if (live is not null && tradable(live)) products.Add(live);
+            }
+
+            // Quoted off the LIVE snapshot where there is one: the rows above were selected on the database,
+            // which lags the last poll by up to a flush, and a price the bot will act on deserves the poll.
+            var rate = FlipQuoting.TaxRateFor(taxRate);
+            var result = products
+                .Select(p => snapshotStore.GetLatestProduct(p.ProductKey) is { } live
+                    ? FlipQuoting.Quote(live, rate, budget, maxFillMinutes, snapshotStore.ObservationOf(p.ProductKey)?.UpstreamUtc)
+                    : FlipQuoting.Quote(p, rate, budget, maxFillMinutes))
+                .ToList();
 
             // Fill time is a filter and a sort, not just a readout: a bot asking for flips wants the ones it
             // can actually complete. Ordering by score alone puts a 677%-spread product that trades twice a

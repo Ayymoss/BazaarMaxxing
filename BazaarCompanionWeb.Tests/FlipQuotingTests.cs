@@ -48,6 +48,36 @@ public class FlipQuotingTests
         quote.SuggestedProfit.Should().BeApproximately(quote.SuggestedQuantity * (20_000 * 0.95 - 18_000), 0.01);
     }
 
+    /// <summary>
+    /// The gate every flip passes, and the one an included product passes too. Audit 2026-09-12, finding 4:
+    /// a product pulled in on its record must never bypass the checks the rest are held to.
+    /// </summary>
+    [Fact]
+    public void A_product_is_tradable_on_price_spread_and_ask_side_demand()
+    {
+        var tradable = FlipQuoting.Tradable(askVolumeFloor: 25_000, excludeManipulated: true).Compile();
+
+        tradable(Product(bid: 18_000, ask: 20_000)).Should().BeTrue();
+        tradable(Product(bid: 18_000, ask: 18_050)).Should().BeFalse("under 100 coins of spread");
+        tradable(Product(bid: 50, ask: 400)).Should().BeFalse("under 100 coins a unit");
+        tradable(Product(bid: 18_000, ask: 20_000, askWeek: 10_000)).Should().BeFalse("too little demand on the ask side");
+        tradable(Product(bid: 18_000, ask: 20_000, bidWeek: 900_000, askWeek: 100_000)).Should().BeFalse("under 30% of the volume on the ask side");
+
+        var rigged = Product(bid: 18_000, ask: 20_000);
+        rigged.Meta.IsManipulated = true;
+        tradable(rigged).Should().BeFalse();
+        FlipQuoting.Tradable(25_000, excludeManipulated: false).Compile()(rigged).Should().BeTrue();
+    }
+
+    [Fact]
+    public void A_quote_is_as_old_as_the_observation_it_was_given()
+    {
+        var quote = FlipQuoting.Quote(Product(bid: 18_000, ask: 20_000), 0.05, null, null,
+            observedUtc: DateTime.UtcNow.AddSeconds(-90));
+
+        quote.DataAgeSeconds.Should().BeApproximately(90, 2);
+    }
+
     [Fact]
     public void Without_a_stated_tax_the_perkless_rate_is_assumed()
     {
