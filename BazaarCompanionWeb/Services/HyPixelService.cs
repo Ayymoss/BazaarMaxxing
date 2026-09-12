@@ -1,4 +1,4 @@
-using BazaarCompanionWeb.Dtos;
+﻿using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Interfaces;
 using BazaarCompanionWeb.Interfaces.Api;
@@ -177,18 +177,9 @@ public class HyPixelService(
             var candlesByProduct =
                 await ohlcRepository.GetCandlesBulkAsync(changedKeys, CandleInterval.OneHour, lookbackHours, cancellationToken);
 
-            var changedInputs = changedKeys.Select(key =>
-            {
-                var b = bazaarList.First(x => x.ProductId == key);
-                var ask = b.Asks.FirstOrDefault();
-                var bid = b.Bids.FirstOrDefault();
-                var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
-                var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
-                return new ScoringProductInput(key, bidOrderPrice, askOrderPrice,
-                    b.Ticker.MovingWeekBuys, b.Ticker.MovingWeekSells,
-                    b.Ticker.ActiveBidOrders, b.Ticker.ActiveAskOrders,
-                    b.Ticker.TotalBidVolume, b.Ticker.TotalAskVolume);
-            }).ToList();
+            var changedInputs = changedKeys
+                .Select(key => ScoringProductInput.From(bazaarList.First(x => x.ProductId == key)))
+                .ToList();
 
             scoringResults = opportunityScoringService.CalculateScoresBatch(changedInputs, candlesByProduct);
         }

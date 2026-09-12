@@ -1,3 +1,5 @@
+﻿using BazaarCompanionWeb.Models.Api.Bazaar;
+
 namespace BazaarCompanionWeb.Dtos;
 
 /// <summary>
@@ -12,4 +14,18 @@ public record ScoringProductInput(
     int BidOrders,
     int AskOrders,
     int BidVolume,
-    int AskVolume);
+    int AskVolume)
+{
+    /// <summary>The scorer's view of one product as the Hypixel feed describes it.</summary>
+    public static ScoringProductInput From(Product product)
+    {
+        var ask = product.Asks.FirstOrDefault();
+        var bid = product.Bids.FirstOrDefault();
+        var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
+        var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
+        return new ScoringProductInput(product.ProductId, bidOrderPrice, askOrderPrice,
+            product.Ticker.MovingWeekBuys, product.Ticker.MovingWeekSells,
+            product.Ticker.ActiveBidOrders, product.Ticker.ActiveAskOrders,
+            product.Ticker.TotalBidVolume, product.Ticker.TotalAskVolume);
+    }
+}
