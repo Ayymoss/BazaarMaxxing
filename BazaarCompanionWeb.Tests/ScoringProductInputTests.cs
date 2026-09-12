@@ -24,6 +24,25 @@ public class ScoringProductInputTests
         input.BidPrice.Should().Be(1_300);
     }
 
+    /// <summary>
+    /// Instant selling fills our BUY orders and moves sellMovingWeek; instant buying fills our SELL offers and
+    /// moves buyMovingWeek. The scorer was handed them the other way round, so a product with 100,000 of
+    /// exit-side demand and 20,000 of entry-side supply was gated as if it had 20,000 of demand - and
+    /// rejected for the very strength that made it worth flipping. Audit 2026-09-12, finding 2.
+    /// </summary>
+    [Fact]
+    public void The_volume_sides_follow_what_fills_our_orders()
+    {
+        var product = Feed(bestAsk: 1_500, bestBid: 1_300);
+        product.Ticker.MovingWeekBuys = 100_000;
+        product.Ticker.MovingWeekSells = 20_000;
+
+        var input = ScoringProductInput.From(product);
+
+        input.AskMovingWeek.Should().Be(100_000, "instant buys consume asks: that is the volume our sell offers see");
+        input.BidMovingWeek.Should().Be(20_000, "instant sells consume bids: that is the volume our buy orders see");
+    }
+
     [Fact]
     public void An_empty_side_is_priced_a_tick_off_the_other()
     {

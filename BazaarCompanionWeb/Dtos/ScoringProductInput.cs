@@ -23,9 +23,15 @@ public record ScoringProductInput(
         var bid = product.Bids.FirstOrDefault();
         var askOrderPrice = ask?.PricePerUnit ?? bid?.PricePerUnit + 0.1 ?? 0.1f;
         var bidOrderPrice = bid?.PricePerUnit ?? ask?.PricePerUnit - 0.1 ?? 0.1f;
+        // Hypixel names the counters by what the TAKER did: buyMovingWeek is instant buys, which consume
+        // asks, so it is the ASK side's volume - the units our sell offers compete to supply. Passed the other
+        // way round, the scorer's ask-volume gate rejected products with strong exit-side demand.
         return new ScoringProductInput(product.ProductId, bidOrderPrice, askOrderPrice,
-            product.Ticker.MovingWeekBuys, product.Ticker.MovingWeekSells,
-            product.Ticker.ActiveBidOrders, product.Ticker.ActiveAskOrders,
-            product.Ticker.TotalBidVolume, product.Ticker.TotalAskVolume);
+            BidMovingWeek: product.Ticker.MovingWeekSells,
+            AskMovingWeek: product.Ticker.MovingWeekBuys,
+            BidOrders: product.Ticker.ActiveBidOrders,
+            AskOrders: product.Ticker.ActiveAskOrders,
+            BidVolume: product.Ticker.TotalBidVolume,
+            AskVolume: product.Ticker.TotalAskVolume);
     }
 }
