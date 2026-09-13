@@ -45,6 +45,7 @@ public class ProductRepository(
                     TotalWeekVolume = x.Meta.TotalWeekVolume,
                     FlipOpportunityScore = x.Meta.FlipOpportunityScore,
                     IsManipulated = x.Meta.IsManipulated,
+                EvidenceLimited = x.Meta.EvidenceLimited,
                     ManipulationIntensity = x.Meta.ManipulationIntensity,
                     PriceDeviationPercent = x.Meta.PriceDeviationPercent,
                     SuggestedBidVolume = x.Meta.SuggestedBidVolume,
@@ -131,6 +132,7 @@ public class ProductRepository(
                 product.Meta.TotalWeekVolume = incomingProduct.Meta.TotalWeekVolume;
                 product.Meta.FlipOpportunityScore = incomingProduct.Meta.FlipOpportunityScore;
                 product.Meta.IsManipulated = incomingProduct.Meta.IsManipulated;
+                product.Meta.EvidenceLimited = incomingProduct.Meta.EvidenceLimited;
                 product.Meta.ManipulationIntensity = incomingProduct.Meta.ManipulationIntensity;
                 product.Meta.PriceDeviationPercent = incomingProduct.Meta.PriceDeviationPercent;
                 product.Meta.SuggestedBidVolume = incomingProduct.Meta.SuggestedBidVolume;
@@ -278,6 +280,7 @@ public class ProductRepository(
                 OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
                 OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
                 IsManipulated = x.Meta.IsManipulated,
+                EvidenceLimited = x.Meta.EvidenceLimited,
                 ManipulationIntensity = x.Meta.ManipulationIntensity,
                 PriceDeviationPercent = x.Meta.PriceDeviationPercent,
                 SuggestedBidVolume = x.Meta.SuggestedBidVolume,
@@ -497,6 +500,7 @@ public class ProductRepository(
                     OrderMetaTotalWeekVolume = x.Meta.TotalWeekVolume,
                     OrderMetaFlipOpportunityScore = x.Meta.FlipOpportunityScore,
                     IsManipulated = x.Meta.IsManipulated,
+                EvidenceLimited = x.Meta.EvidenceLimited,
                     ManipulationIntensity = x.Meta.ManipulationIntensity,
                     PriceDeviationPercent = x.Meta.PriceDeviationPercent,
                     SuggestedBidVolume = x.Meta.SuggestedBidVolume,

@@ -1,4 +1,4 @@
-﻿using BazaarCompanionWeb.Models.Api.Items;
+using BazaarCompanionWeb.Models.Api.Items;
 
 namespace BazaarCompanionWeb.Dtos.Bot;
 
@@ -51,7 +51,10 @@ public sealed record FlipOpportunity(
     /// True when the product had too little history for the full score: the manipulation flag above is a
     /// default rather than a finding, and the score a simplified one. A bet on it is a bet on thin evidence.
     /// </summary>
-    bool EvidenceLimited = false
+    bool EvidenceLimited = false,
+    double BuyUnitsPerMinute = 0,
+    double SellUnitsPerMinute = 0,
+    int QuoteVersion = 2
 );
 
 public sealed record BotProductDetail(

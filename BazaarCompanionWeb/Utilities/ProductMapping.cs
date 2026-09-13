@@ -28,6 +28,7 @@ public static class ProductMapping
         OrderMetaTotalWeekVolume = product.Meta.TotalWeekVolume,
         OrderMetaFlipOpportunityScore = product.Meta.FlipOpportunityScore,
         IsManipulated = product.Meta.IsManipulated,
+        EvidenceLimited = product.Meta.EvidenceLimited,
         ManipulationIntensity = product.Meta.ManipulationIntensity,
         PriceDeviationPercent = product.Meta.PriceDeviationPercent,
         SuggestedBidVolume = product.Meta.SuggestedBidVolume,

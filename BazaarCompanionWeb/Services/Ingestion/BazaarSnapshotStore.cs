@@ -1,4 +1,4 @@
-﻿using System.Collections.Concurrent;
+using System.Collections.Concurrent;
 using BazaarCompanionWeb.Dtos;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Models;
@@ -74,6 +74,13 @@ public sealed class BazaarSnapshotStore
     /// former.
     /// </summary>
     public IReadOnlyCollection<string> KnownProductKeys => _latestState.Keys.ToList();
+
+    public IReadOnlyList<ProductObservation> CaptureProducts()
+    {
+        lock (_diffLock)
+            return _latestProducts.Select(kv => new ProductObservation(kv.Value,
+                _observed.GetValueOrDefault(kv.Key)?.UpstreamUtc)).ToList();
+    }
 
     /// <summary>
     /// Splat one poll's worth of data into the store. Computes change-detection internally
@@ -362,6 +369,7 @@ public sealed class BazaarSnapshotStore
             TradedBuy = _tradedBuy,
             TradedSell = _tradedSell,
             TradedEstimated = _tradedEstimated,
+            FlowEvidenceKnown = true,
         };
     }
 }

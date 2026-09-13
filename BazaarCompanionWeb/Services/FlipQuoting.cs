@@ -1,4 +1,4 @@
-﻿using System.Linq.Expressions;
+using System.Linq.Expressions;
 using BazaarCompanionWeb.Dtos.Bot;
 using BazaarCompanionWeb.Entities;
 using BazaarCompanionWeb.Models;
@@ -171,6 +171,8 @@ public static class FlipQuoting
             IsManipulated: p.Meta.IsManipulated,
             ManipulationIntensity: p.Meta.ManipulationIntensity,
             PriceDeviationPercent: p.Meta.PriceDeviationPercent,
-            EvidenceLimited: p.Meta.EvidenceLimited);
+            EvidenceLimited: p.Meta.EvidenceLimited,
+            BuyUnitsPerMinute: buy.Rate ?? 0,
+            SellUnitsPerMinute: sell.Rate ?? 0);
     }
 }

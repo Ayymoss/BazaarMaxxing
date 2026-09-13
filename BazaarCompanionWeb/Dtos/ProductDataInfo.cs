@@ -27,6 +27,7 @@ public class ProductDataInfo
     public double OrderMetaTotalWeekVolume { get; set; }
     public double OrderMetaFlipOpportunityScore { get; set; }
     public bool IsManipulated { get; set; }
+    public bool EvidenceLimited { get; set; }
     public double ManipulationIntensity { get; set; }
     public double PriceDeviationPercent { get; set; }
 

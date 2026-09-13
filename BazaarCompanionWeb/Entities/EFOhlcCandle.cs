@@ -30,6 +30,9 @@ public sealed record EFOhlcCandle
     /// <summary>Units instantly sold (bids consumed) during the period.</summary>
     public double SellVolume { get; set; }
 
+    /// <summary>Estimated part of volume; null if any constituent has unknown provenance.</summary>
+    public double? EstimatedVolume { get; set; }
+
     /// <summary>
     /// Average bid-ask spread during this candle period (Bid - Ask price).
     /// </summary>

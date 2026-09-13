@@ -227,7 +227,7 @@ public class OhlcAggregationService(
             .AsNoTracking()
             .Where(c => c.Interval == CandleInterval.OneHour && c.PeriodStart >= daySince)
             .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
-                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow })
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow, c.EstimatedVolume })
             .ToListAsync(ct);
 
         var dayCandles = hourly
@@ -252,6 +252,7 @@ public class OhlcAggregationService(
                     Volume = ordered.Sum(h => h.Volume),
                     BuyVolume = ordered.Sum(h => h.BuyVolume),
                     SellVolume = ordered.Sum(h => h.SellVolume),
+                    EstimatedVolume = ordered.All(h => h.EstimatedVolume.HasValue) ? ordered.Sum(h => h.EstimatedVolume) : null,
                     Spread = spreads.Count > 0 ? spreads.Average() : 0,
                 };
             })
@@ -262,7 +263,7 @@ public class OhlcAggregationService(
             .AsNoTracking()
             .Where(c => c.Interval == CandleInterval.OneDay && c.PeriodStart >= weekSince)
             .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
-                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow })
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow, c.EstimatedVolume })
             .ToListAsync(ct);
 
         var weekCandles = daily
@@ -287,6 +288,7 @@ public class OhlcAggregationService(
                     Volume = ordered.Sum(d => d.Volume),
                     BuyVolume = ordered.Sum(d => d.BuyVolume),
                     SellVolume = ordered.Sum(d => d.SellVolume),
+                    EstimatedVolume = ordered.All(d => d.EstimatedVolume.HasValue) ? ordered.Sum(d => d.EstimatedVolume) : null,
                     Spread = spreads.Count > 0 ? spreads.Average() : 0,
                 };
             })
@@ -379,6 +381,7 @@ public class OhlcAggregationService(
                         Volume = buyVolume + sellVolume,
                         BuyVolume = buyVolume,
                         SellVolume = sellVolume,
+                        EstimatedVolume = bars.All(t => t.FlowEvidenceKnown) ? bars.Sum(t => (double)t.TradedEstimated) : null,
                         Spread = avgSpread,
                     };
                 }).ToList();
@@ -475,6 +478,7 @@ public class OhlcAggregationService(
                 flatCandle.Volume = dayHourly.Sum(h => h.Volume);
                 flatCandle.BuyVolume = dayHourly.Sum(h => h.BuyVolume);
                 flatCandle.SellVolume = dayHourly.Sum(h => h.SellVolume);
+                flatCandle.EstimatedVolume = dayHourly.All(h => h.EstimatedVolume.HasValue) ? dayHourly.Sum(h => h.EstimatedVolume) : null;
                 flatCandle.AskOpen = dayHourly.First().AskOpen;
                 flatCandle.AskHigh = dayHourly.Max(h => h.AskHigh);
                 flatCandle.AskLow = AskLowOf(dayHourly.Select(h => h.AskLow));

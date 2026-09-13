@@ -1,4 +1,4 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
@@ -45,6 +45,9 @@ public sealed record EFPriceTick
 
     /// <summary>Units of TradedBuy + TradedSell that were estimated during an expiry burst rather than read off the counters.</summary>
     public long TradedEstimated { get; set; }
+
+    /// <summary>False for legacy bars whose estimation provenance was not persisted.</summary>
+    public bool FlowEvidenceKnown { get; set; }
 
     [ForeignKey(nameof(ProductKey))] public EFProduct Product { get; set; } = null!;
 }

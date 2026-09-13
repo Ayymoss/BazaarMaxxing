@@ -1,4 +1,4 @@
-﻿using BazaarCompanionWeb.Charting;
+using BazaarCompanionWeb.Charting;
 using BazaarCompanionWeb.Configurations;
 using BazaarCompanionWeb.Context;
 using BazaarCompanionWeb.Dtos;
@@ -87,74 +87,18 @@ public static class ApiEndpoints
             var resultLimit = Math.Clamp(maxResults ?? 20, 1, 100);
             var askVolumeFloor = minAskVolume ?? 25_000;
 
-            await using var context = await contextFactory.CreateDbContextAsync(ct);
-
-            var query = context.Products
-                .Include(p => p.Bid)
-                .Include(p => p.Ask)
-                .Include(p => p.Meta)
-                .AsNoTracking()
-                .Where(FlipQuoting.Tradable(askVolumeFloor, filterManipulated))
-                .Where(p => p.Meta.FlipOpportunityScore >= scoreThreshold);
-
-            if (minPrice.HasValue)
-                query = query.Where(p => p.Bid.UnitPrice >= minPrice.Value);
-
-            if (maxPrice.HasValue)
-                query = query.Where(p => p.Bid.UnitPrice <= maxPrice.Value);
-
-            if (minVolume.HasValue)
-                query = query.Where(p => p.Meta.TotalWeekVolume >= minVolume.Value);
-
-            // Pull a wider candidate pool than the caller asked for: the fill-time filter and the fill/
-            // throughput sorts operate on data that only exists after the order books are deserialized, so
-            // trimming to resultLimit by score first would hide exactly the tradable flips they select for.
-            var candidatePool = Math.Min(Math.Max(resultLimit * 5, resultLimit), 250);
-            var products = await query
-                .OrderByDescending(p => p.Meta.FlipOpportunityScore)
-                .Take(candidatePool)
-                .ToListAsync(ct);
-
-            // Products the caller wants quoted whatever they score - its own proven ones - through the same
-            // gate and the same quote as the rest, so a record is a reason to look and never a way past the
-            // checks (audit 2026-09-12, finding 4).
-            var tradable = FlipQuoting.Tradable(askVolumeFloor, filterManipulated).Compile();
-            foreach (var key in (include ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            var snapshot = snapshotStore.CaptureProducts();
+            if (snapshot.Count == 0)
             {
-                if (products.Any(p => p.ProductKey == key)) continue;
-                var live = snapshotStore.GetLatestProduct(key)
-                           ?? await context.Products.Include(p => p.Bid).Include(p => p.Ask).Include(p => p.Meta)
-                               .AsNoTracking().FirstOrDefaultAsync(p => p.ProductKey == key, ct);
-                if (live is not null && tradable(live)) products.Add(live);
+                await using var context = await contextFactory.CreateDbContextAsync(ct);
+                var stored = await context.Products.Include(p => p.Bid).Include(p => p.Ask).Include(p => p.Meta)
+                    .AsNoTracking().ToListAsync(ct);
+                snapshot = stored.Select(p => new ProductObservation(p, p.LastSeenAt)).ToList();
             }
-
-            // Quoted off the LIVE snapshot where there is one: the rows above were selected on the database,
-            // which lags the last poll by up to a flush, and a price the bot will act on deserves the poll.
-            var rate = FlipQuoting.TaxRateFor(taxRate);
-            var result = products
-                .Select(p => snapshotStore.GetLatestProduct(p.ProductKey) is { } live
-                    ? FlipQuoting.Quote(live, rate, budget, maxFillMinutes, snapshotStore.ObservationOf(p.ProductKey)?.UpstreamUtc)
-                    : FlipQuoting.Quote(p, rate, budget, maxFillMinutes))
-                .ToList();
-
-            // Fill time is a filter and a sort, not just a readout: a bot asking for flips wants the ones it
-            // can actually complete. Ordering by score alone puts a 677%-spread product that trades twice a
-            // day above a 26% one that turns over millions a week, which is backwards for anything that has
-            // to hold inventory while it waits.
-            if (maxFillMinutes is { } fillCeiling)
-                result = result.Where(f => f.EstimatedRoundTripMinutes <= fillCeiling).ToList();
-
-            // A flip the caller cannot afford a single unit of is not an opportunity for them.
-            if (budget is not null)
-                result = result.Where(f => f.SuggestedQuantity > 0).ToList();
-
-            result = (sort?.ToLowerInvariant() switch
-            {
-                "fill" => result.OrderBy(f => f.EstimatedRoundTripMinutes),
-                "profit" => result.OrderByDescending(f => f.EstimatedProfitPerUnit),
-                "throughput" => result.OrderByDescending(FlipQuoting.Throughput),
-                _ => result.OrderByDescending(f => f.OpportunityScore)
-            }).Take(resultLimit).ToList();
+            var result = FlipSelection.Select(snapshot, minPrice, maxPrice, minVolume, askVolumeFloor,
+                filterManipulated, scoreThreshold,
+                (include ?? "").Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries),
+                FlipQuoting.TaxRateFor(taxRate), budget, maxFillMinutes, sort, resultLimit);
 
             return Results.Ok(result);
         });

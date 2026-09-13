@@ -12,7 +12,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
 {
     private const string TickColumns =
         "\"ProductKey\", \"Timestamp\", \"BidOpen\", \"BidHigh\", \"BidLow\", \"BidPrice\", " +
-        "\"AskOpen\", \"AskHigh\", \"AskLow\", \"AskPrice\", \"BidVolume\", \"AskVolume\", \"TradedBuy\", \"TradedSell\"";
+        "\"AskOpen\", \"AskHigh\", \"AskLow\", \"AskPrice\", \"BidVolume\", \"AskVolume\", \"TradedBuy\", \"TradedSell\", \"TradedEstimated\", \"FlowEvidenceKnown\"";
 
     /// <summary>
     /// Upserts five-minute bars by (product, bucket). A forming bar is flushed every cycle it changes, so the
@@ -57,6 +57,8 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
                 await importer.WriteAsync(t.AskVolume, NpgsqlDbType.Bigint, ct);
                 await importer.WriteAsync(t.TradedBuy, NpgsqlDbType.Bigint, ct);
                 await importer.WriteAsync(t.TradedSell, NpgsqlDbType.Bigint, ct);
+                await importer.WriteAsync(t.TradedEstimated, NpgsqlDbType.Bigint, ct);
+                await importer.WriteAsync(t.FlowEvidenceKnown, NpgsqlDbType.Boolean, ct);
             }
 
             await importer.CompleteAsync(ct);
@@ -68,7 +70,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
                          "\"BidOpen\" = EXCLUDED.\"BidOpen\", \"BidHigh\" = EXCLUDED.\"BidHigh\", \"BidLow\" = EXCLUDED.\"BidLow\", " +
                          "\"BidPrice\" = EXCLUDED.\"BidPrice\", \"AskOpen\" = EXCLUDED.\"AskOpen\", \"AskHigh\" = EXCLUDED.\"AskHigh\", " +
                          "\"AskLow\" = EXCLUDED.\"AskLow\", \"AskPrice\" = EXCLUDED.\"AskPrice\", \"BidVolume\" = EXCLUDED.\"BidVolume\", " +
-                         "\"AskVolume\" = EXCLUDED.\"AskVolume\", \"TradedBuy\" = EXCLUDED.\"TradedBuy\", \"TradedSell\" = EXCLUDED.\"TradedSell\"",
+                         "\"AskVolume\" = EXCLUDED.\"AskVolume\", \"TradedBuy\" = EXCLUDED.\"TradedBuy\", \"TradedSell\" = EXCLUDED.\"TradedSell\", \"TradedEstimated\" = EXCLUDED.\"TradedEstimated\", \"FlowEvidenceKnown\" = EXCLUDED.\"FlowEvidenceKnown\"",
                          conn, tx))
             await upsert.ExecuteNonQueryAsync(ct);
 
@@ -94,7 +96,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
             .Take(limit)
             .OrderBy(c => c.PeriodStart)
             .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
-                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow))
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow, c.EstimatedVolume))
             .ToListAsync(ct);
 
         return candles;
@@ -139,7 +141,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
                 .OrderBy(c => c.ProductKey)
                 .ThenByDescending(c => c.PeriodStart)
                 .Select(c => new { c.ProductKey, c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
-                    c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow })
+                    c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow, c.EstimatedVolume })
                 .ToListAsync(ct);
 
             totalRows += rows.Count;
@@ -150,7 +152,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
                     .Take(limitPerProduct)
                     .OrderBy(x => x.PeriodStart)
                     .Select(x => new OhlcDataPoint(x.PeriodStart, x.Open, x.High, x.Low, x.Close, x.Volume, x.Spread, x.AskClose,
-                        x.BuyVolume, x.SellVolume, x.AskOpen, x.AskHigh, x.AskLow))
+                        x.BuyVolume, x.SellVolume, x.AskOpen, x.AskHigh, x.AskLow, x.EstimatedVolume))
                     .ToList();
                 result[group.Key] = candles;
             }
@@ -183,7 +185,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
             .Take(limit)
             .OrderBy(c => c.PeriodStart)
             .Select(c => new OhlcDataPoint(c.PeriodStart, c.Open, c.High, c.Low, c.Close, c.Volume, c.Spread, c.AskClose,
-                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow))
+                c.BuyVolume, c.SellVolume, c.AskOpen, c.AskHigh, c.AskLow, c.EstimatedVolume))
             .ToListAsync(ct);
 
         return candles;
@@ -276,6 +278,7 @@ public class OhlcRepository(IDbContextFactory<DataContext> contextFactory, ILogg
                     existingCandle.Volume = candle.Volume;
                     existingCandle.BuyVolume = candle.BuyVolume;
                     existingCandle.SellVolume = candle.SellVolume;
+                    existingCandle.EstimatedVolume = candle.EstimatedVolume;
                     existingCandle.Spread = candle.Spread;
                     existingCandle.AskClose = candle.AskClose;
                     existingCandle.AskOpen = candle.AskOpen;

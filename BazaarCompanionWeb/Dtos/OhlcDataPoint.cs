@@ -17,4 +17,5 @@ public record OhlcDataPoint(
     double SellVolume = 0,
     double AskOpen = 0,
     double AskHigh = 0,
-    double AskLow = 0);
+    double AskLow = 0,
+    double? EstimatedVolume = null);
